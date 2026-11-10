@@ -33,7 +33,6 @@
 #   package (it's more-or-less a cache to keep from rebuilding the
 #   docs when they haven't changed, only useful if you're rebuilding
 #   the same source dir multiple times).
-# - get rid of empty /opt/nerdtools/share/fish/man/man1/ dir.
 # - add update-desktop-database to doinst.sh, since v3.4.0 adds a
 #   .desktop file.
 # - use absolute path to icon in doinst.sh.
@@ -165,11 +164,15 @@ cmake \
   -DCMAKE_CXX_FLAGS:STRING="$SLKCFLAGS" \
   -DCMAKE_INSTALL_PREFIX=/opt/nerdtools \
   -DCMAKE_INSTALL_LIBDIR=/opt/nerdtools/lib${LIBDIRSUFFIX} \
+  -DCMAKE_INSTALL_MANDIR=/opt/nerdtools/man \
   -DCMAKE_INSTALL_SYSCONFDIR=/opt/nerdtools/etc \
   -DCMAKE_BUILD_TYPE=Release \
   -DFISH_USE_SYSTEM_PCRE2=ON ..
 
 make
+# CMake installs these manuals even with WITH_DOCS=OFF.
+mkdir -p cargo/fish-docs
+tar xf "$CWD/fish-$VERSION-manpages.tar.gz" --no-same-owner -C cargo/fish-docs
 make install/strip DESTDIR=$PKG
 find $PKG -print0 | xargs -0 file | grep -e "executable" -e "shared object" | grep ELF \
   | cut -f 1 -d : | xargs strip --strip-unneeded 2> /dev/null || true
@@ -185,12 +188,6 @@ rm -rf $PKG/opt/nerdtools/share/doc
 # Let's not clobber the old config
 mv $PKG/opt/nerdtools/etc/fish/config.fish $PKG/opt/nerdtools/etc/fish/config.fish.new
 
-# Install pre-generated manpages (built on Slackware-current)
-tar xf $CWD/fish-$VERSION-manpages.tar.gz --no-same-owner -C $PKG/opt/nerdtools
-
-# Ensure no stray man dirs under /opt/nerdtools/share
-rm -rf $PKG/opt/nerdtools/share/man
-rm -rf $PKG/opt/nerdtools/share/fish/man
 
 # Compress man pages (Slackware standard)
 if [ -d "$PKG/opt/nerdtools/man" ]; then
@@ -199,8 +196,6 @@ if [ -d "$PKG/opt/nerdtools/man" ]; then
   )
 fi
 
-# Remove manual pages that overwrites coreutils' man pages
-rm -f $PKG/opt/nerdtools/man/man1/{echo,false,pwd,test,true,printf,time}.1.gz
 
 cp CHANGELOG.rst CONTRIBUTING.rst COPYING README.rst $PKG/opt/nerdtools/doc/$PRGNAM-$VERSION
 cat $CWD/$PRGNAM.SlackBuild > $PKG/opt/nerdtools/doc/$PRGNAM-$VERSION/$PRGNAM.SlackBuild

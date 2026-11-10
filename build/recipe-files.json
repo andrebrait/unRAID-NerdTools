@@ -137,7 +137,7 @@
   },
   "bluez/rc.bluetooth": {
     "executable": true,
-    "sha256": "a7a92caf21219e9cce5b737fa80ccd60749ebe68f6edf2b0447c0226d7069497",
+    "sha256": "5138a5f34da0ba1a43ed11617af0c67c9f04c4ff7b533482adf743ec9586236f",
     "type": "file"
   },
   "bluez/slack-desc": {
@@ -254,7 +254,7 @@
   },
   "fish/fish.SlackBuild": {
     "executable": true,
-    "sha256": "64e885d82d555dfaf160bc9bff71264ea739ac7ebdfae71278823b84c8633b79",
+    "sha256": "817bdc732292dbf06303aa939d52604ee7e9dd8f3e69014761ed1db74f57fb17",
     "type": "file"
   },
   "fish/slack-desc": {
@@ -1000,7 +1000,7 @@
   },
   "python-packaging/python-packaging.SlackBuild": {
     "executable": true,
-    "sha256": "bf482b35a9843f68c0a4e6aded3e3edb0830bd140ada3e387d37d40d506f91fe",
+    "sha256": "c896aae3584b6d9afadaae2acb4b53e1e66ce6b2d6c647ddd8d730502ae51baa",
     "type": "file"
   },
   "python-packaging/slack-desc": {

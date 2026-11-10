@@ -337,7 +337,7 @@
     "name": "fish",
     "version": "4.9.2",
     "recipe": "build/recipes/fish/fish.SlackBuild",
-    "recipe_sha256": "64e885d82d555dfaf160bc9bff71264ea739ac7ebdfae71278823b84c8633b79",
+    "recipe_sha256": "817bdc732292dbf06303aa939d52604ee7e9dd8f3e69014761ed1db74f57fb17",
     "provenance": {
       "kind": "source",
       "url": "https://git.slackbuilds.org/slackbuilds/tree/system/fish?id=61c20c2400f83c5911a54921b62682cc38410afc",

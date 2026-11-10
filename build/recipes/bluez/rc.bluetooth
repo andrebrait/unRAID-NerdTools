@@ -9,7 +9,7 @@
 
 start_hci_dev() {
    for dev in ${ACTIVE_HCI_DEVICES_ON_BOOT} ; do
-      hciconfig $dev up > /dev/null 2>&1 
+      /opt/nerdtools/bin/hciconfig $dev up > /dev/null 2>&1
    done
 }
 

@@ -520,7 +520,7 @@
     "name": "python-packaging",
     "version": "26.3",
     "recipe": "build/recipes/python-packaging/python-packaging.SlackBuild",
-    "recipe_sha256": "bf482b35a9843f68c0a4e6aded3e3edb0830bd140ada3e387d37d40d506f91fe",
+    "recipe_sha256": "c896aae3584b6d9afadaae2acb4b53e1e66ce6b2d6c647ddd8d730502ae51baa",
     "provenance": {
       "kind": "source",
       "url": "https://git.slackware.nl/current/plain/source/l/python-packaging/python-packaging.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",

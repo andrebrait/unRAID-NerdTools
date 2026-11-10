@@ -74,7 +74,7 @@ find -L . \
 # This is a bootstrap package for building via wheels.
 # Keep using this build method for now.
 python3 -m flit_core.wheel || exit 1
-PYTHONPATH=src python3 -m installer --prefix /opt/nerdtools --destdir "$PKG" dist/*.whl || exit 1
+PYTHONPATH="src:$PYTHONPATH" python3 -m installer --prefix /opt/nerdtools --destdir "$PKG" dist/*.whl || exit 1
 
 mkdir -p $PKG/opt/nerdtools/doc/$PKGNAM-$VERSION
 cp -a *.rst LICENSE* PKG-INFO \
