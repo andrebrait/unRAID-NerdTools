@@ -3,3 +3,7 @@ upgrade-packages
 
 develop/rsync.txt
 *.bak
+
+__pycache__/
+*.py[cod]
+dist/

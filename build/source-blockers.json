@@ -1,0 +1,29 @@
+[
+  {
+    "module": "github.com/Julusian/godocdown@v0.0.0-20170816220326-6d19f8ff2df8",
+    "reason": "No redistribution grant established. A maintenance-time Linux amd64 build with empty caches and a file-only Go proxy succeeded without these inputs; keep them out of locks and corresponding-source bundles. Their reintroduction remains blocked unless permission is established.",
+    "sha256": [
+      "91dc608222325ec3aa531d17a9e49f6e9dd82f188c5b36867821c29d36483a14",
+      "f38deac3d9557f5631cca65f54d51875576b80d6e2f97d232b394aca6a76615b",
+      "1bd26f1d29b20d40b3eb0a5678691a2e6e153c473efe079b8b1bbd97a7cc1f57"
+    ]
+  },
+  {
+    "module": "github.com/chzyer/logex@v1.1.10",
+    "reason": "No redistribution grant established. A maintenance-time Linux amd64 build with empty caches and a file-only Go proxy succeeded without these inputs; keep them out of locks and corresponding-source bundles. Their reintroduction remains blocked unless permission is established.",
+    "sha256": [
+      "81c20bea55a51b220119e48ba7f736258eece51182ec6bc3e1e7fdfbcefb2fd3",
+      "f7d3104eac4c5674dc4847cf5b1193c2e03bd24fe521243a34d72c709ad83a3a",
+      "2c94771c1e335a2c58a96444b3768b8e00297747d6ce7e7c14bab2e8b39d91bd"
+    ]
+  },
+  {
+    "module": "github.com/robertkrimen/godocdown@v0.0.0-20130622164427-0bfa04905481",
+    "reason": "No redistribution grant established. A maintenance-time Linux amd64 build with empty caches and a file-only Go proxy succeeded without these inputs; keep them out of locks and corresponding-source bundles. Their reintroduction remains blocked unless permission is established.",
+    "sha256": [
+      "a3c4a224029620923ee22096755088b77dea532e10462056d3c10ba4d658c67f",
+      "f704981b439fc685ee5c02b978392e945b3d82571765d1ea1d83418607323d8c",
+      "789ed4a63a797e0dbac7c358eafa8fec4c9885f67ee61da941af4bad2d8c3b55"
+    ]
+  }
+]

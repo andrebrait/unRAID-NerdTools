@@ -1,0 +1,16 @@
+--- ./Makefile.in.orig	2026-03-16 12:25:07.000000000 -0500
++++ ./Makefile.in	2026-03-27 15:00:22.862840301 -0500
+@@ -352,11 +352,11 @@
+ 	$(CXX) -o $@ $(CPPFLAGS) $(CXXFLAGS) $(LDFLAGS) $(OBJS) $(LIBS) $<
+ 
+ build-zenmap: $(ZENMAPDIR)/pyproject.toml $(ZENMAPDIR)/zenmapCore/Version.py
+-	$(PYTHON) -m build $(ZENMAPDIR)/
++	$(PYTHON) -m build --wheel --no-isolation $(ZENMAPDIR)/
+ 
+ install-zenmap: $(ZENMAPDIR)/pyproject.toml
+ 	mkdir -p $(DESTDIR)$(bindir) $(DESTDIR)$(mandir)/man1 $(DESTDIR)$(deskdir)
+-	$(PYTHON) -m pip install $(ZENMAPDIR)/ $(if $(DESTDIR),--root "$(DESTDIR)")
++	$(PYTHON) -m pip install --no-build-isolation $(ZENMAPDIR)/ $(if $(DESTDIR),--root "$(DESTDIR)")
+ 	$(INSTALL) -c -m 644 docs/zenmap.1 $(DESTDIR)$(mandir)/man1/
+ 	$(INSTALL) -c -m 644 $(ZENMAPDIR)/install_scripts/unix/*.desktop $(DESTDIR)$(deskdir)
+ # Create a symlink from nmapfe to zenmap if nmapfe doesn't exist or is

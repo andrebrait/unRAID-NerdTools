@@ -1,48 +1,49 @@
-<?
-// Download a file from given url
-function get_file_from_url($file, $url) {
-    $chfile = fopen($file, 'w');
-    $ch = curl_init();
-    $ch_vers = curl_version();
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-    //curl_setopt($ch, CURLOPT_TIMEOUT, 3600);
-    curl_setopt($ch, CURLOPT_NOPROGRESS, true);
-    curl_setopt($ch, CURLOPT_HEADER, 0);
-    curl_setopt($ch, CURLOPT_USERAGENT, 'curl/'.$ch_vers['version']);
-    //curl_setopt($ch, CURLOPT_PROGRESSFUNCTION, 'progress_bar');
-    curl_setopt($ch, CURLOPT_URL, $url);
-    curl_setopt($ch, CURLOPT_FILE, $chfile);
-    curl_exec($ch);
-    curl_close($ch);
-    fclose($chfile);
+<?php
+class NerdToolsHttpError extends RuntimeException {
+    public $reset;
+    public function __construct($message, $reset = 0) { parent::__construct($message); $this->reset = $reset; }
 }
-
-// get a json array of the contents of gihub repo
-function get_content_from_github($repo, $file) {
-    $ch = curl_init();
-    $ch_vers = curl_version();
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Accept: application/json', 'Content-Type: application/json']);
-    curl_setopt($ch, CURLOPT_USERAGENT, 'curl/'.$ch_vers['version']);
-    curl_setopt($ch, CURLOPT_URL, $repo);
-    $content = curl_exec($ch);
-    curl_close($ch);
-    if (!empty($content))
-        file_put_contents($file, $content);
+function nt_http($url, $file = null) {
+    $allowed = strpos($url, 'https://api.github.com/repos/andrebrait/unRAID-NerdTools/releases?') === 0
+        || strpos($url, 'https://github.com/andrebrait/unRAID-NerdTools/releases/download/') === 0;
+    if (!$allowed) throw new RuntimeException('Refusing untrusted download URL');
+    $headers = []; $body = ''; $bytes = 0;
+    $stream = $file === null ? null : fopen($file, 'wb');
+    if ($file !== null && !$stream) throw new RuntimeException('Cannot write download');
+    $curl = curl_init($url);
+    curl_setopt_array($curl, [
+        CURLOPT_FOLLOWLOCATION=>true, CURLOPT_MAXREDIRS=>5,
+        CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS, CURLOPT_REDIR_PROTOCOLS=>CURLPROTO_HTTPS,
+        CURLOPT_CONNECTTIMEOUT=>15, CURLOPT_TIMEOUT=>$file === null ? 90 : 1800,
+        CURLOPT_SSL_VERIFYPEER=>true, CURLOPT_SSL_VERIFYHOST=>2,
+        CURLOPT_USERAGENT=>'NerdTools/7.3 (andrebrait/unRAID-NerdTools)',
+        CURLOPT_HTTPHEADER=>['Accept: application/vnd.github+json', 'X-GitHub-Api-Version: 2022-11-28'],
+        CURLOPT_HEADERFUNCTION=>function($curl, $line) use (&$headers) {
+            if (strpos($line, 'HTTP/') === 0) $headers = [];
+            $parts = explode(':', $line, 2);
+            if (count($parts) === 2) $headers[strtolower(trim($parts[0]))] = trim($parts[1]);
+            return strlen($line);
+        },
+        CURLOPT_WRITEFUNCTION=>function($curl, $chunk) use ($stream, &$body, &$bytes) {
+            $length = strlen($chunk); $bytes += $length;
+            if ($bytes > ($stream ? 2147483648 : 16777216)) return 0;
+            if ($stream) return fwrite($stream, $chunk);
+            $body .= $chunk; return $length;
+        },
+    ]);
+    try {
+        $ok = curl_exec($curl); $status = curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
+        $reset = 0;
+        if ($status === 403 || $status === 429) {
+            if (isset($headers['x-ratelimit-reset'])) $reset = (int)$headers['x-ratelimit-reset'];
+            if (isset($headers['retry-after'])) {
+                $retry = ctype_digit($headers['retry-after']) ? time() + (int)$headers['retry-after'] : strtotime($headers['retry-after']);
+                $reset = max($reset, $retry ?: 0);
+            }
+        }
+        if ($ok === false || $status !== 200) {
+            throw new NerdToolsHttpError('Download failed'.($status ? ' (HTTP '.$status.')' : ': '.curl_error($curl)), $reset);
+        }
+        return ['body'=>$body, 'headers'=>$headers];
+    } finally { curl_close($curl); if ($stream) fclose($stream); }
 }
-
-// Compare the github sha1 value of a file
-function file_check_sha1($file, $sha1) {
-    $size = filesize($file);
-    $contents = file_get_contents($file);
-
-    // create a sha1 like github does
-    $str = "blob ".$size."\0".$contents;
-    $sha1_file = sha1($str);
-
-    //logger('Downloading file_check_sha1 => sha1_file ['.$sha1_file.'] ['.$sha1.'] package...');
-
-    return ($sha1_file == $sha1);
-}
-?>

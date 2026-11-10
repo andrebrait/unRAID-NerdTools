@@ -1,0 +1,162 @@
+#!/bin/bash
+
+# Copyright 2006-2010  Robby Workman, Northport, AL, USA
+# Copyright 2007-2025  Patrick J. Volkerding, Sebeka, MN, USA
+# All rights reserved.
+#
+# Redistribution and use of this script, with or without modification, is
+# permitted provided that the following conditions are met:
+#
+# 1. Redistributions of this script must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+#
+#  THIS SCRIPT IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
+#  WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+#  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO
+#  EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+#  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+#  PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+#  OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+#  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+#  OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SCRIPT, EVEN IF
+#  ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+cd $(dirname $0) ; CWD=$(pwd)
+
+# NerdTools adaptation of https://git.slackware.nl/current/plain/source/n/gnupg2/gnupg2.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61
+# Private prefix; upstream patch/config/license files remain pinned in the lock.
+export PKG_CONFIG_PATH=/opt/nerdtools/lib64/pkgconfig:/opt/nerdtools/lib/pkgconfig:/opt/nerdtools/share/pkgconfig
+export CPPFLAGS="-I/opt/nerdtools/include ${CPPFLAGS:-}"
+export LDFLAGS="-L/opt/nerdtools/lib64 -L/opt/nerdtools/lib ${LDFLAGS:-}"
+mkdir -p "${OUTPUT:-/out}"
+
+
+PKGNAM=gnupg2
+VERSION=2.5.24
+BUILD=${BUILD:-1}
+
+NUMJOBS=${NUMJOBS:-" -j$(expr $(nproc) + 1) "}
+
+# Automatically determine the architecture we're building on:
+if [ -z "$ARCH" ]; then
+  case "$( uname -m )" in
+    i?86) export ARCH=i686 ;;
+    arm*) export ARCH=arm ;;
+    # Unless $ARCH is already set, use uname -m for all other archs:
+       *) export ARCH=$( uname -m ) ;;
+  esac
+fi
+
+# If the variable PRINT_PACKAGE_NAME is set, then this script will report what
+# the name of the created package would be, and then exit. This information
+# could be useful to other scripts.
+if [ ! -z "${PRINT_PACKAGE_NAME}" ]; then
+  echo "$PKGNAM-$VERSION-$ARCH-$BUILD.txz"
+  exit 0
+fi
+
+TMP=${TMP:-/tmp}
+PKG=$TMP/package-gnupg2
+
+if [ "$ARCH" = "i686" ]; then
+  SLKCFLAGS="-O2 -march=pentium4 -mtune=generic"
+  LIBDIRSUFFIX=""
+elif [ "$ARCH" = "x86_64" ]; then
+  SLKCFLAGS="-O2 -march=x86-64 -mtune=generic -fPIC"
+  LIBDIRSUFFIX="64"
+else
+  SLKCFLAGS="-O2"
+  LIBDIRSUFFIX=""
+fi
+
+rm -rf $PKG
+mkdir -p $TMP $PKG
+
+cd $TMP
+rm -rf gnupg-$VERSION
+tar xvf $CWD/gnupg-$VERSION.tar.?z || exit 1
+cd gnupg-$VERSION || exit 1
+
+chown -R root:root .
+find . \
+  \( -perm 777 -o -perm 775 -o -perm 711 -o -perm 555 -o -perm 511 \) \
+  -exec chmod 755 {} \+ -o \
+  \( -perm 666 -o -perm 664 -o -perm 600 -o -perm 444 -o -perm 440 -o -perm 400 \) \
+  -exec chmod 644 {} \+
+
+CFLAGS="$SLKCFLAGS" \
+CXXFLAGS="$SLKCFLAGS" \
+./configure \
+  --prefix=/opt/nerdtools \
+  --with-ksba-prefix=/opt/nerdtools \
+  --with-npth-prefix=/opt/nerdtools \
+  --with-pinentry-pgm=/opt/nerdtools/bin/pinentry \
+  --with-libassuan-prefix=/opt/nerdtools \
+  --with-libgpg-error-prefix=/usr \
+  --sysconfdir=/opt/nerdtools/etc \
+  --libdir=/opt/nerdtools/lib${LIBDIRSUFFIX} \
+  --mandir=/opt/nerdtools/man \
+  --infodir=/opt/nerdtools/info \
+  --docdir=/opt/nerdtools/doc/gnupg2-$VERSION \
+  --disable-ccid-driver \
+  --enable-large-secmem \
+  --enable-g13 \
+  --enable-maintainer-mode \
+  --program-prefix="" \
+  --program-suffix="" \
+  --build=$ARCH-slackware-linux || exit 1
+
+make $NUMJOBS || exit 1
+make install DESTDIR=$PKG || exit 1
+
+# WTF
+rm -rf $PKG/opt/nerdtools/man/manh
+
+# These names might still be needed:
+( cd $PKG/opt/nerdtools/bin
+  ln -sf gpg gpg2
+  ln -sf gpgv gpgv2
+)
+
+# Create directory for global gpg.conf:
+mkdir -p $PKG/opt/nerdtools/etc/gnupg
+
+find $PKG | xargs file | grep -e "executable" -e "shared object" | grep ELF \
+  | cut -f 1 -d : | xargs strip --strip-unneeded 2> /dev/null
+
+# Compress and link manpages, if any:
+if [ -d $PKG/opt/nerdtools/man ]; then
+  ( cd $PKG/opt/nerdtools/man
+    for manpagedir in $(find . -type d -name "man*") ; do
+      ( cd $manpagedir
+        for eachpage in $( find . -type l -maxdepth 1) ; do
+          ln -s $( readlink $eachpage ).gz $eachpage.gz
+          rm $eachpage
+        done
+        gzip -9 *.?
+      )
+    done
+  )
+fi
+
+rm -f $PKG/opt/nerdtools/info/dir
+gzip -9 $PKG/opt/nerdtools/info/*
+
+mkdir -p $PKG/opt/nerdtools/doc/gnupg2-$VERSION
+cp -a \
+  AUTHORS COPYING* INSTALL NEWS README* THANKS TODO VERSION \
+  $PKG/opt/nerdtools/doc/gnupg2-$VERSION
+
+# If there's a ChangeLog, installing at least part of the recent history
+# is useful, but don't let it get totally out of control:
+if [ -r ChangeLog ]; then
+  DOCSDIR=$(echo $PKG/opt/nerdtools/doc/${PKGNAM}-$VERSION)
+  cat ChangeLog | head -n 1000 > $DOCSDIR/ChangeLog
+  touch -r ChangeLog $DOCSDIR/ChangeLog
+fi
+
+mkdir -p $PKG/install
+cat $CWD/slack-desc > $PKG/install/slack-desc
+
+cd $PKG
+/sbin/makepkg -l n -c n ${OUTPUT:-/out}/$PKGNAM-$VERSION-$ARCH-$BUILD.txz

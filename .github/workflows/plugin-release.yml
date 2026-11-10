@@ -1,0 +1,67 @@
+name: Test and publish NerdTools plugin
+
+on:
+  push:
+    branches:
+      - '**'
+    tags:
+      - 'plugin-*'
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify plugin behavior
+        run: |
+          php tests/plugin.php
+          php tests/plugin_lifecycle.php
+          php tests/plugin_aliases.php
+          php tests/plugin_policy.php
+          python3 tests/plugin_udev.py
+          node --check source/NerdTools/usr/local/emhttp/plugins/NerdTools/js/jquery.NerdTools.js
+      - name: Verify package generation
+        run: python3 -m unittest discover -s tests -p 'test_plugin_packaging.py'
+  publish:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/plugin-')
+    needs: verify
+    concurrency:
+      group: nerdtools-plugin-publication
+      queue: max
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify release commit
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: git merge-base --is-ancestor HEAD "origin/$DEFAULT_BRANCH"
+      - name: Build plugin and manifest
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -eu
+          SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
+          export SOURCE_DATE_EPOCH
+          scripts/build-plugin.sh "${TAG#plugin-}" dist
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          tags="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name')"
+          latest="$(printf '%s\n' "$tags" | python3 -c 'import re,sys; version=lambda s: tuple(map(int, s.removeprefix("plugin-").split("."))); current=version(sys.argv[1]); tags=[s.strip() for s in sys.stdin if re.fullmatch(r"plugin-[0-9]+[.][0-9]+[.][0-9]+(?:[.][0-9]+)?", s.strip())]; print(str(all(current >= version(tag) for tag in tags)).lower())' "$TAG")"
+          gh release create "$TAG" dist/NerdTools.plg dist/NerdTools-*.txz \
+            --verify-tag "--latest=$latest" --generate-notes

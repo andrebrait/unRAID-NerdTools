@@ -1,0 +1,43 @@
+{
+  "family": "7.3",
+  "version": "7.3.4",
+  "source_date_epoch": 1792627200,
+  "tools": [
+    "aria2", "audit", "autossh", "axel", "bc", "bluez", "borgbackup", "btop",
+    "bwm-ng", "cksfv", "ddrescue", "exiftool", "fdupes", "fio", "fish", "fzf",
+    "gnupg2", "gpgme", "iftop", "iotop", "ipmitool", "irssi", "jdupes", "lftp",
+    "libassuan", "libjodycode", "libmediainfo", "libnl", "libsodium", "liburing",
+    "libzen", "llfuse", "mediainfo", "mktorrent", "mlocate", "msgpack-python",
+    "ncdu", "neofetch", "netcat", "nload", "nmap", "nodejs", "npth", "p7zip",
+    "par2cmdline", "pigz", "plocate", "powershell", "powertop", "python-packaging",
+    "python-pip", "python-setuptools", "python2", "python3", "rar2fs", "rclone",
+    "restic", "rsnapshot", "ruby", "screen", "socat", "sshfs", "sshpass", "stress",
+    "stunnel", "tcl", "tcllib", "tcpdump", "tmux", "unrar", "utf8proc", "vim",
+    "wget2", "zsh"
+  ],
+  "image": {
+    "url": "https://releases.unraid.net/dl/stable/7.3.4/ae8169459e2277e8d450b9a590c18f747dd8eaa50ebc54743a36cadd093cbfb8/unRAIDServer-7.3.4-x86_64.zip",
+    "file": "unRAIDServer-7.3.4-x86_64.zip",
+    "sha256": "ba608638e743b323f4581e911fd07093158344010dab14bb19607b46999530e9"
+  },
+  "bzroot_sha256": "a960a948b56ad2e01b007a48980dba186c628d3a4cba89f179beddc0fdee68a1",
+  "provenance": "https://releases.unraid.net/os",
+  "provided_packages": [
+    {
+      "name": "liburing",
+      "version": "2.15",
+      "provider": "unraid",
+      "min_unraid": "7.3.4"
+    }
+  ],
+  "external_packages": [
+    {
+      "name": "rar",
+      "version": "7.23",
+      "delivery": "external",
+      "url": "https://www.rarlab.com/rar/rarlinux-x64-723.tar.gz",
+      "license_url": "https://www.rarlab.com/license.htm",
+      "license_notice": "RAR is proprietary trial software; a license is required after 40 days. Download and install the original upstream distribution yourself."
+    }
+  ]
+}

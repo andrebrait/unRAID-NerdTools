@@ -1,27 +1,12 @@
-# Abandoned
-**Thanks to all the users who have followed us during this time.**
+# NerdTools for Unraid
 
-**Once the new limetech business model was definitively presented and not agreeing with it, we have decided to abandon our collaboration in the development of this project.**
+This fork maintains the NerdTools plugin originally developed by UnRAIDES. It installs native packages and does not require Docker at runtime.
 
-**Best Regards** 
+The supported baseline is Unraid 7.3.4 in the 7.3 family. Package catalogs and binaries are published as GitHub Release assets. Historical releases are retained for rollback.
 
-# unRAID-NerdTools
-[![](https://badgen.net/badge/icon/github?icon=github&label)](https://github.com/UnRAIDES)
-[![](https://badgen.net/badge/icon/docker?icon=docker&label)](https://hub.docker.com/r/unraides)
-![Github stars](https://badgen.net/github/stars/UnRAIDES/unRAID-NerdTools?icon=github&label=stars)
-![Github forks](https://badgen.net/github/forks/UnRAIDES/unRAID-NerdTools?icon=github&label=forks)
-![Github last-commit](https://img.shields.io/github/last-commit/UnRAIDES/unRAID-NerdTools)
-![Github license](https://badgen.net/github/license/UnRAIDES/unRAID-NerdTools)
+NerdTools checks for catalog updates daily by default. The interval is configurable, automatic checks can be disabled, and failed checks are retried hourly. Existing verified packages and the last successful catalog are retained if GitHub is unavailable. Checks do not install updates automatically.
 
-![](images/logo.png)
+RAR is proprietary trial software and is offered through its original upstream download, not repackaged in this repository. Review its license before installing it.
 
-**Install and Uninstall extra packages easily.**
+The build recipes, pinned inputs, and GitHub Actions workflows are maintained in this repository. See [build instructions](build/README.md). Builds use an isolated Unraid-derived environment; hardware-specific behavior requires validation on the target hardware.
 
-
-![](images/image01.png)
-
-
-##
-
-NerdTools is the new plugin that allows you to install additional packages in UnRAID easily.
-This project is based on the old NerdPack plugin but has received many improvements and important changes. For example the package installation now takes advantage of the benefits of UnRAID 6.11 and install packages in the path /boot/extra and delegating part of the management to the system itself.

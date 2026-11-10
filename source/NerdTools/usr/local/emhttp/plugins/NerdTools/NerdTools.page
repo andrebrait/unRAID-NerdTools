@@ -8,40 +8,49 @@ Tag="cog"
 <link type="text/css" rel="stylesheet" href="<?=autov('/webGui/styles/jquery.switchbutton.css');?>">
 <link type="text/css" rel="stylesheet" href="<?=autov('/plugins/NerdTools/css/NerdTools.css');?>">
 <style>
-table.tablesorter tbody tr:nth-child(odd) {
-    background-color: #<?=($display['theme'] == 'white' || $display['theme'] == 'azure') ? 'F0F0F0' : '212421';?>;
-}
-table.tablesorter tbody tr:nth-child(even) {
-    background-color: #<?=($display['theme'] == 'white' || $display['theme'] == 'azure') ? 'e4e2e4' : '1b1d1b';?>;
-}
+table.tablesorter tbody tr:nth-child(odd) { background-color: #<?=($display['theme'] == 'white' || $display['theme'] == 'azure') ? 'F0F0F0' : '212421';?>; }
+table.tablesorter tbody tr:nth-child(even) { background-color: #<?=($display['theme'] == 'white' || $display['theme'] == 'azure') ? 'e4e2e4' : '1b1d1b';?>; }
 </style>
-
-<form markdown="1" id="package_form" name="package_settings" method="POST" action="/update.php" target="progressFrame">
-<input type="hidden" id="include" name="#include" value="/plugins/NerdTools/include/ClearConfig.php"/>
-
+<?php
+$nt_vars = @parse_ini_file('/var/local/emhttp/var.ini', false, INI_SCANNER_RAW);
+?>
+<form id="package_form" name="package_settings" method="POST" action="/plugins/NerdTools/include/Settings.php">
+<input type="hidden" name="csrf_token" value="<?=htmlspecialchars($nt_vars['csrf_token'] ?? '', ENT_QUOTES, 'UTF-8');?>">
+<input type="hidden" name="action" value="save">
+<p>NerdTools installs native command-line tools for Unraid 7.3.4+. Only packages owned by NerdTools can be updated or removed. Changes take effect when you select Apply.</p>
+<label for="update_check_hours">Automatic catalog checks</label>
+<select name="update_check_hours" id="update_check_hours">
+<option value="0">Disabled</option><option value="1">Hourly</option><option value="6">Every 6 hours</option><option value="12">Every 12 hours</option><option value="24" selected>Daily (default)</option><option value="168">Weekly</option>
+</select>
+<p>Checks only refresh the available versions; they never install updates. Failed checks retry hourly and respect GitHub rate limits. Cached packages and your preferences are retained.</p>
+<label for="package_release">Package release</label>
+<select id="package_release"><option value="latest">Latest compatible release</option></select>
+<input id="btnRelease" type="button" value="Use Release">
+<p>Choose a retained release to roll back, then select Apply. Selecting a specific release pins it until you choose Latest compatible release again. Incompatible releases are refused without changing your current cache.</p>
+<p id="catalog_status" role="status" aria-live="polite"></p>
+<p id="package_error" role="alert" hidden></p>
 <div class="wrapper">
 <table class="tablesorter hover-highlight" id="tblPackages">
-    <thead>
-        <tr>
-            <th class="parser-false filter-false" nowrap="nowrap"></th>
-            <th class="filter-name" data-placeholder="Search..."> Name </th>
-            <th class="filter-false" data-placeholder="by dependencies"> Dependencies </th>
-            <th class="filter-version" data-placeholder="by status"> Status </th>
-            <th class="filter-installed" data-placeholder="by install"> Installed </th>
-            <th class="sorter-metric filter-false" data-placeholder="by size" data-metric-name-full="byte|Byte|BYTE" data-metric-name-abbr="b|B"> Size </th>
-            <th class="filter-false" data-placeholder="Search..."> Installed Version </th>
-        </tr>
-    </thead>
-    <tbody>
-    </tbody>
+<thead><tr>
+<th class="parser-false filter-false">Install</th>
+<th class="filter-name" data-placeholder="Search...">Name</th>
+<th class="filter-false">Dependencies</th>
+<th class="filter-version">Status</th>
+<th class="filter-installed">Installed</th>
+<th class="sorter-metric filter-false" data-metric-name-full="byte|Byte|BYTE" data-metric-name-abbr="b|B">Size</th>
+<th class="filter-false">Installed package</th>
+</tr></thead><tbody></tbody>
 </table>
 </div>
-<input onclick="packageQuery(1)" value="Force Updates" type="button" title="Press if the package list doesn't load correctly"><input class="reset" type="button" title="Reset applied filters" value="Reset Filters">
-: <input id="btnApply" type="button" value="Apply"><input type="button" value="Done" onClick="done()">
-<input type="hidden" name="#file" value="NerdTools/NerdTools.cfg">
+<section id="external_offers" hidden><h3>Original upstream downloads</h3><div></div></section>
+<section id="provided_packages" hidden><h3>Built into Unraid</h3><p>These capabilities are supplied by Unraid and cannot be installed, replaced or removed through NerdTools.</p><ul></ul></section>
+<input id="btnRefresh" value="Force Updates" type="button" title="Check GitHub Releases now; existing cache is retained on failure">
+<input class="reset" type="button" title="Reset applied filters" value="Reset Filters">
+<input id="btnSave" type="button" value="Save Settings">
+<input id="btnApply" type="button" value="Apply" disabled>
+<input type="button" value="Done" onclick="done()">
 </form>
-
 <script src="<?=autov('/plugins/NerdTools/js/jquery.tablesorter.combined.min.js');?>"></script>
 <script src="<?=autov('/plugins/NerdTools/js/parser-metric.min.js');?>"></script>
-<script type="text/javascript" src="<?=autov('/webGui/javascript/jquery.switchbutton.js');?>"></script>
-<script type="text/javascript" src="<?=autov('/plugins/NerdTools/js/jquery.NerdTools.js');?>"></script>
+<script src="<?=autov('/webGui/javascript/jquery.switchbutton.js');?>"></script>
+<script src="<?=autov('/plugins/NerdTools/js/jquery.NerdTools.js');?>"></script>

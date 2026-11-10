@@ -1,0 +1,124 @@
+#!/bin/sh
+
+# Slackware build script for Lua
+
+# Written by Menno Duursma
+# Modified by the SlackBuilds.org project
+# Modified by Aaron W. Hsu
+# Updated by Matteo Bernardini
+# Upgraded by Patrick Volkerding
+
+# This program is free software. It comes without any warranty.
+# Granted WTFPL, Version 2, as published by Sam Hocevar. See
+# http://sam.zoy.org/wtfpl/COPYING for more details.
+
+cd $(dirname $0) ; CWD=$(pwd)
+
+# NerdTools adaptation of https://git.slackware.nl/current/plain/source/d/lua/lua.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61
+mkdir -p "${OUTPUT:-/out}"
+
+
+PKGNAM=lua
+VERSION=5.4.9
+BUILD=${BUILD:-2}
+
+# Automatically determine the architecture we're building on:
+if [ -z "$ARCH" ]; then
+  case "$(uname -m)" in
+    i?86) ARCH=i686 ;;
+    arm*) readelf /opt/nerdtools/bin/file -A | egrep -q "Tag_CPU.*[4,5]" && ARCH=arm || ARCH=armv7hl ;;
+    # Unless $ARCH is already set, use uname -m for all other archs:
+    *) ARCH=$(uname -m) ;;
+  esac
+  export ARCH
+fi
+
+# If the variable PRINT_PACKAGE_NAME is set, then this script will report what
+# the name of the created package would be, and then exit. This information
+# could be useful to other scripts.
+if [ ! -z "${PRINT_PACKAGE_NAME}" ]; then
+  echo "$PKGNAM-$VERSION-$ARCH-$BUILD.txz"
+  exit 0
+fi
+
+CWD=$(pwd)
+TMP=${TMP:-/tmp}
+PKG=$TMP/package-$PKGNAM
+
+if [ "$ARCH" = "i686" ]; then
+  SLKCFLAGS="-O2 -march=pentium4 -mtune=generic"
+  LIBDIRSUFFIX=""
+elif [ "$ARCH" = "x86_64" ]; then
+  SLKCFLAGS="-O2 -march=x86-64 -mtune=generic -fPIC"
+  LIBDIRSUFFIX="64"
+else
+  SLKCFLAGS="-O2"
+  LIBDIRSUFFIX=""
+fi
+
+rm -rf $PKG
+mkdir -p $PKG $TMP
+cd $TMP
+rm -rf $PKGNAM-$VERSION
+tar xvf $CWD/$PKGNAM-${VERSION}.tar.?z || exit 1
+cd $PKGNAM-$VERSION
+chown -R root:root .
+
+# Also search paths under /opt/nerdtools/local:
+cat $CWD/lua.usr.local.patch | patch -p1 --verbose || exit 1
+sed -i 's|"/usr/local/"|"/opt/nerdtools/"|g; s|"/usr/"|"/opt/nerdtools/"|g' src/luaconf.h
+
+# Fix luaconf.h header to use lib$LIBDIRSUFFIX:
+sed -i "s|lib/lua|lib$LIBDIRSUFFIX/lua|" src/luaconf.h
+
+make linux \
+  MYCFLAGS="$SLKCFLAGS" \
+  INSTALL_TOP=/opt/nerdtools \
+  INSTALL_LIB=/opt/nerdtools/lib${LIBDIRSUFFIX} \
+  INSTALL_LMOD=/opt/nerdtools/share/lua/$(echo $VERSION | cut -f 1-2 -d .) \
+  INSTALL_CMOD=/opt/nerdtools/lib${LIBDIRSUFFIX}/lua/$(echo $VERSION | cut -f 1-2 -d .) || exit 1
+
+make linux install \
+  MYCFLAGS="$SLKCFLAGS" \
+  INSTALL_TOP=$PKG/opt/nerdtools \
+  INSTALL_LIB=$PKG/opt/nerdtools/lib${LIBDIRSUFFIX} \
+  INSTALL_LMOD=$PKG/opt/nerdtools/share/lua/$(echo $VERSION | cut -f 1-2 -d .) \
+  INSTALL_CMOD=$PKG/opt/nerdtools/lib${LIBDIRSUFFIX}/lua/$(echo $VERSION | cut -f 1-2 -d .) || exit 1
+
+# Now let's build the shared library
+mkdir -p shared
+cd shared
+  ar -x $PKG/opt/nerdtools/lib${LIBDIRSUFFIX}/liblua.a || exit 1
+  gcc $LDFLAGS -ldl -lreadline -lhistory -lncurses -lm -shared -Wl,-soname,liblua.so.$(echo $VERSION | cut -f 1 -d .) *.o -o liblua.so.$VERSION || exit 1
+  cp -a liblua.so.$VERSION $PKG/opt/nerdtools/lib${LIBDIRSUFFIX} || exit 1
+  ( cd $PKG/opt/nerdtools/lib${LIBDIRSUFFIX}
+    ln -s liblua.so.$VERSION liblua.so.$(echo $VERSION | cut -f 1-2 -d .)
+    ln -s liblua.so.$VERSION liblua.so.$(echo $VERSION | cut -f 1 -d .)
+    ln -s liblua.so.$VERSION liblua.so
+  )
+cd ..
+
+## On second thought, this *might* be useful
+## Don't ship the static library:
+#rm -f $PKG/opt/nerdtools/lib${LIBDIRSUFFIX}/liblua.a
+
+# and install the pkgconfig file
+mkdir -p $PKG/opt/nerdtools/lib${LIBDIRSUFFIX}/pkgconfig
+cat $CWD/lua.pc | sed "s|prefix= /usr|prefix= /opt/nerdtools|" | sed "s/%V%/$(echo $VERSION | cut -f 1-2 -d .)/g" | sed "s/%R%/$VERSION/g" | sed "s/%LIBDIRSUFFIX%/$LIBDIRSUFFIX/g" > $PKG/opt/nerdtools/lib${LIBDIRSUFFIX}/pkgconfig/lua.pc
+
+find $PKG | xargs file | grep -e "executable" -e "shared object" | grep ELF \
+  | cut -f 1 -d : | xargs strip --strip-unneeded 2> /dev/null || true
+
+find $PKG/opt/nerdtools/man -type f -exec gzip -9 {} \;
+for i in $( find $PKG/opt/nerdtools/man -type l ) ; do ln -s $( readlink $i ).gz $i.gz ; rm $i ; done
+
+mkdir -p $PKG/opt/nerdtools/doc/$PKGNAM-$VERSION/{extras,html}
+cp -a COPYRIGHT* HISTORY* INSTALL* README* $PKG/opt/nerdtools/doc/$PKGNAM-$VERSION
+cp -a doc/*.html doc/logo.gif doc/lua.css $PKG/opt/nerdtools/doc/$PKGNAM-$VERSION/html
+cp -a etc test $PKG/opt/nerdtools/doc/$PKGNAM-$VERSION/extras
+
+mkdir -p $PKG/install
+cat $CWD/slack-desc > $PKG/install/slack-desc
+
+cd $PKG
+/sbin/makepkg -l n -c n ${OUTPUT:-/out}/$PKGNAM-$VERSION-$ARCH-$BUILD.txz

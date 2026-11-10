@@ -1,0 +1,149 @@
+#!/bin/bash
+
+# Copyright 2010, 2012, 2018, 2019, 2026  Patrick J. Volkerding, Sebeka, MN, USA
+# All rights reserved.
+#
+# Redistribution and use of this script, with or without modification, is
+# permitted provided that the following conditions are met:
+#
+# 1. Redistributions of this script must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+#
+#  THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
+#  WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+#  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO
+#  EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+#  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+#  PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+#  OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+#  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+#  OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+#  ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+cd $(dirname $0) ; CWD=$(pwd)
+
+# NerdTools adaptation of https://git.slackware.nl/current/plain/source/ap/powertop/powertop.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61
+# Private prefix; upstream patch/config/license files remain pinned in the lock.
+export PKG_CONFIG_PATH=/opt/nerdtools/lib64/pkgconfig:/opt/nerdtools/lib/pkgconfig:/opt/nerdtools/share/pkgconfig
+export CPPFLAGS="-I/opt/nerdtools/include ${CPPFLAGS:-}"
+export LDFLAGS="-L/opt/nerdtools/lib64 -L/opt/nerdtools/lib ${LDFLAGS:-}"
+mkdir -p "${OUTPUT:-/out}"
+
+
+PKGNAM=powertop
+VERSION=2.16.1
+BUILD=${BUILD:-1}
+
+# Automatically determine the architecture we're building on:
+if [ -z "$ARCH" ]; then
+  case "$( uname -m )" in
+    i?86) export ARCH=i686 ;;
+    arm*) export ARCH=arm ;;
+    # Unless $ARCH is already set, use uname -m for all other archs:
+       *) export ARCH=$( uname -m ) ;;
+  esac
+fi
+
+# If the variable PRINT_PACKAGE_NAME is set, then this script will report what
+# the name of the created package would be, and then exit. This information
+# could be useful to other scripts.
+if [ ! -z "${PRINT_PACKAGE_NAME}" ]; then
+  echo "$PKGNAM-$VERSION-$ARCH-$BUILD.txz"
+  exit 0
+fi
+
+NUMJOBS=${NUMJOBS:-" -j$(expr $(nproc) + 1) "}
+
+TMP=${TMP:-/tmp}
+PKG=$TMP/package-${PKGNAM}
+rm -rf $PKG
+mkdir -p $TMP $PKG
+
+if [ "$ARCH" = "i686" ]; then
+  SLKCFLAGS="-O2 -march=pentium4 -mtune=generic"
+  LIBDIRSUFFIX=""
+elif [ "$ARCH" = "x86_64" ]; then
+  SLKCFLAGS="-O2 -march=x86-64 -mtune=generic -fPIC"
+  LIBDIRSUFFIX="64"
+else
+  SLKCFLAGS="-O2"
+  LIBDIRSUFFIX=""
+fi
+
+cd $TMP
+rm -rf ${PKGNAM}-*${VERSION}
+tar xvf $CWD/${PKGNAM}-$VERSION.tar.?z || tar xvf $CWD/${PKGNAM}-v$VERSION.tar.?z || exit 1
+cd ${PKGNAM}-$VERSION || cd ${PKGNAM}-v$VERSION || exit 1
+
+# Make sure ownerships and permissions are sane:
+chown -R root:root .
+find . \
+  \( -perm 777 -o -perm 775 -o -perm 711 -o -perm 555 -o -perm 511 \) \
+  -exec chmod 755 {} \+ -o \
+  \( -perm 666 -o -perm 664 -o -perm 600 -o -perm 444 -o -perm 440 -o -perm 400 \) \
+  -exec chmod 644 {} \+
+
+# Configure, build, and install:
+export CFLAGS="$SLKCFLAGS"
+export CXXFLAGS="$SLKCFLAGS"
+mkdir meson-build
+cd meson-build
+meson setup \
+  --prefix=/opt/nerdtools \
+  --libdir=lib${LIBDIRSUFFIX} \
+  --libexecdir=/opt/nerdtools/libexec \
+  --bindir=/opt/nerdtools/bin \
+  --sbindir=/opt/nerdtools/sbin \
+  --includedir=/opt/nerdtools/include \
+  --datadir=/opt/nerdtools/share \
+  --mandir=/opt/nerdtools/man \
+  --sysconfdir=/opt/nerdtools/etc \
+  --localstatedir=/opt/nerdtools/var \
+  --buildtype=release \
+  .. || exit 1
+  "${NINJA:=ninja}" $NUMJOBS || exit 1
+  DESTDIR=$PKG $NINJA install || exit 1
+cd ..
+
+# powertop used to be installed in /opt/nerdtools/sbin, so let's make a link:
+mkdir -p $PKG/opt/nerdtools/sbin
+( cd $PKG/opt/nerdtools/sbin ; ln -sf ../bin/powertop . )
+
+# Strip binaries:
+find $PKG | xargs file | grep -e "executable" -e "shared object" | grep ELF \
+  | cut -f 1 -d : | xargs strip --strip-unneeded 2> /dev/null
+
+# Compress and if needed symlink the man pages:
+if [ -d $PKG/opt/nerdtools/man ]; then
+  ( cd $PKG/opt/nerdtools/man
+    for manpagedir in $(find . -type d -name "man*") ; do
+      ( cd $manpagedir
+        for eachpage in $( find . -type l -maxdepth 1) ; do
+          ln -s $( readlink $eachpage ).gz $eachpage.gz
+          rm $eachpage
+        done
+        gzip -9 *.?
+      )
+    done
+  )
+fi
+
+# Add a documentation directory:
+mkdir -p $PKG/opt/nerdtools/doc/${PKGNAM}-$VERSION
+cp -a \
+  CONTRIBUTE* COPYING* README* TODO* \
+  $PKG/opt/nerdtools/doc/${PKGNAM}-$VERSION
+
+# If there's a ChangeLog, installing at least part of the recent history
+# is useful, but don't let it get totally out of control:
+if [ -r ChangeLog ]; then
+  DOCSDIR=$(echo $PKG/opt/nerdtools/doc/${PKGNAM}-$VERSION)
+  cat ChangeLog | head -n 1000 > $DOCSDIR/ChangeLog
+  touch -r ChangeLog $DOCSDIR/ChangeLog
+fi
+
+mkdir -p $PKG/install
+cat $CWD/slack-desc > $PKG/install/slack-desc
+
+cd $PKG
+/sbin/makepkg -l n -c n ${OUTPUT:-/out}/${PKGNAM}-$VERSION-$ARCH-$BUILD.txz

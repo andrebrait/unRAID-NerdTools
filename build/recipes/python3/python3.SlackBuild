@@ -1,0 +1,182 @@
+#!/bin/bash
+
+# Copyright 2012-2017 Audrius Kažukauskas <audrius@neutrino.lt>
+# Copyright 2017, 2018, 2019, 2023, 2024  Patrick J. Volkerding, Sebeka, MN, USA
+# All rights reserved.
+#
+# Redistribution and use of this script, with or without modification, is
+# permitted provided that the following conditions are met:
+#
+# 1. Redistributions of this script must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+#
+#  THIS SOFTWARE IS PROVIDED BY THE AUTHOR "AS IS" AND ANY EXPRESS OR IMPLIED
+#  WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+#  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO
+#  EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+#  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+#  PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+#  OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+#  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+#  OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+#  ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+cd $(dirname $0) ; CWD=$(pwd)
+
+# NerdTools adaptation of https://git.slackware.nl/current/plain/source/d/python3/python3.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61
+# Private prefix; upstream patch/config/license files remain pinned in the lock.
+export PKG_CONFIG_PATH=/opt/nerdtools/lib64/pkgconfig:/opt/nerdtools/lib/pkgconfig:/opt/nerdtools/share/pkgconfig
+export CPPFLAGS="-I/opt/nerdtools/include ${CPPFLAGS:-}"
+export LDFLAGS="-L/opt/nerdtools/lib64 -L/opt/nerdtools/lib ${LDFLAGS:-}"
+mkdir -p "${OUTPUT:-/out}"
+
+
+PKGNAM=python3
+SRCNAM=Python
+VERSION=3.12.14
+BRANCH_VERSION=$(echo $VERSION | cut -f 1,2 -d . )
+BUILD=${BUILD:-2}
+
+NUMJOBS=${NUMJOBS:-" -j$(expr $(nproc) + 1) "}
+
+# Automatically determine the architecture we're building on:
+if [ -z "$ARCH" ]; then
+  case "$( uname -m )" in
+    i?86) export ARCH=i686 ;;
+    arm*) export ARCH=arm ;;
+    # Unless $ARCH is already set, use uname -m for all other archs:
+       *) export ARCH=$( uname -m ) ;;
+  esac
+fi
+
+# If the variable PRINT_PACKAGE_NAME is set, then this script will report what
+# the name of the created package would be, and then exit. This information
+# could be useful to other scripts.
+if [ ! -z "${PRINT_PACKAGE_NAME}" ]; then
+  echo "$PKGNAM-$VERSION-$ARCH-$BUILD.txz"
+  exit 0
+fi
+
+TMP=${TMP:-/tmp}
+PKG=$TMP/package-$PKGNAM
+rm -rf $PKG
+mkdir -p $TMP $PKG
+
+# Don't set any SLKCFLAGS here, or OPT="$SLKCFLAGS" before the ./configure.
+# Python gets the compile options right without any help.
+if [ "$ARCH" = "i686" ]; then
+  LIBDIRSUFFIX=""
+elif [ "$ARCH" = "x86_64" ]; then
+  LIBDIRSUFFIX="64"
+elif [ "$ARCH" = "arm" ]; then
+  LIBDIRSUFFIX=""
+elif [ "$ARCH" = "armel" ]; then
+  LIBDIRSUFFIX=""
+elif [ "$ARCH" = "aarch64" ]; then
+  LIBDIRSUFFIX="64"
+else
+  LIBDIRSUFFIX=""
+fi
+
+# Location for Python site-packages:
+SITEPK=$PKG/opt/nerdtools/lib${LIBDIRSUFFIX}/python${BRANCH_VERSION}/site-packages
+# same as above without $PKG
+TOOLSDIR=/opt/nerdtools/lib${LIBDIRSUFFIX}/python${BRANCH_VERSION}/site-packages
+
+cd $TMP
+rm -rf $SRCNAM-$VERSION
+tar xf $CWD/$SRCNAM-$VERSION.tar.xz || exit 1
+cd $SRCNAM-$VERSION || exit 1
+
+# Fix python3 path in cgi.py.
+sed -i '1s|^#.*/opt/nerdtools/local/bin/python|#!/opt/nerdtools/bin/python3|' Lib/cgi.py
+
+## If system we're building on already has Python3 with pip in site-packages,
+## ignore it and install pip anyway.
+#sed -i 's|\("install",\)|\1 "--ignore-installed",|' Lib/ensurepip/__init__.py
+
+chown -R root:root .
+find -L . \
+ \( -perm 777 -o -perm 775 -o -perm 750 -o -perm 711 -o -perm 555 \
+  -o -perm 511 \) -exec chmod 755 {} \+ -o \
+ \( -perm 666 -o -perm 664 -o -perm 640 -o -perm 600 -o -perm 444 \
+  -o -perm 440 -o -perm 400 \) -exec chmod 644 {} \+
+
+./configure \
+  --prefix=/opt/nerdtools \
+  --libdir=/opt/nerdtools/lib${LIBDIRSUFFIX} \
+  --with-platlibdir=lib${LIBDIRSUFFIX} \
+  --mandir=/opt/nerdtools/man \
+  --docdir=/opt/nerdtools/doc/$PKGNAM-$VERSION \
+  --enable-ipv6 \
+  --enable-shared \
+  --with-computed-gotos \
+  --enable-optimizations \
+  --with-dbmliborder=gdbm:ndbm \
+  --with-system-expat \
+  --enable-loadable-sqlite-extensions \
+  --without-ensurepip \
+  --with-tzpath=/usr/share/zoneinfo \
+  --build=$ARCH-slackware-linux || exit 1
+
+make $NUMJOBS || exit 1
+make install DESTDIR=$PKG || exit 1
+
+# PEP says we can claim this link:
+( cd $PKG/opt/nerdtools/bin
+  rm -f python
+  ln -sf python${BRANCH_VERSION} python
+)
+
+# We don't want a large libpython*.a.
+find $PKG -name "libpython*.a" -exec rm --verbose "{}" \;
+
+# Make sure we have a non-platform-specific site-packages directory:
+mkdir -p $PKG/opt/nerdtools/lib/python${BRANCH_VERSION}/site-packages
+
+# We'll install the python-tools under site-packages.
+mkdir -p $SITEPK
+cp -a Tools/* $SITEPK
+
+# Remove DOS batch/exe files.
+find $PKG \( -name '*.exe' -o -name '*.bat' \) -exec rm -f '{}' \+
+
+# Fix permissions on dynamic libraries.
+find $PKG -type f -perm 555 -exec chmod 755 '{}' \+
+
+# Install docs.
+mkdir -p $PKG/opt/nerdtools/doc/$PKGNAM-$VERSION
+cp -a README.rst LICENSE Misc $PKG/opt/nerdtools/doc/$PKGNAM-$VERSION
+# Delete stuff that we don't need to package:
+rm -f $PKG/opt/nerdtools/doc/$PKGNAM-$VERSION/Misc/{HISTORY,*.in,*.wpr,python.man,svnmap.txt}
+mv $SITEPK/README $PKG/opt/nerdtools/doc/$PKGNAM-$VERSION/README.python-tools
+( cd $PKG/opt/nerdtools/doc/$PKGNAM-$VERSION ; ln -sf $TOOLSDIR Tools )
+if [ -e "$CWD/python-$VERSION-docs-html.tar.bz2" ]; then
+  tar xf $CWD/python-$VERSION-docs-html.tar.bz2
+  mv python-$VERSION-docs-html $PKG/opt/nerdtools/doc/$PKGNAM-$VERSION/docs-html
+  chown -R root:root $PKG/opt/nerdtools/doc/$PKGNAM-$VERSION/docs-html
+fi
+if [ -e "$CWD/python-$VERSION-docs-text.tar.bz2" ]; then
+  tar xf $CWD/python-$VERSION-docs-text.tar.bz2
+  mv python-$VERSION-docs-text $PKG/opt/nerdtools/doc/$PKGNAM-$VERSION/docs-text
+  chown -R root:root $PKG/opt/nerdtools/doc/$PKGNAM-$VERSION/docs-text
+fi
+
+# Fix possible incorrect permissions.
+( cd $PKG
+  find . -type d -exec chmod 755 "{}" \+
+  find . -perm 640 -exec chmod 644 "{}" \+
+  find . -perm 750 -exec chmod 755 "{}" \+
+)
+
+find $PKG -print0 | xargs -0 file | grep -e "executable" -e "shared object" | grep ELF \
+  | cut -f 1 -d : | xargs strip --strip-unneeded 2> /dev/null || true
+
+find $PKG/opt/nerdtools/man -type f -exec gzip -9 {} \+
+for i in $( find $PKG/opt/nerdtools/man -type l ) ; do ln -s $( readlink $i ).gz $i.gz ; rm $i ; done
+
+mkdir -p $PKG/install
+cat $CWD/slack-desc > $PKG/install/slack-desc
+
+cd $PKG
+/sbin/makepkg -l n -c n ${OUTPUT:-/out}/python3-$VERSION-$ARCH-$BUILD.txz

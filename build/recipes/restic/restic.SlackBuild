@@ -1,0 +1,78 @@
+#!/bin/bash
+
+# Slackware build script for restic
+
+# Copyright 2020-2026 Ebben Aries <slackbuilds@dscp.org>
+# All rights reserved.
+#
+# Redistribution and use of this script, with or without modification, is
+# permitted provided that the following conditions are met:
+#
+# 1. Redistributions of this script must retain the above copyright
+# notice, this list of conditions and the following disclaimer.
+#
+# THIS SOFTWARE IS PROVIDED BY THE AUTHOR "AS IS" AND ANY EXPRESS OR IMPLIED
+# WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
+# EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+# SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+# PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+# OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+# WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+# OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+# ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+# NerdTools: compile upstream source using individually locked Go module inputs.
+set -eu
+cd "$(dirname "$0")"
+CWD=$PWD
+PRGNAM=restic
+VERSION=0.19.0
+ARCH=${ARCH:-x86_64}
+BUILD=${BUILD:-1}
+TAG=${TAG:-_NT73}
+PKGTYPE=${PKGTYPE:-txz}
+TMP=${TMP:-/tmp/SBo}
+OUTPUT=${OUTPUT:-/tmp}
+PKG="$TMP/package-$PRGNAM"
+mkdir -p "$TMP" "$OUTPUT"
+rm -rf "$PKG" "$TMP/$PRGNAM-$VERSION"
+mkdir -p "$PKG/opt/nerdtools/bin" "$TMP/go-proxy"
+cd "$TMP"
+tar xf "$CWD/restic-0.19.0.tar.gz"
+cd "$PRGNAM-$VERSION"
+while IFS=$'\t' read -r input destination; do
+  install -D -m 0644 "$CWD/$input" "$TMP/go-proxy/$destination"
+done < "$CWD/go-modules.tsv"
+export GOPROXY="file://$TMP/go-proxy" GOSUMDB=off GOTOOLCHAIN=local
+export GOMODCACHE="$TMP/go-modules" GOCACHE="$TMP/go-build-cache"
+export CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOFLAGS=-mod=readonly
+go build -trimpath -tags selfupdate,disable_grpc_modules -ldflags="-s -w -X main.version=$VERSION" -o "$PKG/opt/nerdtools/bin/restic" ./cmd/restic
+DOC="$PKG/opt/nerdtools/doc/$PRGNAM-$VERSION"
+mkdir -p "$DOC/third-party"
+GOROOT=$(go env GOROOT)
+cp "$GOROOT/LICENSE" "$DOC/Go-LICENSE"
+if [ -f "$GOROOT/PATENTS" ]; then cp "$GOROOT/PATENTS" "$DOC/Go-PATENTS"; fi
+find . -type f \( -iname '*license*' -o -iname '*licence*' -o -iname '*notice*' -o -iname '*copying*' -o -iname '*copyright*' -o -name 'README*' \) -exec cp -a --parents {} "$DOC/" \;
+# Statically linked Go dependencies retain their own redistributable notices.
+python3 - "$CWD" "$DOC/third-party" <<'PY'
+from pathlib import Path
+import sys
+import zipfile
+root, target = map(Path, sys.argv[1:])
+for archive in root.glob('*.zip'):
+    with zipfile.ZipFile(archive) as source:
+        for member in source.infolist():
+            name = Path(member.filename)
+            if name.is_absolute() or '..' in name.parts:
+                raise SystemExit('unsafe module archive path')
+            if not member.is_dir() and any(word in name.name.lower() for word in ('license', 'licence', 'copying', 'copyright', 'notice')):
+                destination = target / name
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(source.read(member))
+PY
+cp "$CWD/$PRGNAM.SlackBuild" "$DOC/"
+mkdir -p "$PKG/install"
+cp "$CWD/slack-desc" "$PKG/install/slack-desc"
+cd "$PKG"
+/sbin/makepkg -l n -c n "$OUTPUT/$PRGNAM-$VERSION-$ARCH-$BUILD$TAG.$PKGTYPE"

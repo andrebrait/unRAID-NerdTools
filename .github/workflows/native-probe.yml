@@ -1,0 +1,65 @@
+name: Verify native build on task branch
+
+on:
+  push:
+    branches: [implement-maintenance]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Validate build inputs
+        run: |
+          python3 -m unittest discover -s build -p 'test_*.py'
+          python3 build/native.py validate
+      - name: Read baseline metadata
+        id: baseline
+        run: |
+          python3 - <<'PY'
+          import json, os
+          data = json.load(open('build/baseline.json'))
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              for key, value in {'version': data['version'], 'url': data['image']['url'], 'sha256': data['image']['sha256'], 'bzroot': data['bzroot_sha256']}.items():
+                  out.write(f'{key}={value}\n')
+          PY
+      - name: Prepare baseline and toolchain
+        id: roots
+        uses: ./build/unraid-build-root
+        with:
+          version: ${{ steps.baseline.outputs.version }}
+          url: ${{ steps.baseline.outputs.url }}
+          sha256: ${{ steps.baseline.outputs.sha256 }}
+          bzroot-sha256: ${{ steps.baseline.outputs.bzroot }}
+          toolchain-lock: build/locks/toolchain.json
+      - name: Install sandbox and VM tools
+        run: |
+          sudo apt-get install --no-install-recommends --yes binutils qemu-system-x86 bubblewrap uidmap
+          sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 root
+      - name: Verify isolated namespace
+        env:
+          DEVELOPMENT_ROOT: ${{ steps.roots.outputs.development-root }}
+        run: sudo python3 build/native.py sandbox-check --development-root "$DEVELOPMENT_ROOT" --work /tmp
+      - name: Build and validate complete catalog without publishing
+        env:
+          BASELINE_ROOT: ${{ steps.roots.outputs.baseline-root }}
+          DEVELOPMENT_ROOT: ${{ steps.roots.outputs.development-root }}
+        run: |
+          sudo --preserve-env=GITHUB_REPOSITORY,GITHUB_SHA,RUNNER_TEMP python3 build/native.py build \
+            --work /tmp --baseline-root "$BASELINE_ROOT" --development-root "$DEVELOPMENT_ROOT" --publish
+      - name: Retain compatibility report
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: native-probe-${{ github.run_id }}
+          path: |
+            dist/compatibility-7.3.json
+            dist/provenance-7.3.json
+            dist/kernel-smoke-7.3.log
+          if-no-files-found: error

@@ -1,0 +1,1421 @@
+{
+  "alsa-lib": {
+    "type": "directory"
+  },
+  "alsa-lib/alsa-lib.SlackBuild": {
+    "executable": true,
+    "sha256": "eb63429b1e0594841afa08c3ab2012735428ee6c3a1936acc3d6cc48136fa702",
+    "type": "file"
+  },
+  "alsa-lib/asound.conf.alsa": {
+    "executable": false,
+    "sha256": "ba6489a74e0bcf818f21f1c3a5fd30681e681bb572ad4506808f85bf00382ef5",
+    "type": "file"
+  },
+  "alsa-lib/asound.conf.pulse": {
+    "executable": false,
+    "sha256": "5d047c6e08b6f03ad6d14bcf1abef4957b6d283feec6ca65f79f9bd49487c96b",
+    "type": "file"
+  },
+  "alsa-lib/slack-desc": {
+    "executable": false,
+    "sha256": "92f54d44e270878faaf5889422dfffb81cc474f69d11054b16d37db3b2831a80",
+    "type": "file"
+  },
+  "alsa-lib/smixer.conf": {
+    "executable": false,
+    "sha256": "fc0df1fa159cd4bbe486d0fcfaddb0c5d81cb3337dfac1536614ce4926d6c2e2",
+    "type": "file"
+  },
+  "aria2": {
+    "type": "directory"
+  },
+  "aria2/aria2.SlackBuild": {
+    "executable": true,
+    "sha256": "0bd3752f1cdd52081fc1607b554cce38593a0adaccfc22b39f5cf5e8e2f82764",
+    "type": "file"
+  },
+  "aria2/slack-desc": {
+    "executable": false,
+    "sha256": "7cef1b050b60914700b83e02d4ebbc36f6fe860349ce8f6415b5079da6c17926",
+    "type": "file"
+  },
+  "audit": {
+    "type": "directory"
+  },
+  "audit/README": {
+    "executable": false,
+    "sha256": "242704bdc5fa95a6a5f06c0585a509ad17431ceca2a6186df62a7d1de8cd0685",
+    "type": "file"
+  },
+  "audit/README.SLACKWARE": {
+    "executable": false,
+    "sha256": "fd8062d4830063d1f844869b853d18c34fc59f3034d91e091d98a0499ead52ce",
+    "type": "file"
+  },
+  "audit/audit.SlackBuild": {
+    "executable": true,
+    "sha256": "731ad20b42488abae82756b1e79574cc0f43033016bd94aa3293d0b90180744d",
+    "type": "file"
+  },
+  "audit/rc.auditd": {
+    "executable": true,
+    "sha256": "a82bc8c3dbf619298b92c4bc0f7c84f4fdfd7894cfc29a2c9bc0c5c6d00befab",
+    "type": "file"
+  },
+  "audit/slack-desc": {
+    "executable": false,
+    "sha256": "a1ca4a82b0139e976c7c336e92cb4a04d0ab22a7511c9ccb6df998075606dc3c",
+    "type": "file"
+  },
+  "autossh": {
+    "type": "directory"
+  },
+  "autossh/autossh.SlackBuild": {
+    "executable": true,
+    "sha256": "7b5619848c200ffbac3af340935ff1c831324b92040f11b4ba787b9fb6f0b54a",
+    "type": "file"
+  },
+  "autossh/slack-desc": {
+    "executable": false,
+    "sha256": "a22ccbbe6202c0d07ad22a51bd7ad4e817f02203cb87e5c241a53f6efbdfc093",
+    "type": "file"
+  },
+  "axel": {
+    "type": "directory"
+  },
+  "axel/axel.SlackBuild": {
+    "executable": true,
+    "sha256": "f9a147e05c218cb513ab33760619ada3f254f129ca0479e265f6575b4143a135",
+    "type": "file"
+  },
+  "axel/slack-desc": {
+    "executable": false,
+    "sha256": "52200bcbbfbda06096ac1e2645585080ba94c7089b1687d9dd6f6e9c1fba13e5",
+    "type": "file"
+  },
+  "bc": {
+    "type": "directory"
+  },
+  "bc/bc.SlackBuild": {
+    "executable": true,
+    "sha256": "1a19c6cad73f842a2b7ee35f1bbf6515110c5f07ccbd5c9cc4ce3c6e89ee0681",
+    "type": "file"
+  },
+  "bc/slack-desc": {
+    "executable": false,
+    "sha256": "adcd388788de81a7fe494307abe0b4977d87fb4764b39d4c67a568380b1f3068",
+    "type": "file"
+  },
+  "bluez": {
+    "type": "directory"
+  },
+  "bluez/bluez.SlackBuild": {
+    "executable": true,
+    "sha256": "2862efff1892baa91ed082f0642d349215e1bb3b4336e0e8fcd56f138dfd4700",
+    "type": "file"
+  },
+  "bluez/btusb.conf": {
+    "executable": false,
+    "sha256": "46c021be659c9a1c4e55afd04df0c059af1f3d98a96338236412e449bf7477b4",
+    "type": "file"
+  },
+  "bluez/defaultconfig": {
+    "executable": false,
+    "sha256": "81dd73d5d051162b9fce87b0b69c6233ec6d32b99663783e4d87e1f114bc7a23",
+    "type": "file"
+  },
+  "bluez/mpris-proxy.desktop": {
+    "executable": false,
+    "sha256": "3fb8e269081e6dd117ed937c79dc15c59f04db5dd9cd02b4dbdb01ce305e5927",
+    "type": "file"
+  },
+  "bluez/org.bluez.obex.service": {
+    "executable": false,
+    "sha256": "d5cad9262844f332c2c067fb4d83c41b3b170d93247d624c3737d915b079fd74",
+    "type": "file"
+  },
+  "bluez/rc.bluetooth": {
+    "executable": true,
+    "sha256": "a7a92caf21219e9cce5b737fa80ccd60749ebe68f6edf2b0447c0226d7069497",
+    "type": "file"
+  },
+  "bluez/slack-desc": {
+    "executable": false,
+    "sha256": "a6e619b2d9edeb06f105cf8361cc5f06f7d0d4bced33d1497bf65c71075415cf",
+    "type": "file"
+  },
+  "borgbackup": {
+    "type": "directory"
+  },
+  "borgbackup/borgbackup.SlackBuild": {
+    "executable": true,
+    "sha256": "083cc554057a342ac06a313eabb238c1540d4e4160596896dfff3d8b1a7f31f9",
+    "type": "file"
+  },
+  "borgbackup/slack-desc": {
+    "executable": false,
+    "sha256": "0ec82237774c5b478afa94320965476192d839b54e3f88eafd154a28223f8b45",
+    "type": "file"
+  },
+  "btop": {
+    "type": "directory"
+  },
+  "btop/btop.SlackBuild": {
+    "executable": true,
+    "sha256": "aaba4914603eeb374f2e2bd5d08e6d7cef8b6cc8012fb43bd5e29fc9986abe75",
+    "type": "file"
+  },
+  "btop/slack-desc": {
+    "executable": false,
+    "sha256": "cb0e470f166b90ffa917e5dfc4a67f0370cbcd6b8eb9e5e55cc3b1908203e14a",
+    "type": "file"
+  },
+  "bwm-ng": {
+    "type": "directory"
+  },
+  "bwm-ng/bwm-ng.SlackBuild": {
+    "executable": true,
+    "sha256": "36a550fb7ab5881cee69011e9b87f419d6d9084580c2d10de1d7cd5a9d9273f4",
+    "type": "file"
+  },
+  "bwm-ng/slack-desc": {
+    "executable": false,
+    "sha256": "48da2b43dabe10a514ea97a8b820a8d15b15e51818cf5b48a0ee9ea41f32f4bb",
+    "type": "file"
+  },
+  "cksfv": {
+    "type": "directory"
+  },
+  "cksfv/cksfv.SlackBuild": {
+    "executable": true,
+    "sha256": "46c1bf154e5bc47d31f058f04b1cb21d1fb0cc51d4d6f63c63c1405bac3c07c5",
+    "type": "file"
+  },
+  "cksfv/slack-desc": {
+    "executable": false,
+    "sha256": "1d9b7e6a4a0d51e360c5e80c8b7d09fdc0f16988e7d31a2e9a31f6f84034063f",
+    "type": "file"
+  },
+  "ddrescue": {
+    "type": "directory"
+  },
+  "ddrescue/ddrescue.SlackBuild": {
+    "executable": true,
+    "sha256": "fe29e65639fc6c82a43795336be83ad94ef10901ff9ad67867ff69d224a00493",
+    "type": "file"
+  },
+  "ddrescue/slack-desc": {
+    "executable": false,
+    "sha256": "43304d597bae1807eeb2aea5c143e69ea60f942e677b44392101a7bde88363c7",
+    "type": "file"
+  },
+  "exiftool": {
+    "type": "directory"
+  },
+  "exiftool/exiftool.SlackBuild": {
+    "executable": true,
+    "sha256": "588d183bcb310bcef9e2e892c9a2458b2a67a568ab734f46df671ca8d4cd71bb",
+    "type": "file"
+  },
+  "exiftool/slack-desc": {
+    "executable": false,
+    "sha256": "7bcd343dd4c2e2eae6aaeae36dab9a9a0ab139754830efe6848b69446c86ceab",
+    "type": "file"
+  },
+  "fdupes": {
+    "type": "directory"
+  },
+  "fdupes/fdupes.SlackBuild": {
+    "executable": true,
+    "sha256": "c6593dfa4b8c8f8cc2d5c6fa523fd33e5b64dc475cb57e8bb9897645307067b8",
+    "type": "file"
+  },
+  "fdupes/slack-desc": {
+    "executable": false,
+    "sha256": "9b25b61396c333458894431bd8a85899fd3938e48522175e68d93475f19bbe30",
+    "type": "file"
+  },
+  "fio": {
+    "type": "directory"
+  },
+  "fio/fio.SlackBuild": {
+    "executable": true,
+    "sha256": "bd6199f3c809189da9664733b87252c87135d0258c8ffaea8c076328de0681c8",
+    "type": "file"
+  },
+  "fio/slack-desc": {
+    "executable": false,
+    "sha256": "f0af64fa2f08f1c1316dc73ccb1f7ed978b5018d9545c0261abed7fc490c3fcc",
+    "type": "file"
+  },
+  "fish": {
+    "type": "directory"
+  },
+  "fish/fish.SlackBuild": {
+    "executable": true,
+    "sha256": "64e885d82d555dfaf160bc9bff71264ea739ac7ebdfae71278823b84c8633b79",
+    "type": "file"
+  },
+  "fish/slack-desc": {
+    "executable": false,
+    "sha256": "f090dfa236061ff4a73cf69c8e44c8fd9f5ed670fda16b77ed43f9e44c01c335",
+    "type": "file"
+  },
+  "fzf": {
+    "type": "directory"
+  },
+  "fzf/fzf.SlackBuild": {
+    "executable": true,
+    "sha256": "746811ea4672dfb0c06a9c9f618f0e39b2a7731bce169f733eb8a69afd499cb0",
+    "type": "file"
+  },
+  "fzf/fzf.info": {
+    "executable": false,
+    "sha256": "82d81915e427c7a69cc0ba94a4c2987966cf32cd3bd37d862ea068e87f99b7f8",
+    "type": "file"
+  },
+  "fzf/slack-desc": {
+    "executable": false,
+    "sha256": "c64a8a09b62ab6b415dd79fd6a9cd0cab59de921194a0019efd3d27e9f084f64",
+    "type": "file"
+  },
+  "gnupg2": {
+    "type": "directory"
+  },
+  "gnupg2/gnupg2.SlackBuild": {
+    "executable": true,
+    "sha256": "7b183e13f08616c0e73bfb17e86c25883e78407dc1ffcabc71b811399bac0eed",
+    "type": "file"
+  },
+  "gnupg2/slack-desc": {
+    "executable": false,
+    "sha256": "99f6bdd56be9678a696cbd51108a7471bbf425d9efbb73dd9917ea9f134bc5b0",
+    "type": "file"
+  },
+  "gpgme": {
+    "type": "directory"
+  },
+  "gpgme/gpgme.SlackBuild": {
+    "executable": true,
+    "sha256": "45f0330046abecac1fb65beb88e54ada1439a808ea6fe3a54267a5e57722e5f5",
+    "type": "file"
+  },
+  "gpgme/slack-desc": {
+    "executable": false,
+    "sha256": "fe3cae64ac05de3c564092f926ddd40296b0eb35581d4e950b759f77e84a0c37",
+    "type": "file"
+  },
+  "iftop": {
+    "type": "directory"
+  },
+  "iftop/iftop.SlackBuild": {
+    "executable": true,
+    "sha256": "8e5ad1c7837c5a29d787ea91ec77ecec527ace569df3acd849a12f8ab683c682",
+    "type": "file"
+  },
+  "iftop/slack-desc": {
+    "executable": false,
+    "sha256": "f49f96134d46c896f2c189ca55188344d3d35926e5f4ece64f9c9273c9db7d7e",
+    "type": "file"
+  },
+  "iotop": {
+    "type": "directory"
+  },
+  "iotop/fix-proc-status-read.patch": {
+    "executable": false,
+    "sha256": "4527e4bbdb9c942ebb24ae1358b200480b760cc51c5416bb320e312885a00ed1",
+    "type": "file"
+  },
+  "iotop/iotop.SlackBuild": {
+    "executable": true,
+    "sha256": "ec81055c350ee17dd6dd300fec60222ab344456aab4270f03762de5123ad7111",
+    "type": "file"
+  },
+  "iotop/slack-desc": {
+    "executable": false,
+    "sha256": "38f3ca0fb4d581845e0df1f35ac14aad9d64985810bcf251432bf5d86dbc9b0c",
+    "type": "file"
+  },
+  "ipmitool": {
+    "type": "directory"
+  },
+  "ipmitool/ipmitool.SlackBuild": {
+    "executable": true,
+    "sha256": "43526cfd2a9f4351f62424d5d3e969494fde79d3f9f19156799f3652f0873e33",
+    "type": "file"
+  },
+  "ipmitool/patches": {
+    "type": "directory"
+  },
+  "ipmitool/patches/0001-CVE-2011-4339-OpenIPMI.patch": {
+    "executable": false,
+    "sha256": "d5d38fffa489de999612a15645cd91d5117a361278d2d4efd5b6f7af9ff1fe60",
+    "type": "file"
+  },
+  "ipmitool/patches/0002-openssl.patch": {
+    "executable": false,
+    "sha256": "7da20584541279045b4a4743600925b70fe162e1437a8da6647414926e12b58f",
+    "type": "file"
+  },
+  "ipmitool/patches/0003-ipmitool-1.8.11-set-kg-key.patch": {
+    "executable": false,
+    "sha256": "067acc0184e9e56a0254b4b4af5772807b6a863f372b827d2cc9bf5db3ee3cdf",
+    "type": "file"
+  },
+  "ipmitool/patches/0004-slowswid.patch": {
+    "executable": false,
+    "sha256": "afd6832c9f043961c03cad9daceb2e3afdffcd11b08166146b66d7b832e3d4e1",
+    "type": "file"
+  },
+  "ipmitool/patches/0005-sensor-id-length.patch": {
+    "executable": false,
+    "sha256": "9ca0ba9c415b8834ba10d6b3cdb2d19251c8ff8ea843546b69b7d7a86da03530",
+    "type": "file"
+  },
+  "ipmitool/patches/0006-enable-usb.patch": {
+    "executable": false,
+    "sha256": "77c13d708fde749ea245110d65040f3e049966372ecfa2527581d0f4a5f049ac",
+    "type": "file"
+  },
+  "ipmitool/patches/0007-check-input.patch": {
+    "executable": false,
+    "sha256": "079b07669ed66165037a3a9ced65152ddda34d900c2e4ee02db41cca38cc0972",
+    "type": "file"
+  },
+  "ipmitool/patches/0008-add-extern.patch": {
+    "executable": false,
+    "sha256": "e58eb5ba61d6b6366d476a0c22384064a93a5c67918b8fb70a4c5ca08a0dae91",
+    "type": "file"
+  },
+  "ipmitool/patches/0009-best-cipher.patch": {
+    "executable": false,
+    "sha256": "ba1c6050b21c5f81dea39631749adf9ce65d9adf57bfab42febbd68f931b33a2",
+    "type": "file"
+  },
+  "ipmitool/patches/0010-pef-missing-newline.patch": {
+    "executable": false,
+    "sha256": "a4e2d4d299a1e53cd00d09c5462835af56afb3761002029cf58b577ced07c330",
+    "type": "file"
+  },
+  "ipmitool/patches/0011-expand-sensor-name-column.patch": {
+    "executable": false,
+    "sha256": "a0547b432fcdf0c085d935364e2c5966c1d77e4974ac8968203a9e430c1cfa58",
+    "type": "file"
+  },
+  "ipmitool/patches/0012-CVE-2020-5208.patch": {
+    "executable": false,
+    "sha256": "ff8c1b57fe70ac0d30e4440c2777a890104fdc4a43f4e35210aedda4ec5cb186",
+    "type": "file"
+  },
+  "ipmitool/slack-desc": {
+    "executable": false,
+    "sha256": "7601d0b63322e7fe9b1f45d9493df24aa0855f0d8c5adc799e1a8f0d1f86e8fa",
+    "type": "file"
+  },
+  "irssi": {
+    "type": "directory"
+  },
+  "irssi/irssi.SlackBuild": {
+    "executable": true,
+    "sha256": "e6f4ef176fbf9f7ca1c36ba26c05166844f0de904c20100731c84dadeacf3ca4",
+    "type": "file"
+  },
+  "irssi/slack-desc": {
+    "executable": false,
+    "sha256": "1e7583675985035296a2df903085bbd0b0d79a19b1e7a1f3686489d2c8c5d293",
+    "type": "file"
+  },
+  "jdupes": {
+    "type": "directory"
+  },
+  "jdupes/jdupes.SlackBuild": {
+    "executable": true,
+    "sha256": "c975d55729d2ede0762d8e31d4d54e70bc07c8d0edc02a34ebcb7482230a45cb",
+    "type": "file"
+  },
+  "jdupes/slack-desc": {
+    "executable": false,
+    "sha256": "646ad884d782b900c8338b835ad644d275b6d2f194b7fe5064c41bdb5cb49663",
+    "type": "file"
+  },
+  "lftp": {
+    "type": "directory"
+  },
+  "lftp/lftp.SlackBuild": {
+    "executable": true,
+    "sha256": "9d17daeede739a37589f8ac8890fbf6243969ac517d2286fc411e884f8e8de81",
+    "type": "file"
+  },
+  "lftp/slack-desc": {
+    "executable": false,
+    "sha256": "8a13dd7fba422a2a481091fce1521bf33d414c6b66160b7c7f1458f951b9cb8d",
+    "type": "file"
+  },
+  "libassuan": {
+    "type": "directory"
+  },
+  "libassuan/libassuan.SlackBuild": {
+    "executable": true,
+    "sha256": "19b28f467722b2ad44262bd24753dc11311968713aafd4d45ccc0ad3dccd37bb",
+    "type": "file"
+  },
+  "libassuan/slack-desc": {
+    "executable": false,
+    "sha256": "e8b45e0d3954c75df96004168c910dd54833dbf83f0761555c0f301003642f54",
+    "type": "file"
+  },
+  "libical": {
+    "type": "directory"
+  },
+  "libical/libical.SlackBuild": {
+    "executable": true,
+    "sha256": "91ee1db9f0b90ba4e7130f77816b3e3eb5671dc60207902d8dbc882004a603ef",
+    "type": "file"
+  },
+  "libical/slack-desc": {
+    "executable": false,
+    "sha256": "0e37420c2e65e219f8a4a3c1b83b922fabea14dafdb430e6cd9729029f723031",
+    "type": "file"
+  },
+  "libjodycode": {
+    "type": "directory"
+  },
+  "libjodycode/libjodycode.SlackBuild": {
+    "executable": true,
+    "sha256": "9a7b18bdd415c7850ca0107584cb31ee7fa34d1d94f4bab48baa659f20240c7b",
+    "type": "file"
+  },
+  "libjodycode/slack-desc": {
+    "executable": false,
+    "sha256": "2938ba18c294033bdf7e053a00b8341553181f759ef39d0a02806ff058365cbd",
+    "type": "file"
+  },
+  "libksba": {
+    "type": "directory"
+  },
+  "libksba/libksba.SlackBuild": {
+    "executable": true,
+    "sha256": "9a76b04c36d3f543d70e9d887d5b8e218ddcc23d886cebf2fa64164099023789",
+    "type": "file"
+  },
+  "libksba/slack-desc": {
+    "executable": false,
+    "sha256": "a76f206c7049e63ae0d07962b2ad19e381956a874d76b00ae62979e2f278291c",
+    "type": "file"
+  },
+  "libmediainfo": {
+    "type": "directory"
+  },
+  "libmediainfo/libmediainfo.SlackBuild": {
+    "executable": true,
+    "sha256": "e119dcb7e12bbdc5ab2e326a1a85f9ae09db2aebdbfd98773478b9b4450a0e25",
+    "type": "file"
+  },
+  "libmediainfo/slack-desc": {
+    "executable": false,
+    "sha256": "f02d4b28c210f44061c10701a0bf0a1fc8141c67f09ee1b4fd22615b942c626c",
+    "type": "file"
+  },
+  "libnl": {
+    "type": "directory"
+  },
+  "libnl/libnl.SlackBuild": {
+    "executable": true,
+    "sha256": "f3eb7d5bf04af5cd6c0b67cd18fa866922d617976fb9c89e0da34280cda5be97",
+    "type": "file"
+  },
+  "libnl/slack-desc": {
+    "executable": false,
+    "sha256": "b64b18f32a59fbf309d7c68f1d499450ca585460c6697a07af2de6a2010adfae",
+    "type": "file"
+  },
+  "libsodium": {
+    "type": "directory"
+  },
+  "libsodium/libsodium.SlackBuild": {
+    "executable": true,
+    "sha256": "16d8009ef05300df787317cfd57508466279e2038aa04e20b980a9e2e3491314",
+    "type": "file"
+  },
+  "libsodium/slack-desc": {
+    "executable": false,
+    "sha256": "0dcc5cb2a23dd35e34160c96bb2bc719880884b5bf43ee8e1a5b908495f96566",
+    "type": "file"
+  },
+  "liburing": {
+    "type": "directory"
+  },
+  "liburing/liburing.SlackBuild": {
+    "executable": true,
+    "sha256": "6e041f94baede30df178024e4d86e68bef86443c252343c04d2184606547abe5",
+    "type": "file"
+  },
+  "liburing/slack-desc": {
+    "executable": false,
+    "sha256": "ec25dda1432904045063fce5ca94f7ec8a044175f57b2ff574da4185a3f15787",
+    "type": "file"
+  },
+  "libyaml": {
+    "type": "directory"
+  },
+  "libyaml/libyaml.SlackBuild": {
+    "executable": true,
+    "sha256": "761cdc45530e36df4fbc53f0432a1277c36bd191bf2c73e8e6955c9192f18ade",
+    "type": "file"
+  },
+  "libyaml/slack-desc": {
+    "executable": false,
+    "sha256": "d58019685f2e571dccbbc0a0a49668d74c61d339c45378e0a1cae292a443c685",
+    "type": "file"
+  },
+  "libzen": {
+    "type": "directory"
+  },
+  "libzen/libzen.SlackBuild": {
+    "executable": true,
+    "sha256": "0610f2e44e1c0e1aba1659fd25204f0e3c906ce39b0407a4dfabb305bbefddbc",
+    "type": "file"
+  },
+  "libzen/slack-desc": {
+    "executable": false,
+    "sha256": "cff37f38281c4dda6ed7938308ff5a24c69a9b1eefcaec7296cb2a3ad825feb9",
+    "type": "file"
+  },
+  "llfuse": {
+    "type": "directory"
+  },
+  "llfuse/llfuse.SlackBuild": {
+    "executable": true,
+    "sha256": "5ddfead858832bca68b6511a49839191dc0476bd37dbfc327304a90cb5fe1671",
+    "type": "file"
+  },
+  "llfuse/slack-desc": {
+    "executable": false,
+    "sha256": "b9c732dd0cb7e885ea5928b149d982886306580def9cc71d4d9bbeacacd8bfb6",
+    "type": "file"
+  },
+  "lua": {
+    "type": "directory"
+  },
+  "lua/lua.SlackBuild": {
+    "executable": true,
+    "sha256": "d6cb6486cfd7031ebb1e2caf11c265e2be0a50ea1a76488c9f71c6053b0f361c",
+    "type": "file"
+  },
+  "lua/lua.pc": {
+    "executable": false,
+    "sha256": "ef5afc58aebbf1732e653bb263ada05ff09b4c2a9bf37a7d7650a775d30c821c",
+    "type": "file"
+  },
+  "lua/lua.usr.local.patch": {
+    "executable": false,
+    "sha256": "116b1b9d1e168a657532758cba51f22dbd1b69a76d813a4f53391dccd070ad5c",
+    "type": "file"
+  },
+  "lua/slack-desc": {
+    "executable": false,
+    "sha256": "4609d99c81ecd34658ed436de545753066eb75c428288c5c013d1c36db3eb914",
+    "type": "file"
+  },
+  "mediainfo": {
+    "type": "directory"
+  },
+  "mediainfo/mediainfo.SlackBuild": {
+    "executable": true,
+    "sha256": "b69f287b488ccbcc5958976a71cb67cc26f81bce55bb310fc646f07258a42215",
+    "type": "file"
+  },
+  "mediainfo/slack-desc": {
+    "executable": false,
+    "sha256": "30cf4e91a5650cfcd64b4b84f1717c36c89a042b6245e9b584cbe1b114ff2660",
+    "type": "file"
+  },
+  "mktorrent": {
+    "type": "directory"
+  },
+  "mktorrent/mktorrent.SlackBuild": {
+    "executable": true,
+    "sha256": "84a7132192d11a467a9d059bbe6a440bb8b2c3f1e08da41443a9439948390b44",
+    "type": "file"
+  },
+  "mktorrent/slack-desc": {
+    "executable": false,
+    "sha256": "7723d58fd5019caa801867fccdc22c1bbafbcbef26b05d60466cc5980d39ac61",
+    "type": "file"
+  },
+  "mlocate": {
+    "type": "directory"
+  },
+  "mlocate/mlocate.SlackBuild": {
+    "executable": true,
+    "sha256": "81c36df89c7df55caf0dc3a0cb010fec0ee990e3fd20fed98dccddc16c166ff4",
+    "type": "file"
+  },
+  "mlocate/slack-desc": {
+    "executable": false,
+    "sha256": "84a0820d836a715a9ac7393c23140b2c6fd957ef76b9abf45956a85494332d4d",
+    "type": "file"
+  },
+  "mlocate/updatedb.conf.new": {
+    "executable": false,
+    "sha256": "b6fb30c3a7ee716214ba5749f48f99c4b3617674e1ee40d699989a346e730d5a",
+    "type": "file"
+  },
+  "msgpack-python": {
+    "type": "directory"
+  },
+  "msgpack-python/msgpack-python.SlackBuild": {
+    "executable": true,
+    "sha256": "a0282cab453f89fe7f4e1086f398b681cb560578cb9e63b3222b0fcdb7bea52e",
+    "type": "file"
+  },
+  "msgpack-python/slack-desc": {
+    "executable": false,
+    "sha256": "8b26db8aef9a84d4f5e041990b92ee2a1f2c377a72e4e12c26076ac4f2889995",
+    "type": "file"
+  },
+  "ncdu": {
+    "type": "directory"
+  },
+  "ncdu/ncdu.SlackBuild": {
+    "executable": true,
+    "sha256": "727f544a93d8d8a6fedc6e547d6ab6d46d01ca470938cce78ec32befe7c228b1",
+    "type": "file"
+  },
+  "ncdu/slack-desc": {
+    "executable": false,
+    "sha256": "4fa19b5d01ad77456057a2cf52e53d18560fcd1e7281e8dc081d5bc33c3f9e30",
+    "type": "file"
+  },
+  "neofetch": {
+    "type": "directory"
+  },
+  "neofetch/neofetch.SlackBuild": {
+    "executable": true,
+    "sha256": "12052177ca9b9dc64aabf6db4942953567bf38948b89a1ed1b46c0aefffc4614",
+    "type": "file"
+  },
+  "neofetch/slack-desc": {
+    "executable": false,
+    "sha256": "06e6e61c877f351dfbb065c9e86203b74a7ade702f13200b6200c35b3723d60e",
+    "type": "file"
+  },
+  "netcat": {
+    "type": "directory"
+  },
+  "netcat/netcat.SlackBuild": {
+    "executable": true,
+    "sha256": "fad28edbe4ebf61710221e3d98bae67ac9287d46ec80da8baad1db5f70942bbf",
+    "type": "file"
+  },
+  "netcat/slack-desc": {
+    "executable": false,
+    "sha256": "9b16d0d265fab21bff53a19f32e7d7d8b01aad1520b452860c8ec966caec8328",
+    "type": "file"
+  },
+  "nload": {
+    "type": "directory"
+  },
+  "nload/nload.SlackBuild": {
+    "executable": true,
+    "sha256": "2a93e2cf2f91eae7e4caef462b5d54bee508a62aedf62aad4d090fe7102d7914",
+    "type": "file"
+  },
+  "nload/slack-desc": {
+    "executable": false,
+    "sha256": "ca201754982f9b507cedfc314a909839ff240549d65f6d3f67298339ec3dd118",
+    "type": "file"
+  },
+  "nmap": {
+    "type": "directory"
+  },
+  "nmap/nmap.SlackBuild": {
+    "executable": true,
+    "sha256": "7b0e21e94cc1ff2184d87a038cedcdf08ebbefbd2ba2f777d2a035ba726b34de",
+    "type": "file"
+  },
+  "nmap/nmap.no.internet.requirement.for.build.diff": {
+    "executable": false,
+    "sha256": "da933c3de7384ad08af72eb3af3965407f1859b4e8b370200611b78f78b574b7",
+    "type": "file"
+  },
+  "nmap/nmap.nping.system.libpcap.diff": {
+    "executable": false,
+    "sha256": "94eb647b6c08fb46c539e93ee8ace2a7de404dca0df1816774c0cf81a631986a",
+    "type": "file"
+  },
+  "nmap/slack-desc": {
+    "executable": false,
+    "sha256": "49a83035fbb549325f59dce8346e86e2acbb5cc93f17c28a2e59a4e3ded64fad",
+    "type": "file"
+  },
+  "nodejs": {
+    "type": "directory"
+  },
+  "nodejs/32-bit.patch": {
+    "executable": false,
+    "sha256": "bae01a0b273fcba90b4b7809f3b7374e4cb8bbc5a51fd1df73947117c9f2ddb4",
+    "type": "file"
+  },
+  "nodejs/nodejs.SlackBuild": {
+    "executable": true,
+    "sha256": "59079770976d245b426a97d1679499f8f78119bf8c7aa256ba6beef4d08e5c20",
+    "type": "file"
+  },
+  "nodejs/slack-desc": {
+    "executable": false,
+    "sha256": "aa0543b21e1dac8915ea8bb6b0ead1b73d88011497eb9ab7c274c46546e071f4",
+    "type": "file"
+  },
+  "npth": {
+    "type": "directory"
+  },
+  "npth/npth.SlackBuild": {
+    "executable": true,
+    "sha256": "65383778c7cc56fbef0e65b5dbc43f30fa226b411fe72a54eee9387c62ad81e7",
+    "type": "file"
+  },
+  "npth/slack-desc": {
+    "executable": false,
+    "sha256": "64c746bdce4a7e01ebad283653ec153159637abcf06f1138c776482430c72293",
+    "type": "file"
+  },
+  "p7zip": {
+    "type": "directory"
+  },
+  "p7zip/p7zip.SlackBuild": {
+    "executable": true,
+    "sha256": "eb2befae44ff1800df65afc4b79d18fa3c42dbae01d3811cb8523df1ec0f8f59",
+    "type": "file"
+  },
+  "p7zip/slack-desc": {
+    "executable": false,
+    "sha256": "3c90ca6312f320dbe741af3953c44b546f672627aef49a0760e25550a707b1b4",
+    "type": "file"
+  },
+  "par2cmdline": {
+    "type": "directory"
+  },
+  "par2cmdline/par2cmdline.SlackBuild": {
+    "executable": true,
+    "sha256": "db8646d18feb5170eb7fa7556fcbd94367e5a21791c1c32ef248b2aff425553b",
+    "type": "file"
+  },
+  "par2cmdline/slack-desc": {
+    "executable": false,
+    "sha256": "fb28aec991c4c2ba783759c57b95982db59437765b70cf7e9950d4a2ba6f9613",
+    "type": "file"
+  },
+  "pigz": {
+    "type": "directory"
+  },
+  "pigz/pigz.SlackBuild": {
+    "executable": true,
+    "sha256": "f663572a533e6c5cf4776fe55277213e01128445fa0dd600916bacd4a8ea8c0d",
+    "type": "file"
+  },
+  "pigz/slack-desc": {
+    "executable": false,
+    "sha256": "e29d8e86f73631826bf71893041410540cc20b488d281bbe4918a96ad8f91341",
+    "type": "file"
+  },
+  "pinentry": {
+    "type": "directory"
+  },
+  "pinentry/pinentry.SlackBuild": {
+    "executable": true,
+    "sha256": "7692bb397bc8ab7c3ecac00dc52cead1a8e585d9693a61c35f2fb1521e275658",
+    "type": "file"
+  },
+  "pinentry/slack-desc": {
+    "executable": false,
+    "sha256": "3f34dde337553108a6a107e8b03a7a3354656a560813069aec32a5f646541288",
+    "type": "file"
+  },
+  "plocate": {
+    "type": "directory"
+  },
+  "plocate/plocate.SlackBuild": {
+    "executable": true,
+    "sha256": "19defe3d467a664186286e60f1f6921dcaeddc8e6cbb6d386fc142d790ee85f1",
+    "type": "file"
+  },
+  "plocate/slack-desc": {
+    "executable": false,
+    "sha256": "3a1a3f1982f989bb70533ae180e568c3da95a17ee9406904af91b340444b34e1",
+    "type": "file"
+  },
+  "plocate/updatedb.conf": {
+    "executable": false,
+    "sha256": "b6fb30c3a7ee716214ba5749f48f99c4b3617674e1ee40d699989a346e730d5a",
+    "type": "file"
+  },
+  "powershell": {
+    "type": "directory"
+  },
+  "powershell/nuget-locks": {
+    "type": "directory"
+  },
+  "powershell/nuget-locks/src": {
+    "type": "directory"
+  },
+  "powershell/nuget-locks/src/Microsoft.PowerShell.Commands.Management": {
+    "type": "directory"
+  },
+  "powershell/nuget-locks/src/Microsoft.PowerShell.Commands.Management/packages.lock.json": {
+    "executable": false,
+    "sha256": "9ffc8e665b7334fbcd0b07a828d6bf89d91f0a7c84895c967c0ab4217a591f06",
+    "type": "file"
+  },
+  "powershell/nuget-locks/src/Microsoft.PowerShell.Commands.Utility": {
+    "type": "directory"
+  },
+  "powershell/nuget-locks/src/Microsoft.PowerShell.Commands.Utility/packages.lock.json": {
+    "executable": false,
+    "sha256": "0eacf4d746542b7ead36564553eb987c559fbe2b850fe259fdb230583d3ec091",
+    "type": "file"
+  },
+  "powershell/nuget-locks/src/Microsoft.PowerShell.ConsoleHost": {
+    "type": "directory"
+  },
+  "powershell/nuget-locks/src/Microsoft.PowerShell.ConsoleHost/packages.lock.json": {
+    "executable": false,
+    "sha256": "27a249bf9c4c15f79e59a80a57534aed967a716bfbff404fa9d15bed301cc204",
+    "type": "file"
+  },
+  "powershell/nuget-locks/src/Microsoft.PowerShell.SDK": {
+    "type": "directory"
+  },
+  "powershell/nuget-locks/src/Microsoft.PowerShell.SDK/packages.lock.json": {
+    "executable": false,
+    "sha256": "c71a42cc26e1ebf3d209747074b447affdaf1cc78bea44ba3905e32e007dda12",
+    "type": "file"
+  },
+  "powershell/nuget-locks/src/Microsoft.PowerShell.Security": {
+    "type": "directory"
+  },
+  "powershell/nuget-locks/src/Microsoft.PowerShell.Security/packages.lock.json": {
+    "executable": false,
+    "sha256": "27a249bf9c4c15f79e59a80a57534aed967a716bfbff404fa9d15bed301cc204",
+    "type": "file"
+  },
+  "powershell/nuget-locks/src/Modules": {
+    "type": "directory"
+  },
+  "powershell/nuget-locks/src/Modules/packages.lock.json": {
+    "executable": false,
+    "sha256": "80b52def6daac54913fac79561460809bf1c3d4502d7499f9c36d26cd68b3946",
+    "type": "file"
+  },
+  "powershell/nuget-locks/src/ResGen": {
+    "type": "directory"
+  },
+  "powershell/nuget-locks/src/ResGen/packages.lock.json": {
+    "executable": false,
+    "sha256": "5807264a99d1717d9b7d8333eaec0f71766609882d23559cab3be46aaa47f05c",
+    "type": "file"
+  },
+  "powershell/nuget-locks/src/System.Management.Automation": {
+    "type": "directory"
+  },
+  "powershell/nuget-locks/src/System.Management.Automation/SourceGenerators": {
+    "type": "directory"
+  },
+  "powershell/nuget-locks/src/System.Management.Automation/SourceGenerators/PSVersionInfoGenerator": {
+    "type": "directory"
+  },
+  "powershell/nuget-locks/src/System.Management.Automation/SourceGenerators/PSVersionInfoGenerator/packages.lock.json": {
+    "executable": false,
+    "sha256": "7cac3affb939568f1d09cdb49c9fef8caa95b42760d6749cf808181d9b296118",
+    "type": "file"
+  },
+  "powershell/nuget-locks/src/System.Management.Automation/packages.lock.json": {
+    "executable": false,
+    "sha256": "2efd8c0066735c40c1439751465e1a6736bc126c079dec497aa87ce57aa7413f",
+    "type": "file"
+  },
+  "powershell/nuget-locks/src/TypeCatalogGen": {
+    "type": "directory"
+  },
+  "powershell/nuget-locks/src/TypeCatalogGen/packages.lock.json": {
+    "executable": false,
+    "sha256": "5807264a99d1717d9b7d8333eaec0f71766609882d23559cab3be46aaa47f05c",
+    "type": "file"
+  },
+  "powershell/nuget-locks/src/powershell-unix": {
+    "type": "directory"
+  },
+  "powershell/nuget-locks/src/powershell-unix/packages.lock.json": {
+    "executable": false,
+    "sha256": "fdbfbe3b1e746b7a1f64dacd332fda660c1c003ec8d2ec6802d85bb79cdd3ddb",
+    "type": "file"
+  },
+  "powershell/nuget-locks/tools": {
+    "type": "directory"
+  },
+  "powershell/nuget-locks/tools/wix": {
+    "type": "directory"
+  },
+  "powershell/nuget-locks/tools/wix/packages.lock.json": {
+    "executable": false,
+    "sha256": "3799dfd900dfdb5459d552af5273978d69ef2d76f333e26547ee8688e9e5354e",
+    "type": "file"
+  },
+  "powershell/powershell.SlackBuild": {
+    "executable": true,
+    "sha256": "652ca33e65e85149ac06601f1431c86f26dbd2504a923681693187c0f0758004",
+    "type": "file"
+  },
+  "powershell/slack-desc": {
+    "executable": false,
+    "sha256": "12a8740d1cfe8bc5b4688080317eed14c0e06ad667ebf4f939cfc87242a842d4",
+    "type": "file"
+  },
+  "powershell/upstream.commit": {
+    "executable": false,
+    "sha256": "04aacab49426dad66bedf9f914b3d1185eecaec62b328eedb52c956c389b44e7",
+    "type": "file"
+  },
+  "powershell/upstream.tag": {
+    "executable": false,
+    "sha256": "88155b65478caa794da3b3c248ea2f776e5ad49a486e3a5cf05b577b6a464dad",
+    "type": "file"
+  },
+  "powertop": {
+    "type": "directory"
+  },
+  "powertop/powertop.SlackBuild": {
+    "executable": true,
+    "sha256": "0c7e958fe8f1cd424722a90ebf024d60877299acc1853ba3b3644df5311b4de2",
+    "type": "file"
+  },
+  "powertop/slack-desc": {
+    "executable": false,
+    "sha256": "118d0aae6e19184056b1b2b49d5cf97b2cfbfa67d2874bdf130f2e00bbe805f7",
+    "type": "file"
+  },
+  "python-packaging": {
+    "type": "directory"
+  },
+  "python-packaging/python-packaging.SlackBuild": {
+    "executable": true,
+    "sha256": "bf482b35a9843f68c0a4e6aded3e3edb0830bd140ada3e387d37d40d506f91fe",
+    "type": "file"
+  },
+  "python-packaging/slack-desc": {
+    "executable": false,
+    "sha256": "a4397e04395009d8afed9a585d225fd194cec68968796756b81d89cd0bbd5a71",
+    "type": "file"
+  },
+  "python-pip": {
+    "type": "directory"
+  },
+  "python-pip/python-pip.SlackBuild": {
+    "executable": true,
+    "sha256": "2440be950dd3c97c89c96b9bd80d8cafdc3d157eab7632441b6b112a613567ed",
+    "type": "file"
+  },
+  "python-pip/slack-desc": {
+    "executable": false,
+    "sha256": "479f2c195aacfad6efc2439b77b24e300b2b29148515e60364806d1a8b5c0967",
+    "type": "file"
+  },
+  "python-setuptools": {
+    "type": "directory"
+  },
+  "python-setuptools/python-setuptools.SlackBuild": {
+    "executable": true,
+    "sha256": "e853ba44d3f1f3fe36c048b6ff2671cdbd3d4c4f9f1177feb1fa4f20c3678274",
+    "type": "file"
+  },
+  "python-setuptools/slack-desc": {
+    "executable": false,
+    "sha256": "466e6095ae5b86039d1628ab19f1cba5031fee291a73ae01b2dbc844a2e86460",
+    "type": "file"
+  },
+  "python2": {
+    "type": "directory"
+  },
+  "python2/python.no-static-library.diff": {
+    "executable": false,
+    "sha256": "1b176b9d92b960b8ef11a38a025f261f6b4d198c82b5425001e658b05139fbbb",
+    "type": "file"
+  },
+  "python2/python.readline.set_pre_input_hook.diff": {
+    "executable": false,
+    "sha256": "213c451c02aece4c3e04cf00fc3e4c9b511459190298df3c13a7e542e43df1e2",
+    "type": "file"
+  },
+  "python2/python.x86_64.diff": {
+    "executable": false,
+    "sha256": "40363d3f92c40307e891e939dbd449b0ddf95ad66527c40ca5b7d88a5f59ace8",
+    "type": "file"
+  },
+  "python2/python2.SlackBuild": {
+    "executable": true,
+    "sha256": "ff67a26e903466b94f556f3e1a005bf4981d755234d7eb850c40c7801b69443e",
+    "type": "file"
+  },
+  "python2/slack-desc": {
+    "executable": false,
+    "sha256": "98d47c12263b66694a8c990553715aa8973c25080b902a01e2ae1eb701e0d230",
+    "type": "file"
+  },
+  "python3": {
+    "type": "directory"
+  },
+  "python3/python3.SlackBuild": {
+    "executable": true,
+    "sha256": "b3d7de7828c972efaa8853f23eeaa06c4c590596487a506d953bba7253ace947",
+    "type": "file"
+  },
+  "python3/slack-desc": {
+    "executable": false,
+    "sha256": "0a2cb3019dace14c047befad3f8451e57b45d6e3eb6333fb05d6c8834086065a",
+    "type": "file"
+  },
+  "rar2fs": {
+    "type": "directory"
+  },
+  "rar2fs/rar2fs.SlackBuild": {
+    "executable": true,
+    "sha256": "91898ec94d51b6832e73871e1a04b60047759183c65984d32055b861df7adfa9",
+    "type": "file"
+  },
+  "rar2fs/slack-desc": {
+    "executable": false,
+    "sha256": "dc939fd3be6594b7e3ad41ee4b7ef6606d48ab33275ecc05f8603fe0707de3e9",
+    "type": "file"
+  },
+  "rclone": {
+    "type": "directory"
+  },
+  "rclone/go-modules.tsv": {
+    "executable": false,
+    "sha256": "d4de40dd653e130a6ade517ac79b3d157076871d8c9efb15bbd7a0c889c71ae2",
+    "type": "file"
+  },
+  "rclone/rclone.SlackBuild": {
+    "executable": true,
+    "sha256": "0f242191aef8bff42af17eedd779594618b4021b55441a2afd0b916bc52e64b9",
+    "type": "file"
+  },
+  "rclone/slack-desc": {
+    "executable": false,
+    "sha256": "61b98b91828084b036db60ac55b7c9cb9f2ebadfd1783cb130defcb863ab75a6",
+    "type": "file"
+  },
+  "restic": {
+    "type": "directory"
+  },
+  "restic/go-modules.tsv": {
+    "executable": false,
+    "sha256": "6aecab52a284617da24dad7e66d456a39f95f0132e97d274357a93e69383c7f2",
+    "type": "file"
+  },
+  "restic/restic.SlackBuild": {
+    "executable": true,
+    "sha256": "b093d909476d941959ef33b5ed3d9737fa74551974675cd45b2116c32587274b",
+    "type": "file"
+  },
+  "restic/slack-desc": {
+    "executable": false,
+    "sha256": "239d0b9133c4913cbe3b45e6910fa3b654277d1f9e8af29eab9e7a8b8ed2947a",
+    "type": "file"
+  },
+  "rsnapshot": {
+    "type": "directory"
+  },
+  "rsnapshot/contrib": {
+    "type": "directory"
+  },
+  "rsnapshot/contrib/crontab": {
+    "executable": false,
+    "sha256": "7ffdd5410546fc5eedfb1f58efdfe3e67bbfa69fb5939a4b0d88edebc9be7e12",
+    "type": "file"
+  },
+  "rsnapshot/contrib/rsnapshot.conf": {
+    "executable": false,
+    "sha256": "26168017eb95a7cb5d734b802720b0dcc233b7da2238e3d32e891cfd51292911",
+    "type": "file"
+  },
+  "rsnapshot/contrib/rsnapshot_backup_mysql": {
+    "executable": true,
+    "sha256": "f7f18791653be60af250e7764c458b717ce719b461d0d29378c1a089f64d06e2",
+    "type": "file"
+  },
+  "rsnapshot/contrib/rsnapshot_daily": {
+    "executable": true,
+    "sha256": "4924ea0b19d28d26ab2b6bbea3a49d4d8250b2bbeef799d4f816adc83c1c7ee3",
+    "type": "file"
+  },
+  "rsnapshot/contrib/rsnapshot_hourly": {
+    "executable": true,
+    "sha256": "fdab248eeb2b25ba8c9c73d7bc7ee84ec6ae5eb566712bb25048208e92d06863",
+    "type": "file"
+  },
+  "rsnapshot/contrib/rsnapshot_monthly": {
+    "executable": true,
+    "sha256": "4ac894fbc260104ed7a72933636d14822c0b4441eba3a2cc022ec2db23999f97",
+    "type": "file"
+  },
+  "rsnapshot/contrib/rsnapshot_weekly": {
+    "executable": true,
+    "sha256": "30d7deb518cb69e2ccf792dddffd639cc3a2019fb8a25c1a7ebbd26f6acda6d1",
+    "type": "file"
+  },
+  "rsnapshot/rsnapshot.SlackBuild": {
+    "executable": true,
+    "sha256": "3edd08c8a0fac7574c3a3a163b5cf206bd16a8c8e9b89d22537f0578a0135434",
+    "type": "file"
+  },
+  "rsnapshot/slack-desc": {
+    "executable": false,
+    "sha256": "4d0f3965fc519034241e10e177bef172cadb1cc65b6af2241f871a5ddd4af460",
+    "type": "file"
+  },
+  "ruby": {
+    "type": "directory"
+  },
+  "ruby/ruby.SlackBuild": {
+    "executable": true,
+    "sha256": "eaab2b785d95cc82d139d28862760bd8f91a65cd0f84204786b373cdba6e1754",
+    "type": "file"
+  },
+  "ruby/slack-desc": {
+    "executable": false,
+    "sha256": "9a39f4a5815b7a27939dbf54d7e45f6a3f4388346e7d7391141af18b293d1a06",
+    "type": "file"
+  },
+  "screen": {
+    "type": "directory"
+  },
+  "screen/60-revert-screenrc-change.diff": {
+    "executable": false,
+    "sha256": "79ee80e37ff1f2df29f944cbc1b4d9b30e1b1a1fefb1119b3c93baa1e6a28023",
+    "type": "file"
+  },
+  "screen/screen.SlackBuild": {
+    "executable": true,
+    "sha256": "62f93cc38586afe6f2761c02bb5c2d90fe575f60486c08e5930007ffa887f498",
+    "type": "file"
+  },
+  "screen/screen.pam": {
+    "executable": false,
+    "sha256": "4e631aaf91babb312ec39a09d6cfd6e0a57d8ac5a48eb58a9bade25af3a937aa",
+    "type": "file"
+  },
+  "screen/slack-desc": {
+    "executable": false,
+    "sha256": "ddd2d40dcc73b4a8c88486556a95b983782dd27f8e4df67e3d2121a09d162214",
+    "type": "file"
+  },
+  "socat": {
+    "type": "directory"
+  },
+  "socat/slack-desc": {
+    "executable": false,
+    "sha256": "1c30dd2bff95a6d55645d22bc569e012ab0f801f26cf77758da3caa7b9abdcf0",
+    "type": "file"
+  },
+  "socat/socat.SlackBuild": {
+    "executable": true,
+    "sha256": "227914ab8df0c3f6faa96c7cf20d5dff2846d73635b1750b7708e91aa420d87a",
+    "type": "file"
+  },
+  "sshfs": {
+    "type": "directory"
+  },
+  "sshfs/slack-desc": {
+    "executable": false,
+    "sha256": "1ed97f10efd7780a0511e57cdb76d7118407f9d5c3784c78c4ba4ee253be3d82",
+    "type": "file"
+  },
+  "sshfs/sshfs.SlackBuild": {
+    "executable": true,
+    "sha256": "59a8d0d1e413ca114e73fffa981d1189ea14cc340f9798edd9132421795302c2",
+    "type": "file"
+  },
+  "sshpass": {
+    "type": "directory"
+  },
+  "sshpass/slack-desc": {
+    "executable": false,
+    "sha256": "db07e7013f7137127e186721269fd1e34be94389bd634365dfd922934e1d5fc0",
+    "type": "file"
+  },
+  "sshpass/sshpass.SlackBuild": {
+    "executable": true,
+    "sha256": "d6d443fcc0cbc619af1fbb6a42eae9016301241205f08cf291f75aa6a17b4243",
+    "type": "file"
+  },
+  "stress": {
+    "type": "directory"
+  },
+  "stress/slack-desc": {
+    "executable": false,
+    "sha256": "6817dfeb2dcc97fc9e4e2e3cf60eefa12f46c37b39e96e673d96f64a5ed5d2c5",
+    "type": "file"
+  },
+  "stress/stress.SlackBuild": {
+    "executable": true,
+    "sha256": "723f7e62def710bb6c8d1358162512e1d9cfd76a9ec7cc086f5e722440652ef0",
+    "type": "file"
+  },
+  "stunnel": {
+    "type": "directory"
+  },
+  "stunnel/generate-stunnel-key.sh": {
+    "executable": true,
+    "sha256": "76e02a917b846394e0e7ddc8e85b58384b76b0cf6abb49fd094cb151cee286df",
+    "type": "file"
+  },
+  "stunnel/slack-desc": {
+    "executable": false,
+    "sha256": "c78df91b02f539d9780047ffcc2c298129ad4dae674652d231638a3a320137d6",
+    "type": "file"
+  },
+  "stunnel/stunnel.SlackBuild": {
+    "executable": true,
+    "sha256": "5c88a22c421c012a4e274eca68053d2292750afc93754a960f97ba3835fa8f1c",
+    "type": "file"
+  },
+  "tcl": {
+    "type": "directory"
+  },
+  "tcl/slack-desc": {
+    "executable": false,
+    "sha256": "fb699c543d11a9ce528a98191ddfdccd084720c8f3cd3d8490676cecffde154a",
+    "type": "file"
+  },
+  "tcl/tcl.SlackBuild": {
+    "executable": true,
+    "sha256": "dcae272a107ec2504eae306a8f81a38688d67b69b2176675bf74b6fce0f74212",
+    "type": "file"
+  },
+  "tcllib": {
+    "type": "directory"
+  },
+  "tcllib/slack-desc": {
+    "executable": false,
+    "sha256": "05b133a648c804fc5fa94baa3582c4fbda6945582a3d49d5a884046f72a5b022",
+    "type": "file"
+  },
+  "tcllib/tcllib.SlackBuild": {
+    "executable": true,
+    "sha256": "af50c702977c6f15fea349198494c9014166807ba1e4871057a4102df7c3a145",
+    "type": "file"
+  },
+  "tcpdump": {
+    "type": "directory"
+  },
+  "tcpdump/slack-desc": {
+    "executable": false,
+    "sha256": "a0fdbfcee25aa7c2b9fb09aa8ea584e42516beef20a7104e6ed38e673296892b",
+    "type": "file"
+  },
+  "tcpdump/tcpdump.SlackBuild": {
+    "executable": true,
+    "sha256": "8e6258865c4171f6335f66e12a8d5e636d38b1921fa3dae13872f2b8d1a3d895",
+    "type": "file"
+  },
+  "tmux": {
+    "type": "directory"
+  },
+  "tmux/slack-desc": {
+    "executable": false,
+    "sha256": "4f4f1436420bfbae9de3d71df1d2da7fa1992804fafc7471ed1b73bfe5540168",
+    "type": "file"
+  },
+  "tmux/tmux.SlackBuild": {
+    "executable": true,
+    "sha256": "2e26674e383d512ac7539f4038668e2b98848d6ef2ae53c514c6f9ef168d7d6c",
+    "type": "file"
+  },
+  "tmux/tmux.conf": {
+    "executable": false,
+    "sha256": "09146eaa0bfb018813349992e40366005927dbe48d45796e0a66102fbb5576e2",
+    "type": "file"
+  },
+  "unrar": {
+    "type": "directory"
+  },
+  "unrar/slack-desc": {
+    "executable": false,
+    "sha256": "beb0ebc77dcd89186459d68ddad296be3761a21ad8129bef77f2312446c626fb",
+    "type": "file"
+  },
+  "unrar/unrar-6.1.7-soname.patch": {
+    "executable": false,
+    "sha256": "e09ba11fda5b26428bb321e973847275f6e1d13980621ec055be7897c647d3da",
+    "type": "file"
+  },
+  "unrar/unrar.1": {
+    "executable": false,
+    "sha256": "91ab332decfc84470645d42f864d77426769b0dcc4696bcf973c29e14579b79c",
+    "type": "file"
+  },
+  "unrar/unrar.SlackBuild": {
+    "executable": true,
+    "sha256": "b0c8e3db41eacaaf1db7497f85df8e3efdc6f0777957d7bd44dd8d64b17edbd6",
+    "type": "file"
+  },
+  "utf8proc": {
+    "type": "directory"
+  },
+  "utf8proc/slack-desc": {
+    "executable": false,
+    "sha256": "a21dcc7eac20ae5c85433eab10a3635c48aab76ae078892b21a4d97f17301b88",
+    "type": "file"
+  },
+  "utf8proc/utf8proc.SlackBuild": {
+    "executable": true,
+    "sha256": "fe7a992cac28f45b33619e7fdd9e1545d754af5d2f03ffc7d43cc96de2ae4478",
+    "type": "file"
+  },
+  "vim": {
+    "type": "directory"
+  },
+  "vim/slack-desc.vim": {
+    "executable": false,
+    "sha256": "b92bdd5968a990873411b8cfbecee904161fa1f7894e614dbddb4525f7b41327",
+    "type": "file"
+  },
+  "vim/vim.SlackBuild": {
+    "executable": true,
+    "sha256": "8db63359c915b6e8de48148505ef17b409345db35d20297f96edc9c29a67161b",
+    "type": "file"
+  },
+  "vim/vim.vimrc.diff": {
+    "executable": false,
+    "sha256": "568722fc4fbb43b4d44ce99a6c95546c36eb892eca70939f7b1922c69e5b521f",
+    "type": "file"
+  },
+  "wget2": {
+    "type": "directory"
+  },
+  "wget2/slack-desc": {
+    "executable": false,
+    "sha256": "88268cadd5507831d82e31d92d1b2c4d683809dd08f89182338b533e38250205",
+    "type": "file"
+  },
+  "wget2/wget2.SlackBuild": {
+    "executable": true,
+    "sha256": "b8252bb4eb9d03537b14023c363daa5a5663dbaaba23faa2c1ca103660c2034c",
+    "type": "file"
+  },
+  "zsh": {
+    "type": "directory"
+  },
+  "zsh/slack-desc": {
+    "executable": false,
+    "sha256": "9f40f1e0b4e27c6411592a69a858c77d22ed25db9b4af4f73bfcc0ef65d675bb",
+    "type": "file"
+  },
+  "zsh/zsh.SlackBuild": {
+    "executable": true,
+    "sha256": "4557ac5a9c543776e2867fd705dbbce68a533db978c44983d33f09256449451b",
+    "type": "file"
+  }
+}

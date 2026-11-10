@@ -1,0 +1,126 @@
+name: Discover Unraid releases
+
+on:
+  schedule:
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: unraid-release-discovery
+  cancel-in-progress: false
+
+jobs:
+  discover:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      matrix: ${{ steps.dispatch.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check release parser
+        run: python3 -m unittest discover -s tests -p test_unraid_releases.py
+      - name: Discover releases and correlate authoritative archive checksums
+        run: python3 scripts/check-unraid-releases.py --output unraid-releases.json
+      - name: Compare published releases and compatibility runs, then dispatch
+        id: dispatch
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('node:fs');
+            const report = JSON.parse(fs.readFileSync('unraid-releases.json', 'utf8'));
+            for (const release of report.blocked) {
+              core.warning(`${release.checksum_error}; compatibility build not dispatched and not verified.`);
+            }
+            const repository = context.repo;
+            const {data: repo} = await github.rest.repos.get(repository);
+            const releases = await github.paginate(github.rest.repos.listReleases, {
+              ...repository, per_page: 100,
+            });
+            report.published_release_tags = releases.filter(r => !r.draft).map(r => r.tag_name).sort();
+            let runs;
+            try {
+              runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
+                ...repository,
+                workflow_id: 'build-packages.yml',
+                event: 'workflow_dispatch',
+                branch: repo.default_branch,
+                per_page: 100,
+              });
+            } catch (error) {
+              throw new Error(`Cannot inspect build-packages.yml compatibility runs; ensure the build workflow exists on the default branch and Actions is enabled: ${error.message}`);
+            }
+            const pending = [];
+            report.checks = [];
+            for (const release of report.matrix.include) {
+              const title = `Unraid compatibility ${release.version} ${release.sha256}`;
+              const matching = runs.filter(run => run.display_title === title);
+              const successful = matching.find(run => run.conclusion === 'success');
+              const active = matching.find(run => run.status !== 'completed');
+              const previous = successful || active;
+              if (previous) {
+                report.checks.push({...release,
+                  status: successful ? 'previous_run_succeeded' : 'in_flight',
+                  run_url: previous.html_url,
+                });
+              } else {
+                pending.push(release);
+                report.checks.push({...release, status: 'dispatch_pending'});
+              }
+            }
+            // A package release is not proof of compatibility; only exact run identity deduplicates.
+            report.dispatch_matrix = {include: pending};
+            core.setOutput('matrix', JSON.stringify(report.dispatch_matrix));
+            fs.writeFileSync('unraid-releases.json', JSON.stringify(report, null, 2) + '\n');
+            for (const release of pending) {
+              const check = report.checks.find(item => item.channel === release.channel && item.version === release.version);
+              try {
+                await github.rest.actions.createWorkflowDispatch({
+                  ...repository,
+                  workflow_id: 'build-packages.yml',
+                  ref: repo.default_branch,
+                  inputs: {
+                    unraid_version: release.version,
+                    unraid_sha256: release.sha256,
+                    unraid_url: release.url,
+                    channel: release.channel,
+                    publish: 'false',
+                  },
+                });
+              } catch (error) {
+                check.status = 'dispatch_failed';
+                fs.writeFileSync('unraid-releases.json', JSON.stringify(report, null, 2) + '\n');
+                throw new Error(`Cannot dispatch compatibility build/tests for ${release.channel} ${release.version}; check build-packages.yml inputs and Actions permissions: ${error.message}`);
+              }
+              check.status = 'dispatched';
+              fs.writeFileSync('unraid-releases.json', JSON.stringify(report, null, 2) + '\n');
+              core.notice(`Dispatched compatibility build/tests for ${release.channel} ${release.version}; result is pending, not verified.`);
+            }
+            await core.summary
+              .addHeading('Unraid release discovery')
+              .addRaw('Discovery and published package tags do not verify compatibility. Dispatched builds must pass their own gates. Failed/cancelled builds are retried on the next discovery run.\n\n')
+              .addRaw(`Archive checksums come from official metadata fields, never opaque download URL IDs: ${report.checksum_sources.join(', ')}\n\n`)
+              .addTable([
+                [{data: 'Channel', header: true}, {data: 'Version', header: true}, {data: 'Archive SHA256', header: true}, {data: 'Compatibility workflow', header: true}],
+                ...report.checks.map(item => [item.channel, item.version, item.sha256, item.run_url ? `${item.status}: ${item.run_url}` : item.status]),
+              ])
+              .addHeading('Checksum-unavailable releases (not dispatched)', 2)
+              .addCodeBlock(JSON.stringify(report.blocked, null, 2), 'json')
+              .addHeading('Published package tags (inventory only)', 2)
+              .addCodeBlock(JSON.stringify(report.published_release_tags, null, 2), 'json')
+              .write();
+      - name: Preserve discovery and dispatch report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unraid-release-discovery-${{ github.run_id }}-${{ github.run_attempt }}
+          path: unraid-releases.json
+          if-no-files-found: warn

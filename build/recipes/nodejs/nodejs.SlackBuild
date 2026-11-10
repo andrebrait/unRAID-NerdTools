@@ -1,0 +1,185 @@
+#!/bin/bash
+
+# Copyright 2022, 2024, 2025, 2026  Patrick J. Volkerding, Sebeka, Minnesota, USA
+# All rights reserved.
+#
+# Thanks to Audrius Kažukauskas, Ryan P.C. McQuen, and Willy Sudiarto Raharjo
+# for the slackbuilds.org version of this script.
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version, with the following exception:
+# the text of the GPL license may be omitted.
+#
+# You may have received a copy of the GNU General Public License
+# along with this program (most likely, a file named COPYING). If
+# not, see <https://www.gnu.org/licenses/>.
+
+
+cd $(dirname $0) ; CWD=$(pwd)
+
+# NerdTools adaptation of https://git.slackware.nl/current/plain/source/l/nodejs/nodejs.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61
+# Private prefix; upstream patch/config/license files remain pinned in the lock.
+export PKG_CONFIG_PATH=/opt/nerdtools/lib64/pkgconfig:/opt/nerdtools/lib/pkgconfig:/opt/nerdtools/share/pkgconfig
+export CPPFLAGS="-I/opt/nerdtools/include ${CPPFLAGS:-}"
+export LDFLAGS="-L/opt/nerdtools/lib64 -L/opt/nerdtools/lib ${LDFLAGS:-}"
+mkdir -p "${OUTPUT:-/out}"
+
+
+PKGNAM=nodejs
+SRCNAM=node
+VERSION=24.22.2
+BUILD=${BUILD:-1}
+
+# Automatically determine the architecture we're building on:
+if [ -z "$ARCH" ]; then
+  case "$(uname -m)" in
+    i?86) ARCH=i686 ;;
+    arm*) readelf /opt/nerdtools/bin/file -A | grep -E -q "Tag_CPU.*[4,5]" && ARCH=arm || ARCH=armv7hl ;;
+    # Unless $ARCH is already set, use uname -m for all other archs:
+    *) ARCH=$(uname -m) ;;
+  esac
+  export ARCH
+fi
+
+# If the variable PRINT_PACKAGE_NAME is set, then this script will report what
+# the name of the created package would be, and then exit. This information
+# could be useful to other scripts.
+if [ ! -z "${PRINT_PACKAGE_NAME}" ]; then
+  echo "$PKGNAM-$VERSION-$ARCH-$BUILD.txz"
+  exit 0
+fi
+
+NUMJOBS=${NUMJOBS:-" -j $(expr $(nproc) + 1) "}
+
+if [ "$ARCH" = "i686" ]; then
+  SLKCFLAGS="-O2 -march=pentium4 -mtune=generic"
+  LIBDIRSUFFIX=""
+elif [ "$ARCH" = "x86_64" ]; then
+  SLKCFLAGS="-O2 -march=x86-64 -mtune=generic -fPIC"
+  LIBDIRSUFFIX="64"
+else
+  SLKCFLAGS="-O2"
+  LIBDIRSUFFIX=""
+fi
+
+TMP=${TMP:-/tmp}
+PKG=$TMP/package-$PKGNAM
+
+rm -rf $PKG
+mkdir -p $TMP $PKG
+
+cd $TMP
+rm -rf $SRCNAM-v${VERSION}
+echo "Extracting $CWD/$SRCNAM-v${VERSION}.tar.?z..."
+tar xf $CWD/$SRCNAM-v${VERSION}.tar.?z || exit 1
+cd $SRCNAM-v${VERSION} || exit 1
+
+chown -R root:root .
+find . \
+  \( -perm 777 -o -perm 775 -o -perm 711 -o -perm 555 -o -perm 511 \) \
+  -exec chmod 755 {} \+ -o \
+  \( -perm 666 -o -perm 664 -o -perm 600 -o -perm 444 -o -perm 440 -o -perm 400 \) \
+  -exec chmod 644 {} \+
+
+## Fix libdir for 64-bit:
+sed -i "s|lib/|lib${LIBDIRSUFFIX}/|g" tools/install.py
+sed -i "s|'lib'|'lib${LIBDIRSUFFIX}'|g" lib/module.js
+sed -i "s|'lib'|'lib${LIBDIRSUFFIX}'|g" deps/npm/lib/npm.js
+
+# Not sure if this one is really needed.
+#sed -i "s|math.h|cmath|" src/node_crypto.cc
+
+# Fix for x86 32-bit:
+if [ "$ARCH" = "i686" ]; then
+  cat $CWD/32-bit.patch | patch -p1 --verbose || exit 1
+  sed -i "s/#  define HDR_HAS_AVX2_DISPATCH 1/#  undef HDR_HAS_AVX2_DISPATCH/g" deps/histogram/src/hdr_histogram.c
+fi
+
+# Choose a compiler (gcc/g++ or clang/clang++):
+export CC=${CC:-gcc}
+export CXX=${CXX:-g++}
+
+./configure \
+  --prefix=/opt/nerdtools \
+  --with-intl=full-icu \
+  --shared-openssl \
+  --shared-zlib \
+  --shared-libuv \
+  --shared-nghttp2 \
+  --shared-nghttp3 \
+  --shared-brotli || exit 1
+# --shared-v8
+# --shared-http-parser
+
+export CFLAGS="$SLKCFLAGS"
+export CXXFLAGS="$SLKCFLAGS"
+make $NUMJOBS || exit 1
+make install DESTDIR=$PKG || exit 1
+
+# Strip binaries:
+find $PKG | xargs file | grep -e "executable" -e "shared object" | grep ELF | cut -f 1 -d : | xargs strip --strip-unneeded 2> /dev/null
+
+# Relocate manual pages:
+if [ -d $PKG/opt/nerdtools/share/man ]; then
+  mv $PKG/opt/nerdtools/share/man $PKG/opt/nerdtools
+  # Copy these, we'll link them later:
+  rsync -lprvt $PKG/opt/nerdtools/lib${LIBDIRSUFFIX}/node_modules/npm/man/ $PKG/opt/nerdtools/man/
+fi
+
+# Compress manual pages:
+find $PKG/opt/nerdtools/man $PKG/opt/nerdtools/lib${LIBDIRSUFFIX}/node_modules/npm/man -type f -exec gzip -9 {} \+
+for i in $( find $PKG/opt/nerdtools/man -type l ) ; do
+  ln -s $( readlink $i ).gz $i.gz
+  rm $i
+done
+
+# Symlink npm man pages:
+( cd $PKG/opt/nerdtools/lib${LIBDIRSUFFIX}/node_modules/npm/man
+  for dir in man? ; do
+    pushd $dir
+      for file in *.gz ; do
+        ln -sf ../../../../../man/$dir/$file .
+      done
+    popd
+  done
+)
+
+# Relocate /opt/nerdtools/share/doc/node, but leave a link since the contents look like
+# scripts that might be called at the default path?
+if [ -d $PKG/opt/nerdtools/share/doc/node ]; then
+  mkdir -p $PKG/opt/nerdtools/doc/${PKGNAM}-$VERSION
+  mv $PKG/opt/nerdtools/share/doc/node/* $PKG/opt/nerdtools/doc/${PKGNAM}-$VERSION
+  rm -rf $PKG/opt/nerdtools/share/doc
+  ln -sf ${PKGNAM}-$VERSION $PKG/opt/nerdtools/doc/node
+fi
+
+# Remove unneeded files:
+find $PKG/opt/nerdtools \( -name '.git*' \) -exec rm -f {} \;
+
+# Symlink bash-completion if needed:
+mkdir -p $PKG/opt/nerdtools/share/bash-completion/completions
+if [ ! -r $PKG/opt/nerdtools/share/bash-completion/completions/npm -a -r $PKG/opt/nerdtools/lib${LIBDIRSUFFIX}/node_modules/npm/lib/utils/completion.sh ]; then
+  ( cd $PKG/opt/nerdtools/share/bash-completion/completions ; ln -sf ../../../lib${LIBDIRSUFFIX}/node_modules/npm/lib/utils/completion.sh npm )
+fi
+
+# Add a documentation directory:
+mkdir -p $PKG/opt/nerdtools/doc/${PKGNAM}-$VERSION
+cp -a \
+  AUTHORS* BUILDING* CHANGELOG* CODE_OF_CONDUCT* CONTRIBUTING* GOVERNANCE* LICENSE* README* SECURITY* \
+  $PKG/opt/nerdtools/doc/${PKGNAM}-$VERSION
+
+# If there's a CHANGELOG, installing at least part of the recent history
+# is useful, but don't let it get totally out of control:
+if [ -r CHANGELOG ]; then
+  DOCSDIR=$(echo $PKG/opt/nerdtools/doc/${PKGNAM}-$VERSION)
+  cat CHANGELOG | head -n 1000 > $DOCSDIR/CHANGELOG
+  touch -r CHANGELOG $DOCSDIR/CHANGELOG
+fi
+
+mkdir -p $PKG/install
+cat $CWD/slack-desc > $PKG/install/slack-desc
+
+cd $PKG
+/sbin/makepkg -l n -c n ${OUTPUT:-/out}/$PKGNAM-$VERSION-$ARCH-$BUILD.txz

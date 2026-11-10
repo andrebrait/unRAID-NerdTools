@@ -1,0 +1,1203 @@
+[
+  {
+    "name": "bc",
+    "version": "1.08.2",
+    "recipe": "build/recipes/bc/bc.SlackBuild",
+    "recipe_sha256": "1a19c6cad73f842a2b7ee35f1bbf6515110c5f07ccbd5c9cc4ce3c6e89ee0681",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/ap/bc/bc.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/ap/bc/bc-1.08.2.tar.lz",
+        "file": "bc-1.08.2.tar.lz",
+        "sha256": "79e31e022a84b31dd809815063d4b8ea590b409637a52c50ec9f42c2bf332711"
+      }
+    ],
+    "dependencies": [],
+    "build_dependencies": [],
+    "smoke": [
+      [
+        "/opt/nerdtools/bin/bc",
+        "--version"
+      ]
+    ]
+  },
+  {
+    "name": "bluez",
+    "version": "5.88",
+    "recipe": "build/recipes/bluez/bluez.SlackBuild",
+    "recipe_sha256": "2862efff1892baa91ed082f0642d349215e1bb3b4336e0e8fcd56f138dfd4700",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/n/bluez/bluez.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/n/bluez/bluez-5.88.tar.xz",
+        "file": "bluez-5.88.tar.xz",
+        "sha256": "6952c39eb5f8b0ee712cc50ab3bcff03be17c410dd97ca640f4849d9a1653ba3"
+      }
+    ],
+    "dependencies": [
+      "alsa-lib",
+      "libical"
+    ],
+    "build_dependencies": [
+      "alsa-lib",
+      "libical"
+    ],
+    "smoke": [
+      [
+        "/opt/nerdtools/bin/bluetoothctl",
+        "--version"
+      ],
+      [
+        "/opt/nerdtools/libexec/bluetooth/obexd",
+        "--version"
+      ]
+    ]
+  },
+  {
+    "name": "ddrescue",
+    "version": "1.30",
+    "recipe": "build/recipes/ddrescue/ddrescue.SlackBuild",
+    "recipe_sha256": "fe29e65639fc6c82a43795336be83ad94ef10901ff9ad67867ff69d224a00493",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/ap/ddrescue/ddrescue.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/ap/ddrescue/ddrescue-1.30.tar.lz",
+        "file": "ddrescue-1.30.tar.lz",
+        "sha256": "2264622d309d6c87a1cfc19148292b8859a688e9bc02d4702f5cd4f288745542"
+      }
+    ],
+    "dependencies": [],
+    "build_dependencies": [],
+    "smoke": [
+      [
+        "/opt/nerdtools/bin/ddrescue",
+        "--version"
+      ]
+    ]
+  },
+  {
+    "name": "gnupg2",
+    "version": "2.5.24",
+    "recipe": "build/recipes/gnupg2/gnupg2.SlackBuild",
+    "recipe_sha256": "7b183e13f08616c0e73bfb17e86c25883e78407dc1ffcabc71b811399bac0eed",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/n/gnupg2/gnupg2.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/n/gnupg2/gnupg-2.5.24.tar.lz",
+        "file": "gnupg-2.5.24.tar.lz",
+        "sha256": "6ef91c31056021102f78dec196ccc6c839289b0d44476fbc34f325d9337c9115"
+      }
+    ],
+    "dependencies": [
+      "libassuan",
+      "npth",
+      "libksba",
+      "pinentry"
+    ],
+    "build_dependencies": [
+      "libassuan",
+      "npth",
+      "libksba",
+      "pinentry"
+    ],
+    "smoke": [
+      [
+        "/opt/nerdtools/bin/gpg",
+        "--version"
+      ],
+      [
+        "/opt/nerdtools/bin/gpg-agent",
+        "--version"
+      ]
+    ]
+  },
+  {
+    "name": "gpgme",
+    "version": "2.2.0",
+    "recipe": "build/recipes/gpgme/gpgme.SlackBuild",
+    "recipe_sha256": "45f0330046abecac1fb65beb88e54ada1439a808ea6fe3a54267a5e57722e5f5",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/n/gpgme/gpgme.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/n/gpgme/gpgme-2.2.0.tar.lz",
+        "file": "gpgme-2.2.0.tar.lz",
+        "sha256": "d3ce99def89208ffc6fc7de294039b703eef82bf4bb224edab647338d76d372b"
+      }
+    ],
+    "dependencies": [
+      "gnupg2",
+      "libassuan"
+    ],
+    "build_dependencies": [
+      "gnupg2",
+      "libassuan"
+    ],
+    "smoke": [
+      [
+        "/opt/nerdtools/bin/gpgme-json",
+        "--version"
+      ]
+    ]
+  },
+  {
+    "name": "iftop",
+    "version": "1.0pre4",
+    "recipe": "build/recipes/iftop/iftop.SlackBuild",
+    "recipe_sha256": "8e5ad1c7837c5a29d787ea91ec77ecec527ace569df3acd849a12f8ab683c682",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/n/iftop/iftop.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/n/iftop/iftop-1.0pre4.tar.xz",
+        "file": "iftop-1.0pre4.tar.xz",
+        "sha256": "80625b7f60361b083db9eb2e60f2e2665c4537d3ca1bb316743d2f9b8b3c6669"
+      }
+    ],
+    "dependencies": [],
+    "build_dependencies": [],
+    "smoke": [
+      [
+        "/opt/nerdtools/sbin/iftop",
+        "-h"
+      ]
+    ]
+  },
+  {
+    "name": "irssi",
+    "version": "1.4.5",
+    "recipe": "build/recipes/irssi/irssi.SlackBuild",
+    "recipe_sha256": "e6f4ef176fbf9f7ca1c36ba26c05166844f0de904c20100731c84dadeacf3ca4",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/n/irssi/irssi.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/n/irssi/irssi-1.4.5.tar.xz",
+        "file": "irssi-1.4.5.tar.xz",
+        "sha256": "72a951cb0ad622785a8962801f005a3a412736c7e7e3ce152f176287c52fe062"
+      }
+    ],
+    "dependencies": [
+      "utf8proc"
+    ],
+    "build_dependencies": [
+      "utf8proc"
+    ],
+    "smoke": [
+      [
+        "/opt/nerdtools/bin/irssi",
+        "--version"
+      ]
+    ]
+  },
+  {
+    "name": "lftp",
+    "version": "4.9.3",
+    "recipe": "build/recipes/lftp/lftp.SlackBuild",
+    "recipe_sha256": "9d17daeede739a37589f8ac8890fbf6243969ac517d2286fc411e884f8e8de81",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/n/lftp/lftp.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/n/lftp/lftp-4.9.3.tar.lz",
+        "file": "lftp-4.9.3.tar.lz",
+        "sha256": "7eb8e99012660923d1a98ead4203e5a49c140ddc73071907b9038df31af827f6"
+      }
+    ],
+    "dependencies": [],
+    "build_dependencies": [],
+    "smoke": [
+      [
+        "/opt/nerdtools/bin/lftp",
+        "--version"
+      ]
+    ]
+  },
+  {
+    "name": "libassuan",
+    "version": "3.0.2",
+    "recipe": "build/recipes/libassuan/libassuan.SlackBuild",
+    "recipe_sha256": "19b28f467722b2ad44262bd24753dc11311968713aafd4d45ccc0ad3dccd37bb",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/n/libassuan/libassuan.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/n/libassuan/libassuan-3.0.2.tar.lz",
+        "file": "libassuan-3.0.2.tar.lz",
+        "sha256": "49771fa6bbb981a23c0212a4bdedcce675a4e26736ef6baba8e6e532a062deab"
+      }
+    ],
+    "dependencies": [],
+    "build_dependencies": [],
+    "smoke": [
+      [
+        "/usr/bin/test",
+        "-r",
+        "/opt/nerdtools/lib64/libassuan.so"
+      ]
+    ]
+  },
+  {
+    "name": "libnl",
+    "version": "1.1.4",
+    "recipe": "build/recipes/libnl/libnl.SlackBuild",
+    "recipe_sha256": "f3eb7d5bf04af5cd6c0b67cd18fa866922d617976fb9c89e0da34280cda5be97",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/l/libnl/libnl.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/l/libnl/libnl-1.1.4.tar.lz",
+        "file": "libnl-1.1.4.tar.lz",
+        "sha256": "1e8fab82344e98aabb5bc8dd7b20afa86d375593d528b213609af4433e6fb3cc"
+      }
+    ],
+    "dependencies": [],
+    "build_dependencies": [],
+    "smoke": [
+      [
+        "/usr/bin/test",
+        "-r",
+        "/opt/nerdtools/lib64/libnl.so"
+      ]
+    ]
+  },
+  {
+    "name": "libsodium",
+    "version": "1.0.22",
+    "recipe": "build/recipes/libsodium/libsodium.SlackBuild",
+    "recipe_sha256": "16d8009ef05300df787317cfd57508466279e2038aa04e20b980a9e2e3491314",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/l/libsodium/libsodium.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/l/libsodium/libsodium-1.0.22.tar.lz",
+        "file": "libsodium-1.0.22.tar.lz",
+        "sha256": "eb5f1f74cfd7eef6db978c7bac614e802006f804e154167056105825285d453f"
+      }
+    ],
+    "dependencies": [],
+    "build_dependencies": [],
+    "smoke": [
+      [
+        "/usr/bin/test",
+        "-r",
+        "/opt/nerdtools/lib64/libsodium.so"
+      ]
+    ]
+  },
+  {
+    "name": "liburing",
+    "version": "2.15",
+    "recipe": "build/recipes/liburing/liburing.SlackBuild",
+    "recipe_sha256": "6e041f94baede30df178024e4d86e68bef86443c252343c04d2184606547abe5",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/l/liburing/liburing.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/l/liburing/liburing-2.15.tar.lz",
+        "file": "liburing-2.15.tar.lz",
+        "sha256": "06ad4ad873c4136e9592c0f929cf28f7b54ca0a416c9f2ef05f43b5cc2e72018"
+      }
+    ],
+    "dependencies": [],
+    "build_dependencies": [],
+    "smoke": [
+      [
+        "/usr/bin/test",
+        "-r",
+        "/opt/nerdtools/lib64/liburing.so"
+      ]
+    ],
+    "catalog": false,
+    "provided_by_unraid": true
+  },
+  {
+    "name": "mlocate",
+    "version": "0.26",
+    "recipe": "build/recipes/mlocate/mlocate.SlackBuild",
+    "recipe_sha256": "81c36df89c7df55caf0dc3a0cb010fec0ee990e3fd20fed98dccddc16c166ff4",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/a/mlocate/mlocate.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/a/mlocate/mlocate-0.26.tar.xz",
+        "file": "mlocate-0.26.tar.xz",
+        "sha256": "3063df79fe198fb9618e180c54baf3105b33d88fe602ff2d8570aaf944f1263e"
+      }
+    ],
+    "dependencies": [],
+    "build_dependencies": [],
+    "smoke": [
+      [
+        "/opt/nerdtools/bin/mlocate",
+        "--version"
+      ],
+      [
+        "/opt/nerdtools/bin/updatedb.mlocate",
+        "--version"
+      ]
+    ]
+  },
+  {
+    "name": "neofetch",
+    "version": "20211210_ccd5d9f5",
+    "recipe": "build/recipes/neofetch/neofetch.SlackBuild",
+    "recipe_sha256": "12052177ca9b9dc64aabf6db4942953567bf38948b89a1ed1b46c0aefffc4614",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/ap/neofetch/neofetch.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/ap/neofetch/neofetch-20211210_ccd5d9f5.tar.lz",
+        "file": "neofetch-20211210_ccd5d9f5.tar.lz",
+        "sha256": "d04bf4059b4f11e45f24d0562ca0d9b8cfbfe5b010d7132959b596ae1a56b64a"
+      }
+    ],
+    "dependencies": [],
+    "build_dependencies": [],
+    "smoke": [
+      [
+        "/opt/nerdtools/bin/neofetch",
+        "--version"
+      ]
+    ]
+  },
+  {
+    "name": "nmap",
+    "version": "7.993",
+    "recipe": "build/recipes/nmap/nmap.SlackBuild",
+    "recipe_sha256": "7b0e21e94cc1ff2184d87a038cedcdf08ebbefbd2ba2f777d2a035ba726b34de",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/n/nmap/nmap.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/n/nmap/nmap-7.993.tar.lz",
+        "file": "nmap-7.993.tar.lz",
+        "sha256": "bf0fc5fe91d06b7ded9e3990910e83acfd01cd5aea6935073a405d19b94b6609"
+      }
+    ],
+    "dependencies": [],
+    "build_dependencies": [],
+    "smoke": [
+      [
+        "/opt/nerdtools/bin/nmap",
+        "--version"
+      ]
+    ]
+  },
+  {
+    "name": "nodejs",
+    "version": "24.22.2",
+    "recipe": "build/recipes/nodejs/nodejs.SlackBuild",
+    "recipe_sha256": "59079770976d245b426a97d1679499f8f78119bf8c7aa256ba6beef4d08e5c20",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/l/nodejs/nodejs.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/l/nodejs/node-v24.22.2.tar.xz",
+        "file": "node-v24.22.2.tar.xz",
+        "sha256": "8fe2ec1723bb9f8d0b683907c82708debbeda64af21cb2aa214c4241eed0a061"
+      }
+    ],
+    "dependencies": [],
+    "build_dependencies": [],
+    "smoke": [
+      [
+        "/opt/nerdtools/bin/node",
+        "--version"
+      ],
+      [
+        "/opt/nerdtools/bin/npm",
+        "--version"
+      ]
+    ]
+  },
+  {
+    "name": "npth",
+    "version": "1.8",
+    "recipe": "build/recipes/npth/npth.SlackBuild",
+    "recipe_sha256": "65383778c7cc56fbef0e65b5dbc43f30fa226b411fe72a54eee9387c62ad81e7",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/n/npth/npth.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/n/npth/npth-1.8.tar.lz",
+        "file": "npth-1.8.tar.lz",
+        "sha256": "5a09777cb889161d3e58a318a2eb44778cd8939d1e964ff28dcc606a1396f541"
+      }
+    ],
+    "dependencies": [],
+    "build_dependencies": [],
+    "smoke": [
+      [
+        "/usr/bin/test",
+        "-r",
+        "/opt/nerdtools/lib64/libnpth.so"
+      ]
+    ]
+  },
+  {
+    "name": "powertop",
+    "version": "2.16.1",
+    "recipe": "build/recipes/powertop/powertop.SlackBuild",
+    "recipe_sha256": "0c7e958fe8f1cd424722a90ebf024d60877299acc1853ba3b3644df5311b4de2",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/ap/powertop/powertop.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/ap/powertop/powertop-2.16.1.tar.lz",
+        "file": "powertop-2.16.1.tar.lz",
+        "sha256": "e200fa6080e1bd353c31acc1b9e4da41e75dbf598dd18d0e367846bd17558d43"
+      }
+    ],
+    "dependencies": [],
+    "build_dependencies": [],
+    "smoke": [
+      [
+        "/opt/nerdtools/bin/powertop",
+        "--version"
+      ]
+    ]
+  },
+  {
+    "name": "python-packaging",
+    "version": "26.3",
+    "recipe": "build/recipes/python-packaging/python-packaging.SlackBuild",
+    "recipe_sha256": "bf482b35a9843f68c0a4e6aded3e3edb0830bd140ada3e387d37d40d506f91fe",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/l/python-packaging/python-packaging.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/l/python-packaging/packaging-26.3.tar.lz",
+        "file": "packaging-26.3.tar.lz",
+        "sha256": "7935805565953997d40d3e2cd86ea0d48d1bdd02b35e1828bb847c43c4bda06a"
+      }
+    ],
+    "dependencies": [
+      "python3"
+    ],
+    "build_dependencies": [
+      "python3"
+    ],
+    "smoke": [
+      [
+        "/opt/nerdtools/bin/python3",
+        "-c",
+        "import packaging; print(packaging.__version__)"
+      ]
+    ]
+  },
+  {
+    "name": "python-pip",
+    "version": "26.3",
+    "recipe": "build/recipes/python-pip/python-pip.SlackBuild",
+    "recipe_sha256": "2440be950dd3c97c89c96b9bd80d8cafdc3d157eab7632441b6b112a613567ed",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/d/python-pip/python-pip.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/d/python-pip/pip-26.3.tar.lz",
+        "file": "pip-26.3.tar.lz",
+        "sha256": "091815499ec03b5f170db7c2baf1903b64aeed70a6959b9f51e1608f500795e6"
+      }
+    ],
+    "dependencies": [
+      "python3"
+    ],
+    "build_dependencies": [
+      "python3",
+      "python-setuptools",
+      "python-packaging"
+    ],
+    "smoke": [
+      [
+        "/opt/nerdtools/bin/python3",
+        "-m",
+        "pip",
+        "--version"
+      ]
+    ]
+  },
+  {
+    "name": "python-setuptools",
+    "version": "84.2.1",
+    "recipe": "build/recipes/python-setuptools/python-setuptools.SlackBuild",
+    "recipe_sha256": "e853ba44d3f1f3fe36c048b6ff2671cdbd3d4c4f9f1177feb1fa4f20c3678274",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/d/python-setuptools/python-setuptools.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/d/python-setuptools/setuptools-84.2.1.tar.lz",
+        "file": "setuptools-84.2.1.tar.lz",
+        "sha256": "c226c3a3ac774c33c69f899e88362a7ce704e11a593c79a8a62c2227555b8cb6"
+      }
+    ],
+    "dependencies": [
+      "python3"
+    ],
+    "build_dependencies": [
+      "python3"
+    ],
+    "smoke": [
+      [
+        "/opt/nerdtools/bin/python3",
+        "-c",
+        "import setuptools; print(setuptools.__version__)"
+      ]
+    ]
+  },
+  {
+    "name": "python2",
+    "version": "2.7.18",
+    "recipe": "build/recipes/python2/python2.SlackBuild",
+    "recipe_sha256": "ff67a26e903466b94f556f3e1a005bf4981d755234d7eb850c40c7801b69443e",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/d/python2/python2.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/d/python2/Python-2.7.18.tar.xz",
+        "file": "Python-2.7.18.tar.xz",
+        "sha256": "b62c0e7937551d0cc02b8fd5cb0f544f9405bafc9a54d3808ed4594812edef43"
+      },
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/d/python2/pip-20.3.tar.lz",
+        "file": "pip-20.3.tar.lz",
+        "sha256": "2b0987b73ccc674ac0125cb3f0b3727418eb496998c6ffee4a487353302bdf67"
+      },
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/d/python2/python-2.7.18-docs-text.tar.bz2",
+        "file": "python-2.7.18-docs-text.tar.bz2",
+        "sha256": "c86f5b5a2bd8f90158523efd350198d6cde7353965ef5a6ca5e54e5174af47f2"
+      },
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/d/python2/setuptools-44.1.1.tar.lz",
+        "file": "setuptools-44.1.1.tar.lz",
+        "sha256": "f4208059675deb0c8086595c4256304c2e78c5f31a341961e120b87d7f9ac7c9"
+      }
+    ],
+    "dependencies": [],
+    "build_dependencies": [],
+    "smoke": [
+      [
+        "/opt/nerdtools/bin/python2",
+        "--version"
+      ]
+    ]
+  },
+  {
+    "name": "python3",
+    "version": "3.12.14",
+    "recipe": "build/recipes/python3/python3.SlackBuild",
+    "recipe_sha256": "b3d7de7828c972efaa8853f23eeaa06c4c590596487a506d953bba7253ace947",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/d/python3/python3.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/d/python3/Python-3.12.14.tar.xz",
+        "file": "Python-3.12.14.tar.xz",
+        "sha256": "5c8462af5790baf43a321a1559dbe0db06d1be4300fb85fb53c40060668e548a"
+      },
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/d/python3/python-3.12.14-docs-text.tar.bz2",
+        "file": "python-3.12.14-docs-text.tar.bz2",
+        "sha256": "ace61a04b376cd45ce9cb47d13d71cb1c20c86675d0db225345ed67788cf4e4a"
+      }
+    ],
+    "dependencies": [],
+    "build_dependencies": [],
+    "smoke": [
+      [
+        "/opt/nerdtools/bin/python3",
+        "--version"
+      ]
+    ]
+  },
+  {
+    "name": "ruby",
+    "version": "4.0.9",
+    "recipe": "build/recipes/ruby/ruby.SlackBuild",
+    "recipe_sha256": "eaab2b785d95cc82d139d28862760bd8f91a65cd0f84204786b373cdba6e1754",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/d/ruby/ruby.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/d/ruby/ruby-4.0.9.tar.lz",
+        "file": "ruby-4.0.9.tar.lz",
+        "sha256": "af0287c6e754ff9d15c4200a715e733653d76d178827a296448b23656f7b5afb"
+      }
+    ],
+    "dependencies": [
+      "libyaml"
+    ],
+    "build_dependencies": [
+      "libyaml"
+    ],
+    "smoke": [
+      [
+        "/opt/nerdtools/bin/ruby",
+        "-rpsych",
+        "-e",
+        "puts RUBY_VERSION; puts Psych.libyaml_version.join('.')"
+      ]
+    ]
+  },
+  {
+    "name": "screen",
+    "version": "5.0.2",
+    "recipe": "build/recipes/screen/screen.SlackBuild",
+    "recipe_sha256": "62f93cc38586afe6f2761c02bb5c2d90fe575f60486c08e5930007ffa887f498",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/ap/screen/screen.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/ap/screen/screen-5.0.2.tar.lz",
+        "file": "screen-5.0.2.tar.lz",
+        "sha256": "750e3d9d9b7b3a9bf354459419dde5333f60888dcca51ec766b478cc108977a2"
+      }
+    ],
+    "dependencies": [],
+    "build_dependencies": [],
+    "smoke": [
+      [
+        "/opt/nerdtools/bin/screen",
+        "--version"
+      ]
+    ]
+  },
+  {
+    "name": "socat",
+    "version": "1.8.1.3",
+    "recipe": "build/recipes/socat/socat.SlackBuild",
+    "recipe_sha256": "227914ab8df0c3f6faa96c7cf20d5dff2846d73635b1750b7708e91aa420d87a",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/n/socat/socat.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/n/socat/socat-1.8.1.3.tar.lz",
+        "file": "socat-1.8.1.3.tar.lz",
+        "sha256": "0d597e4a785ae34b23f06170fef273ba279d390f394e700a42c0262764b2d993"
+      }
+    ],
+    "dependencies": [],
+    "build_dependencies": [],
+    "smoke": [
+      [
+        "/opt/nerdtools/bin/socat",
+        "-V"
+      ]
+    ]
+  },
+  {
+    "name": "sshfs",
+    "version": "3.7.6",
+    "recipe": "build/recipes/sshfs/sshfs.SlackBuild",
+    "recipe_sha256": "59a8d0d1e413ca114e73fffa981d1189ea14cc340f9798edd9132421795302c2",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/n/sshfs/sshfs.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/n/sshfs/sshfs-3.7.6.tar.xz",
+        "file": "sshfs-3.7.6.tar.xz",
+        "sha256": "6a1bcb31450a077e9cb1b7ff158c71de34db697c3c0da6cb362502131e495893"
+      }
+    ],
+    "dependencies": [],
+    "build_dependencies": [],
+    "smoke": [
+      [
+        "/opt/nerdtools/bin/sshfs",
+        "--version"
+      ]
+    ]
+  },
+  {
+    "name": "stunnel",
+    "version": "5.82",
+    "recipe": "build/recipes/stunnel/stunnel.SlackBuild",
+    "recipe_sha256": "5c88a22c421c012a4e274eca68053d2292750afc93754a960f97ba3835fa8f1c",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/n/stunnel/stunnel.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/n/stunnel/stunnel-5.82.tar.lz",
+        "file": "stunnel-5.82.tar.lz",
+        "sha256": "e4415fa95682a6edbe173fb1e5a77053e978084e6934ea2272b9567281bc6298"
+      }
+    ],
+    "dependencies": [],
+    "build_dependencies": [],
+    "smoke": [
+      [
+        "/opt/nerdtools/bin/stunnel",
+        "-version"
+      ]
+    ]
+  },
+  {
+    "name": "tcl",
+    "version": "8.6.18",
+    "recipe": "build/recipes/tcl/tcl.SlackBuild",
+    "recipe_sha256": "dcae272a107ec2504eae306a8f81a38688d67b69b2176675bf74b6fce0f74212",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/tcl/tcl/tcl.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/tcl/tcl/tcl8.6.18-src.tar.lz",
+        "file": "tcl8.6.18-src.tar.lz",
+        "sha256": "b462fb9a1f0d62bcfd4ae8f7951d1abeba7c95c91827c40401491bb2a99c0e6e"
+      }
+    ],
+    "dependencies": [],
+    "build_dependencies": [],
+    "smoke": [
+      [
+        "/bin/sh",
+        "-c",
+        "printf '%s\\n' 'if {[package provide Tcl] ne \"8.6.18\"} {exit 1}; puts [info patchlevel]' | /opt/nerdtools/bin/tclsh"
+      ]
+    ]
+  },
+  {
+    "name": "tcpdump",
+    "version": "4.99.7",
+    "recipe": "build/recipes/tcpdump/tcpdump.SlackBuild",
+    "recipe_sha256": "8e6258865c4171f6335f66e12a8d5e636d38b1921fa3dae13872f2b8d1a3d895",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/n/tcpdump/tcpdump.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/n/tcpdump/tcpdump-4.99.7.tar.xz",
+        "file": "tcpdump-4.99.7.tar.xz",
+        "sha256": "39675dfa06fb0e99be8da5d4a1784acbaab58ae0870231d956ff7870cb99eec1"
+      }
+    ],
+    "dependencies": [],
+    "build_dependencies": [],
+    "smoke": [
+      [
+        "/opt/nerdtools/bin/tcpdump",
+        "--version"
+      ]
+    ]
+  },
+  {
+    "name": "tmux",
+    "version": "3.8",
+    "recipe": "build/recipes/tmux/tmux.SlackBuild",
+    "recipe_sha256": "2e26674e383d512ac7539f4038668e2b98848d6ef2ae53c514c6f9ef168d7d6c",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/ap/tmux/tmux.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/ap/tmux/tmux-3.8.tar.lz",
+        "file": "tmux-3.8.tar.lz",
+        "sha256": "3bf528d1c5de3a032ad72203c1ff1028094d81d6f797282655b8d5728fe71c1a"
+      }
+    ],
+    "dependencies": [],
+    "build_dependencies": [],
+    "smoke": [
+      [
+        "/opt/nerdtools/bin/tmux",
+        "-V"
+      ]
+    ]
+  },
+  {
+    "name": "utf8proc",
+    "version": "2.12.0",
+    "recipe": "build/recipes/utf8proc/utf8proc.SlackBuild",
+    "recipe_sha256": "fe7a992cac28f45b33619e7fdd9e1545d754af5d2f03ffc7d43cc96de2ae4478",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/l/utf8proc/utf8proc.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/l/utf8proc/utf8proc-2.12.0.tar.lz",
+        "file": "utf8proc-2.12.0.tar.lz",
+        "sha256": "c63c7a1f7c490b9afbb49cb5ee848055b34156625803577128d5d577340e48f6"
+      }
+    ],
+    "dependencies": [],
+    "build_dependencies": [],
+    "smoke": [
+      [
+        "/usr/bin/test",
+        "-r",
+        "/opt/nerdtools/lib64/libutf8proc.so"
+      ]
+    ]
+  },
+  {
+    "name": "vim",
+    "version": "9.2.1252",
+    "recipe": "build/recipes/vim/vim.SlackBuild",
+    "recipe_sha256": "8db63359c915b6e8de48148505ef17b409345db35d20297f96edc9c29a67161b",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/ap/vim/vim.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/ap/vim/vim-9.2.1252.tar.lz",
+        "file": "vim-9.2.1252.tar.lz",
+        "sha256": "85c4ccd21d467b5527d0fcf773b0efa7f48b9847428ae46f34fd1ad4ec531034"
+      }
+    ],
+    "dependencies": [
+      "lua",
+      "python3",
+      "ruby",
+      "tcl"
+    ],
+    "build_dependencies": [
+      "lua",
+      "python3",
+      "ruby",
+      "tcl"
+    ],
+    "smoke": [
+      [
+        "/opt/nerdtools/bin/vim",
+        "--version"
+      ]
+    ]
+  },
+  {
+    "name": "wget2",
+    "version": "2.3.0",
+    "recipe": "build/recipes/wget2/wget2.SlackBuild",
+    "recipe_sha256": "b8252bb4eb9d03537b14023c363daa5a5663dbaaba23faa2c1ca103660c2034c",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/n/wget2/wget2.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/n/wget2/wget2-2.3.0.tar.lz",
+        "file": "wget2-2.3.0.tar.lz",
+        "sha256": "becf0a06fcfb7760be88db4b29048b31cb7c789e33dc571475071144b0f2caf4"
+      }
+    ],
+    "dependencies": [],
+    "build_dependencies": [],
+    "smoke": [
+      [
+        "/opt/nerdtools/bin/wget2",
+        "--version"
+      ]
+    ]
+  },
+  {
+    "name": "zsh",
+    "version": "5.9.2",
+    "recipe": "build/recipes/zsh/zsh.SlackBuild",
+    "recipe_sha256": "4557ac5a9c543776e2867fd705dbbce68a533db978c44983d33f09256449451b",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/ap/zsh/zsh.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/ap/zsh/zsh-5.9.2-doc.tar.xz",
+        "file": "zsh-5.9.2-doc.tar.xz",
+        "sha256": "020ee644be1749507b282e619cdcd95c56ff36144e79b7a3c245458aacd9458f"
+      },
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/ap/zsh/zsh-5.9.2.tar.xz",
+        "file": "zsh-5.9.2.tar.xz",
+        "sha256": "36fa734374b44783582cec09bcd67822e2f992c779ec1624ab5596df078d2f81"
+      }
+    ],
+    "dependencies": [],
+    "build_dependencies": [],
+    "smoke": [
+      [
+        "/opt/nerdtools/bin/zsh",
+        "--version"
+      ]
+    ]
+  },
+  {
+    "name": "libksba",
+    "version": "1.8.1",
+    "recipe": "build/recipes/libksba/libksba.SlackBuild",
+    "recipe_sha256": "9a76b04c36d3f543d70e9d887d5b8e218ddcc23d886cebf2fa64164099023789",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/n/libksba/libksba.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/n/libksba/libksba-1.8.1.tar.lz",
+        "file": "libksba-1.8.1.tar.lz",
+        "sha256": "3f1820de578c9f7d714436495429528c5c08fa994ce01db0abadc185d9248b99"
+      }
+    ],
+    "dependencies": [],
+    "build_dependencies": [],
+    "smoke": [
+      [
+        "/usr/bin/test",
+        "-r",
+        "/opt/nerdtools/lib64/libksba.so"
+      ]
+    ],
+    "internal": true
+  },
+  {
+    "name": "pinentry",
+    "version": "1.3.3",
+    "recipe": "build/recipes/pinentry/pinentry.SlackBuild",
+    "recipe_sha256": "7692bb397bc8ab7c3ecac00dc52cead1a8e585d9693a61c35f2fb1521e275658",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/n/pinentry/pinentry.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/n/pinentry/pinentry-1.3.3.tar.lz",
+        "file": "pinentry-1.3.3.tar.lz",
+        "sha256": "d6206023510548b9820c8695b2eee031bdaa9ac6a2ca9029e78cd2d237dd6801"
+      }
+    ],
+    "dependencies": [
+      "libassuan"
+    ],
+    "build_dependencies": [
+      "libassuan"
+    ],
+    "smoke": [
+      [
+        "/opt/nerdtools/bin/pinentry-curses",
+        "--version"
+      ]
+    ],
+    "internal": true
+  },
+  {
+    "name": "alsa-lib",
+    "version": "1.2.16.1",
+    "recipe": "build/recipes/alsa-lib/alsa-lib.SlackBuild",
+    "recipe_sha256": "eb63429b1e0594841afa08c3ab2012735428ee6c3a1936acc3d6cc48136fa702",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/l/alsa-lib/alsa-lib.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/l/alsa-lib/alsa-lib-1.2.16.1.tar.lz",
+        "file": "alsa-lib-1.2.16.1.tar.lz",
+        "sha256": "53d4a3c8b5aea9810040577736c14930381e0c8bcc386db5174bd32124e5dd2b"
+      },
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/l/alsa-lib/alsa-topology-conf-1.2.5.1.tar.lz",
+        "file": "alsa-topology-conf-1.2.5.1.tar.lz",
+        "sha256": "650250e788d122b30dca7a8591c4c1d57e4bf2d31986b7a84aaf2ed587cd7484"
+      },
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/l/alsa-lib/alsa-ucm-conf-1.2.16.1.tar.lz",
+        "file": "alsa-ucm-conf-1.2.16.1.tar.lz",
+        "sha256": "908d0b24511eb29ee26bf09761c9b3a274ca044d2e9296e07430f561e286512c"
+      }
+    ],
+    "dependencies": [],
+    "build_dependencies": [],
+    "smoke": [
+      [
+        "/usr/bin/test",
+        "-r",
+        "/opt/nerdtools/lib64/libasound.so"
+      ]
+    ],
+    "internal": true
+  },
+  {
+    "name": "libical",
+    "version": "3.0.20",
+    "recipe": "build/recipes/libical/libical.SlackBuild",
+    "recipe_sha256": "91ee1db9f0b90ba4e7130f77816b3e3eb5671dc60207902d8dbc882004a603ef",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/l/libical/libical.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/l/libical/libical-3.0.20.tar.lz",
+        "file": "libical-3.0.20.tar.lz",
+        "sha256": "2388f3ea8dee2fd49abdd59b02154f3556924dacf90e4f0d3e3fe748659a9245"
+      }
+    ],
+    "dependencies": [],
+    "build_dependencies": [],
+    "smoke": [
+      [
+        "/usr/bin/test",
+        "-r",
+        "/opt/nerdtools/lib64/libical.so"
+      ]
+    ],
+    "internal": true
+  },
+  {
+    "name": "libyaml",
+    "version": "0.2.5",
+    "recipe": "build/recipes/libyaml/libyaml.SlackBuild",
+    "recipe_sha256": "761cdc45530e36df4fbc53f0432a1277c36bd191bf2c73e8e6955c9192f18ade",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/l/libyaml/libyaml.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/l/libyaml/libyaml-0.2.5.tar.lz",
+        "file": "libyaml-0.2.5.tar.lz",
+        "sha256": "6a01301259c74a2abcf1b71fac0db128f2bb2422631539285647da95bf1c930c"
+      }
+    ],
+    "dependencies": [],
+    "build_dependencies": [],
+    "smoke": [
+      [
+        "/usr/bin/test",
+        "-r",
+        "/opt/nerdtools/lib64/libyaml.so"
+      ]
+    ],
+    "internal": true
+  },
+  {
+    "name": "lua",
+    "version": "5.4.9",
+    "recipe": "build/recipes/lua/lua.SlackBuild",
+    "recipe_sha256": "d6cb6486cfd7031ebb1e2caf11c265e2be0a50ea1a76488c9f71c6053b0f361c",
+    "provenance": {
+      "kind": "source",
+      "url": "https://git.slackware.nl/current/plain/source/d/lua/lua.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
+      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+    },
+    "inputs": [
+      {
+        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/d/lua/lua-5.4.9.tar.lz",
+        "file": "lua-5.4.9.tar.lz",
+        "sha256": "8af95e14c4f1d36cf9e6cc1b2e5fee81d13e239d6fb0c589fa92edd21ba90335"
+      }
+    ],
+    "dependencies": [],
+    "build_dependencies": [],
+    "smoke": [
+      [
+        "/opt/nerdtools/bin/lua",
+        "-e",
+        "assert(_VERSION == \"Lua 5.4\"); print(_VERSION)"
+      ]
+    ],
+    "internal": true
+  }
+]

@@ -1,0 +1,15 @@
+#!/bin/sh
+# auditctl signals the kernel-registered daemon, avoiding stale PID-file races.
+# Start explicitly with sh /etc/rc.d/rc.auditd start; chmod +x opts into boot startup.
+set -eu
+SBIN=/opt/nerdtools/sbin
+case "${1:-}" in
+  start)
+    "$SBIN/auditd"
+    if [ -x "$SBIN/augenrules" ]; then "$SBIN/augenrules" --load; fi
+    ;;
+  stop|reload|rotate|resume|state) exec "$SBIN/auditctl" --signal "$1" ;;
+  status) exec "$SBIN/auditctl" -s ;;
+  restart) sh "$0" stop; exec sh "$0" start ;;
+  *) echo "Usage: $0 {start|stop|restart|reload|rotate|resume|state|status}" >&2; exit 2 ;;
+esac

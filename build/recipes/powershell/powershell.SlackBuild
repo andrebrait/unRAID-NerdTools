@@ -1,0 +1,107 @@
+#!/bin/bash
+#
+# Slackware build script for powershell.
+#
+# Copyright 2022 Reza Talebi, Shahin Shahr, Iran.
+# All rights reserved.
+#
+# Redistribution and use of this script, with or without modification, is
+# permitted provided that the following conditions are met:
+#
+# 1. Redistributions of this script must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+#
+#  THIS SOFTWARE IS PROVIDED BY THE AUTHOR "AS IS" AND ANY EXPRESS OR IMPLIED
+#  WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+#  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO
+#  EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+#  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+#  PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+#  OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+#  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+#  OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+#  ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+# NerdTools builds the published PowerShell sources; the upstream shell is a build-only bootstrap.
+set -euo pipefail
+cd "$(dirname "$0")"
+CWD=$PWD
+PRGNAM=powershell
+VERSION=7.6.9
+ARCH=${ARCH:-x86_64}
+BUILD=${BUILD:-1}
+TAG=${TAG:-_NT73}
+PKGTYPE=${PKGTYPE:-txz}
+TMP=${TMP:-/tmp/SBo}
+OUTPUT=${OUTPUT:-/tmp}
+test "$ARCH" = x86_64
+WORK="$TMP/powershell-source-build"
+PKG="$TMP/package-$PRGNAM"
+rm -rf "$WORK" "$PKG"
+mkdir -p "$WORK/source" "$WORK/bootstrap" "$WORK/dotnet" "$WORK/feed" "$WORK/home" "$PKG/opt/nerdtools/libexec/powershell" "$OUTPUT"
+tar xf "$CWD/PowerShell-bf5fc434120666e5f1a8d1dfd6ecac7efc17a4be.tar.gz" -C "$WORK/source" --strip-components=1
+tar xf "$CWD/dotnet-sdk-10.0.403-linux-x64.tar.gz" -C "$WORK/dotnet"
+tar xf "$CWD/powershell-7.6.9-linux-x64-fxdependent.tar.gz" -C "$WORK/bootstrap"
+cp "$CWD"/*.nupkg "$WORK/feed/"
+cd "$WORK/source"
+# Rehydrate genuine upstream Git objects for the official version generator, never fabricated history.
+git init -q
+git config core.autocrlf false
+git config core.filemode true
+# Archive blobs already match upstream; checkout filters would rewrite historical CRLF blobs.
+printf '%s\n' '* -text -filter -ident' > .git/info/attributes
+git add --force .
+test "$(git write-tree)" = 88161cb49c20f66f06575bed08518432f23a8283
+test "$(git hash-object -t commit -w "$CWD/upstream.commit")" = bf5fc434120666e5f1a8d1dfd6ecac7efc17a4be
+test "$(git hash-object -t tag -w "$CWD/upstream.tag")" = a0edd6969993766081edc6bf0306696d1adef88a
+printf '%s\n' bf5fc434120666e5f1a8d1dfd6ecac7efc17a4be > .git/shallow
+git update-ref HEAD bf5fc434120666e5f1a8d1dfd6ecac7efc17a4be
+git update-ref refs/tags/v7.6.9 a0edd6969993766081edc6bf0306696d1adef88a
+cp -a "$CWD/nuget-locks/." .
+# Every source, including Gallery modules and WiX build tools, resolves only from locked local inputs.
+for config in nuget.config src/Modules/nuget.config tools/wix/nuget.config; do
+  cat > "$config" <<EOF
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <packageSources><clear /><add key="locked-inputs" value="$WORK/feed" /></packageSources>
+  <disabledPackageSources><clear /></disabledPackageSources>
+</configuration>
+EOF
+done
+export HOME="$WORK/home" DOTNET_CLI_HOME="$WORK/home" DOTNET_ROOT="$WORK/dotnet"
+export PATH="$DOTNET_ROOT:$PATH" NUGET_PACKAGES="$WORK/packages"
+export DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
+export DOTNET_GENERATE_ASPNET_CERTIFICATE=false DOTNET_NOLOGO=true
+# Signature validation stays enabled; network-disabled builds use cached certificate revocation data.
+export NUGET_CERT_REVOCATION_MODE=offline
+export RestoreLockedMode=true
+export NERDTOOLS_PS_OUTPUT="$PKG/opt/nerdtools/libexec/powershell"
+# The framework-dependent bootstrap uses the pinned, security-fixed .NET SDK runtime.
+dotnet "$WORK/bootstrap/pwsh.dll" -NoLogo -NoProfile -NonInteractive -Command \
+  '$ErrorActionPreference = "Stop"; Import-Module ./build.psm1 -ArgumentList $true; Start-PSBuild -Runtime linux-x64 -Configuration Release -ReleaseTag v7.6.9 -Output $env:NERDTOOLS_PS_OUTPUT'
+test -x "$PKG/opt/nerdtools/libexec/powershell/pwsh"
+mkdir -p "$PKG/opt/nerdtools/bin"
+ln -s ../libexec/powershell/pwsh "$PKG/opt/nerdtools/bin/pwsh"
+DOC="$PKG/opt/nerdtools/doc/$PRGNAM-$VERSION"
+mkdir -p "$DOC/third-party"
+cp -a LICENSE.txt ThirdPartyNotices.txt "$CWD/$PRGNAM.SlackBuild" "$DOC/"
+python3 - "$WORK/feed" "$DOC/third-party" <<'PY'
+from pathlib import Path, PurePosixPath
+import sys
+import zipfile
+feed, target = map(Path, sys.argv[1:])
+for archive in feed.glob('*.nupkg'):
+    with zipfile.ZipFile(archive) as source:
+        for member in source.infolist():
+            path = PurePosixPath(member.filename.replace("\\", "/"))
+            if path.is_absolute() or '..' in path.parts:
+                raise SystemExit('unsafe NuGet archive path')
+            if not member.is_dir() and (path.suffix == '.nuspec' or any(word in path.name.lower() for word in ('license', 'licence', 'notice', 'copying', 'copyright'))):
+                destination = target / archive.stem / path
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(source.read(member))
+PY
+mkdir -p "$PKG/install"
+cp "$CWD/slack-desc" "$PKG/install/slack-desc"
+cd "$PKG"
+/sbin/makepkg -l n -c n "$OUTPUT/$PRGNAM-$VERSION-$ARCH-$BUILD$TAG.$PKGTYPE"

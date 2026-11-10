@@ -1,0 +1,77 @@
+--- ./runtime/vimrc_example.vim.orig	2026-03-26 16:19:34.000000000 -0500
++++ ./runtime/vimrc_example.vim	2026-04-01 15:35:15.394826092 -0500
+@@ -10,37 +10,43 @@
+ "	 for MS-Windows:  $VIM\_vimrc
+ "	      for Haiku:  ~/config/settings/vim/vimrc
+ "	    for OpenVMS:  sys$login:.vimrc
++"
++" Add of these examples are commented out by default.
++" To use them, remove the leading " from syntax lines.
+ 
+ " When started as "evim", evim.vim will already have done these settings, bail
+ " out.
+-if v:progname =~? "evim"
+-  finish
+-endif
++"if v:progname =~? "evim"
++"  finish
++"endif
+ 
+ " Get the defaults that most users want.
+-source $VIMRUNTIME/defaults.vim
++"source $VIMRUNTIME/defaults.vim
+ 
+-if has("vms")
+-  set nobackup		" do not keep a backup file, use versions instead
+-else
+-  set backup		" keep a backup file (restore to previous version)
+-  if has('persistent_undo')
+-    set undofile	" keep an undo file (undo changes after closing)
+-  endif
+-endif
+-
+-if &t_Co > 2 || has("gui_running")
+-  " Switch on highlighting the last used search pattern.
+-  set hlsearch
+-endif
++"if has("vms")
++"  set nobackup		" do not keep a backup file, use versions instead
++"else
++"  set backup		" keep a backup file (restore to previous version)
++"  if has('persistent_undo')
++"    set undofile	" keep an undo file (undo changes after closing)
++"  endif
++"endif
++
++"if &t_Co > 2 || has("gui_running")
++"  " Switch on highlighting the last used search pattern.
++"  set hlsearch
++"endif
+ 
+ " Put these in an autocmd group, so that we can delete them easily.
+-augroup vimrcEx
+-  au!
++"augroup vimrcEx
++"  au!
+ 
+   " For all text files set 'textwidth' to 78 characters.
+-  autocmd FileType text setlocal textwidth=78
+-augroup END
++"  autocmd FileType text setlocal textwidth=78
++"augroup END
++
++" Make vim work with the 'crontab -e' command
++"set backupskip+=/var/spool/cron/*,/run/cron/*
+ 
+ " Add optional packages.
+ "
+@@ -48,6 +54,6 @@
+ " compatible.
+ " The ! means the package won't be loaded right away but when plugins are
+ " loaded during initialization.
+-if has('syntax') && has('eval')
+-  packadd! matchit
+-endif
++"if has('syntax') && has('eval')
++"  packadd! matchit
++"endif

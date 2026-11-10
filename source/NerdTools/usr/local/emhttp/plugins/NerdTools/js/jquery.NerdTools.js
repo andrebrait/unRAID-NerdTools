@@ -1,161 +1,148 @@
-$(function(){
-    // tablesorter options
+var nerdPackages = {};
+var nerdLoaded = false;
+$(function() {
     $('#tblPackages').tablesorter({
-        sortList: [[0,0]],
+        sortList: [[1, 0]],
         widgets: ['saveSort', 'filter', 'stickyHeaders', 'zebra'],
         widgetOptions: {
             stickyHeaders_filteredToTop: true,
             stickyHeaders_attachTo: null,
-            stickyHeaders_offset: ($('#header').css("position") === "fixed") ? '90' : '0',
-            filter_hideEmpty: true,
-            filter_liveSearch: true,
-            filter_saveFilters: true,
+            stickyHeaders_offset: ($('#header').css('position') === 'fixed') ? '90' : '0',
+            filter_hideEmpty: true, filter_liveSearch: true, filter_saveFilters: true,
             filter_reset: '.reset',
-            filter_functions: {
-                '.filter-version': true,
-                '.filter-installed': true
-            }
+            filter_functions: {'.filter-version': true, '.filter-installed': true}
         }
     });
- 
-    $.cookie('nerdtools_checkall', 'no', { expires: 3650 });
-    $.cookie('nerdtools_packages_uninstall', '--uninstall', { expires: 3650 });
-    $('#btnApply').click(Apply);
-
-    var url = window.location.href.split("?");
-    packageQuery(url[1]);
+    $('#package_form').on('submit', function(event) { event.preventDefault(); Apply(); });
+    $('#btnApply').on('click', Apply);
+    $('#btnSave').on('click', function() { saveSettings(false); });
+    $('#btnRefresh').on('click', function() { packageQuery(true); });
+    $('#btnRelease').on('click', function() {
+        $('#btnRelease').prop('disabled', true);
+        $.post('/plugins/NerdTools/include/Settings.php', {
+            action: 'release', release: $('#package_release').val(),
+            csrf_token: $('#package_form input[name="csrf_token"]').val()
+        }).done(function() { packageError(''); packageQuery(false); })
+          .fail(function(xhr) { packageError(requestError(xhr)); })
+          .always(function() { $('#btnRelease').prop('disabled', false); });
+    });
+    packageQuery(false);
 });
-
-//list all available packages in a table
+function packageError(message) {
+    $('#package_error').text(message || '').prop('hidden', !message);
+}
+function requestError(xhr) {
+    return xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : 'NerdTools request failed; please try again.';
+}
 function packageQuery(force) {
-    $('#tblPackages tbody').html("<tr><td colspan='6'><br><i class='fa fa-spinner fa-spin icon'></i><em>Please wait, retrieving plugin information ...</em></td><tr>");
-    $.getJSON('/plugins/NerdTools/include/PackageQuery.php', {force: force}, function(data) {
-        $('#tblPackages tbody').empty();
-        var Ready;
-        var Count = 0;
-        var len = data.packages.length, i = 0;
-        for (i; i < len; i++) {
-            var Update;
-            var Downloaded = data.packages[i].downloaded;
-            var DownloadEQ = data.packages[i].downloadeq;
-            var Installed  = data.packages[i].installed;
-            var InstallEQ  = data.packages[i].installeq;
-            var updatePkg  = data.packages[i].updatePkg;
-            if (InstallEQ == Installed || !updatePkg){
-                if (Installed == "yes"){
-                    if (Downloaded == "no")
-                        Update = "<span ><i class='installed fa fa-check-circle'></i> installed</span>";
-                    else
-                        Update = "<span><i class='uptodate fa fa-check'></i> up-to-date </span>";
-                }else{
-                    Update = "<span><i class='uninstalled fa fa-info-circle'></i> uninstalled </span>";
-                }
-            }else{
-                Update = "<span ><a class='update'><i class='updateready fa fa-cloud-download'></i> update ready </a></span>";
-                Ready = true;
-            }
-
-            if (DownloadEQ != Downloaded && updatePkg)
-                Downloaded = 'old';
-
-            var Checked = "";
-            if (data.packages[i].config == "yes"){
-                Checked = "checked";
-                Count++;
-           }
-
-            $('#tblPackages tbody').append("<tr>"+
-            "<td class='checked'><input class='pkgcheckbox' id='"+data.packages[i].pkgname+"' type='checkbox' "+Checked+">"+
-            "<td class='package wrapper' title='"+data.packages[i].desc+"'>"+data.packages[i].name+"</td>"+ // package name
-            "<td>"+data.packages[i].dependencies+"</td>"+ // package status
-            "<td>"+Update+"</td>"+ // package status
-            "<td>"+Downloaded+"</td>"+ // package downloaded
-            "<td>"+data.packages[i].size+"</td>"+ // package size
-            "<td>"+data.packages[i].actualpkgv+"</td>"+ // package dependents
-            "<input class='pkgvalue' type='hidden' id='"+data.packages[i].pkgname+"_value' name='"+data.packages[i].pkgnver+"' value='"+data.packages[i].config+"'></td>"+
-            "</tr>");
+    if (force) {
+        $('#btnRefresh').prop('disabled', true);
+        $.post('/plugins/NerdTools/include/Settings.php', {
+            action: 'refresh', csrf_token: $('#package_form input[name="csrf_token"]').val()
+        }).done(function() { packageError(''); packageQuery(false); })
+          .fail(function(xhr) { packageError(requestError(xhr)); packageQuery(false); })
+          .always(function() { $('#btnRefresh').prop('disabled', false); });
+        return;
+    }
+    $('#catalog_status').text('Retrieving package information…');
+    $.getJSON('/plugins/NerdTools/include/PackageQuery.php').done(function(data) {
+        nerdPackages = {};
+        var body = $('#tblPackages tbody').empty();
+        $.each(data.packages, function(_, pkg) {
+            nerdPackages[pkg.name] = pkg;
+            var row = $('<tr>');
+            var checkbox = $('<input>', {type: 'checkbox', 'class': 'pkgcheckbox', 'aria-label': 'Install ' + pkg.tool})
+                .attr('data-package', pkg.name).prop('checked', pkg.selected).prop('disabled', pkg.external && !pkg.selected);
+            var value = $('<input>', {type: 'hidden', 'class': 'pkgvalue', name: 'packages[' + pkg.name + ']'})
+                .attr('data-package', pkg.name).val(pkg.selected ? 'yes' : 'no');
+            row.append($('<td>').append(checkbox, value));
+            row.append($('<td>', {'class': 'package wrapper'}).text(pkg.tool + ' ' + pkg.version));
+            row.append($('<td>').text((pkg.dependency_labels || pkg.dependencies).join(', ')));
+            var status = $('<td>');
+            if (pkg.external) status.text('Managed by Unraid or another installer (protected)');
+            else if (pkg.unavailable) status.text('Absent from this release; switch Off to remove');
+            else if (pkg.exact) status.text('Up-to-date');
+            else if (pkg.installed) {
+                status.append($('<button>', {type: 'button', 'class': 'update'}).text('Update ready').on('click', function() {
+                    checkbox.prop('checked', true).trigger('change'); Apply();
+                }));
+            } else status.text('Uninstalled');
+            row.append(status, $('<td>').text(pkg.installed ? 'yes' : 'no'), $('<td>').text(pkg.size), $('<td>').text(pkg.current));
+            body.append(row);
+        });
+        if (!data.packages.length) body.append($('<tr>').append($('<td>', {colspan: 7}).text('No compatible catalog cached. Select Force Updates to retrieve the package list.')));
+        $('.pkgcheckbox').switchButton({labels_placement: 'right', on_label: 'On', off_label: 'Off'}).on('change', function() {
+            syncPreferences(); checkDepends();
+        });
+        var hours = String(data.hours);
+        if (!$('#update_check_hours option').filter(function() { return this.value === hours; }).length) {
+            $('#update_check_hours').append($('<option>').val(hours).text('Every ' + hours + ' hours'));
         }
-        if (Ready)
-            $('#btnApply').prop('disabled', false);
-
-        // attach switch buttons to every package checkbox all at once
-        $('.pkgcheckbox')
-            .switchButton({
-                labels_placement: 'right',
-                on_label: 'On',
-                off_label: 'Off'
-            })
-            .change(function() {
-                $(this).parent().parent().find('.pkgvalue').val(this.checked ? "yes": "no");
-                if (this.checked)
-                    checkDepends();
-                $('#btnApply').prop("disabled", false);
-            });
-
-        // attach submit to update ready
-        $('.update').click(Apply);
-
-        // restore filters
-        var lastSearch = $('#tblPackages')[0].config.lastSearch;
-        $('#tblPackages').trigger('update')
-        .trigger('search', [lastSearch]);
-
-        if (data.empty == true && Count > 0) {
-            swal({
-                title:'Downloaded Packages Missing!',
-                text:'You either changed unRAID versions or deleted your downloaded packages. Click Download or the Apply button below to download and install your selected packages.',
-                type:'warning',
-                showCancelButton: true,
-                confirmButtonColor: "#00AA00",
-                confirmButtonText: 'Download',
-                closeOnConfirm: true,},
-                function(isConfirm) {
-                    $('#btnApply').prop('disabled', false);
-                    if(isConfirm)
-                        Apply();
-                    else
-                        $('html, body').animate({
-                            scrollTop: $("#btnApply").offset().top
-                        }, 2000);
-                }
-            );
-        }
+        $('#update_check_hours').val(hours);
+        var releases = $('#package_release').empty().append($('<option>').val('latest').text('Latest compatible release'));
+        $.each(data.releases || [], function(_, tag) { releases.append($('<option>').val(tag).text(tag)); });
+        releases.val(data.selector || 'latest');
+        var state = data.state || {};
+        var statusText = data.release ? 'Package release: ' + data.release + '. ' : '';
+        statusText += state.last_success ? 'Last successful check: ' + new Date(state.last_success * 1000).toLocaleString() + '. ' : 'No successful catalog check yet. ';
+        if (state.error) statusText += 'Last check failed: ' + state.error + '. Using the last-good cache. ';
+        if (data.hours === 0) statusText += 'Automatic checks are disabled.';
+        else if (state.next_check) statusText += 'Next eligible check: ' + new Date(state.next_check * 1000).toLocaleString() + '.';
+        $('#catalog_status').text(statusText);
+        var offers = $('#external_offers div').empty();
+        $.each(data.external_packages || [], function(_, offer) {
+            offers.append($('<p>').append(
+                $('<strong>').text(offer.name + ' ' + offer.version + ': '),
+                document.createTextNode(offer.license_notice + ' '),
+                $('<a>', {href: offer.license_url, target: '_blank', rel: 'noopener noreferrer'}).text('Read license terms'),
+                document.createTextNode(' · '),
+                $('<a>', {href: offer.url, target: '_blank', rel: 'noopener noreferrer'}).text('Download original from RARLAB')
+            ));
+        });
+        $('#external_offers').prop('hidden', !(data.external_packages || []).length);
+        var provided = $('#provided_packages ul').empty();
+        $.each(data.provided_packages || [], function(_, capability) {
+            provided.append($('<li>').text(capability.name + ' (Unraid baseline ' + capability.version + ')'));
+        });
+        $('#provided_packages').prop('hidden', !(data.provided_packages || []).length);
+        nerdLoaded = true;
+        $('#btnApply').prop('disabled', !data.packages.length);
+        $('#tblPackages').trigger('update').trigger('search', [$('#tblPackages')[0].config.lastSearch]);
+    }).fail(function(xhr) {
+        packageError(requestError(xhr));
+        $('#catalog_status').text('Package information is unavailable. Existing settings have not been changed.');
+        $('#btnApply').prop('disabled', true);
     });
 }
-
-function Apply() {
-        checkDepends();
-        var Arg2 = (typeof $.cookie('nerdtools_packages_uninstall') === 'undefined') ? '' : '&arg2='+$.cookie('nerdtools_packages_uninstall');
-        $.post('/update.php', $('#package_form').serializeArray(), function() {
-                openBox('/plugins/NerdTools/scripts/packagemanager&arg1=--download'+ Arg2,
-                            'Package Manager', 600, 900, true);
-            }
-        );
+function syncPreferences() {
+    $('.pkgcheckbox').each(function() {
+        $(this).closest('tr').find('.pkgvalue').val(this.checked ? 'yes' : 'no');
+    });
 }
-
 function checkDepends() {
-    try {
-        $.ajaxSetup({
-            async: false
-        });
-        $.getJSON('/plugins/NerdTools/include/CheckDepends.php', function(data) {
-            console.log(data)
-            $.each(data,function(index, value){
-                if ($('#'+index)[0]){
-                    value.split(",").forEach(function (item) { 
-                        if (item && $('#'+index)[0].checked) {
-                            $('#' + item.trim()).switchButton({ checked: true });
-                            $('#' + item.trim(), '.pkgvalue').val('yes');
-                        }
-                    });
-                }
-            });
-        });
-
-    } catch (error) {
-        console.error('Error checkDepends' + error);
+    var selected = {};
+    function visit(name) {
+        if (selected[name] || !nerdPackages[name]) return;
+        selected[name] = true;
+        $.each(nerdPackages[name].dependencies, function(_, dep) { visit(dep); });
     }
-
-    return ""
-
+    $('.pkgcheckbox:checked').each(function() { visit($(this).attr('data-package')); });
+    $('.pkgcheckbox').each(function() {
+        if (selected[$(this).attr('data-package')] && !this.checked) {
+            $(this).switchButton({checked: true}); this.checked = true;
+        }
+    });
+    syncPreferences();
 }
+function saveSettings(install) {
+    if (!nerdLoaded) { packageError('Load the catalog before saving settings.'); return; }
+    checkDepends();
+    $('#btnApply, #btnSave').prop('disabled', true);
+    $.post('/plugins/NerdTools/include/Settings.php', $('#package_form').serialize()).done(function() {
+        packageError('');
+        if (install) openBox('/plugins/NerdTools/scripts/packagemanager&arg1=--download&arg2=--uninstall', 'Package Manager', 600, 900, true);
+        else packageQuery(false);
+    }).fail(function(xhr) { packageError(requestError(xhr)); })
+      .always(function() { $('#btnApply, #btnSave').prop('disabled', false); });
+}
+function Apply() { saveSettings(true); }

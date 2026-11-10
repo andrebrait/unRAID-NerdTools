@@ -1,0 +1,54 @@
+name: Pinned Unraid build root
+description: Prepare a private exact-version Unraid root and additive SHA256-locked development toolchain on a disposable Linux x86_64 runner.
+inputs:
+  version:
+    description: Exact official Unraid version
+    required: true
+  url:
+    description: HTTPS ZIP URL under releases.unraid.net/dl/
+    required: true
+  sha256:
+    description: SHA256 of the exact ZIP
+    required: true
+  bzroot-sha256:
+    description: Optional independent SHA256 pin for the ZIP's bzroot member
+    required: false
+    default: ''
+  toolchain-lock:
+    description: Path in the consuming checkout to a JSON array of name/url/file/sha256 development package inputs
+    required: true
+outputs:
+  baseline-root:
+    description: Private pristine exact-version root (never upload or cache)
+    value: ${{ steps.bootstrap.outputs.baseline-root }}
+  development-root:
+    description: Private copy with additive locked development packages; existing runtime files preserved
+    value: ${{ steps.bootstrap.outputs.development-root }}
+  kernel:
+    description: Private exact bzimage from the pinned official ZIP
+    value: ${{ steps.bootstrap.outputs.kernel }}
+runs:
+  using: composite
+  steps:
+    - name: Require a disposable Linux x86_64 runner and archive tools
+      shell: bash
+      run: |
+        [[ "$RUNNER_OS" == Linux && "$RUNNER_ARCH" == X64 ]]
+        sudo apt-get update
+        sudo apt-get install --no-install-recommends --yes cpio zstd xz-utils
+    - name: Verify inputs and prepare private roots
+      id: bootstrap
+      shell: bash
+      env:
+        UNRAID_VERSION: ${{ inputs.version }}
+        UNRAID_URL: ${{ inputs.url }}
+        UNRAID_SHA256: ${{ inputs.sha256 }}
+        UNRAID_BZROOT_SHA256: ${{ inputs.bzroot-sha256 }}
+        TOOLCHAIN_LOCK: ${{ inputs.toolchain-lock }}
+        BOOTSTRAP_SCRIPT: ${{ github.action_path }}/bootstrap.py
+      run: |
+        args=()
+        if [[ -n "$UNRAID_BZROOT_SHA256" ]]; then args+=(--bzroot-sha256 "$UNRAID_BZROOT_SHA256"); fi
+        sudo --preserve-env=GITHUB_OUTPUT,RUNNER_TEMP python3 "$BOOTSTRAP_SCRIPT" \
+          --version "$UNRAID_VERSION" --url "$UNRAID_URL" --sha256 "$UNRAID_SHA256" \
+          --toolchain-lock "$TOOLCHAIN_LOCK" "${args[@]}"

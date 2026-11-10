@@ -1,0 +1,147 @@
+#!/bin/bash
+
+# Copyright 2008, 2009, 2012, 2013, 2016, 2017, 2018, 2019, 2024  Patrick J. Volkerding, Sebeka, MN, USA
+# All rights reserved.
+#
+# Redistribution and use of this script, with or without modification, is
+# permitted provided that the following conditions are met:
+#
+# 1. Redistributions of this script must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+#
+#  THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
+#  WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+#  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO
+#  EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+#  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+#  PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+#  OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+#  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+#  OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+#  ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+cd $(dirname $0) ; CWD=$(pwd)
+
+# NerdTools adaptation of https://git.slackware.nl/current/plain/source/tcl/tcl/tcl.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61
+# Private prefix; upstream patch/config/license files remain pinned in the lock.
+export PKG_CONFIG_PATH=/opt/nerdtools/lib64/pkgconfig:/opt/nerdtools/lib/pkgconfig:/opt/nerdtools/share/pkgconfig
+export CPPFLAGS="-I/opt/nerdtools/include ${CPPFLAGS:-}"
+export LDFLAGS="-L/opt/nerdtools/lib64 -L/opt/nerdtools/lib ${LDFLAGS:-}"
+mkdir -p "${OUTPUT:-/out}"
+
+
+PKGNAM=tcl
+VERSION=8.6.18
+# See also version number 8.6 in the symlinks below...)
+BUILD=${BUILD:-2}
+
+# Automatically determine the architecture we're building on:
+if [ -z "$ARCH" ]; then
+  case "$( uname -m )" in
+    i?86) export ARCH=i686 ;;
+    arm*) export ARCH=arm ;;
+    # Unless $ARCH is already set, use uname -m for all other archs:
+       *) export ARCH=$( uname -m ) ;;
+  esac
+fi
+
+# If the variable PRINT_PACKAGE_NAME is set, then this script will report what
+# the name of the created package would be, and then exit. This information
+# could be useful to other scripts.
+if [ ! -z "${PRINT_PACKAGE_NAME}" ]; then
+  echo "$PKGNAM-$VERSION-$ARCH-$BUILD.txz"
+  exit 0
+fi
+
+NUMJOBS=${NUMJOBS:-" -j$(expr $(nproc) + 1) "}
+
+TMP=${TMP:-/tmp}
+PKG=$TMP/package-tcl
+
+if [ "$ARCH" = "i686" ]; then
+  SLKCFLAGS="-O2 -march=pentium4 -mtune=generic"
+  LIBDIRSUFFIX=""
+  CONFARGS="--enable-64bit"
+elif [ "$ARCH" = "x86_64" ]; then
+  SLKCFLAGS="-O2 -fPIC"
+  LIBDIRSUFFIX="64"
+  CONFARGS=""
+else
+  SLKCFLAGS="-O2"
+  LIBDIRSUFFIX=""
+  CONFARGS=""
+fi
+
+rm -rf $PKG
+mkdir -p $TMP $PKG
+cd $TMP
+rm -rf tcl$VERSION
+tar xvf $CWD/tcl$VERSION-src.tar.?z || exit 1
+cd tcl$VERSION || exit 1
+chown -R root:root .
+find . \
+  \( -perm 777 -o -perm 775 -o -perm 711 -o -perm 555 -o -perm 511 \) \
+  -exec chmod 755 {} \+ -o \
+  \( -perm 666 -o -perm 664 -o -perm 600 -o -perm 444 -o -perm 440 -o -perm 400 \) \
+  -exec chmod 644 {} \+
+
+mkdir -p $PKG/opt/nerdtools/doc/tcl$VERSION
+cp -a README* license.terms $PKG/opt/nerdtools/doc/tcl$VERSION
+
+cd unix
+# Fix 64bit path names:
+sed -i -e "s#TCL_LIBRARY='\$(prefix)/lib/tcl\$(VERSION)'#TCL_LIBRARY='\$(prefix)/lib$LIBDIRSUFFIX/tcl\$(VERSION)'#" configure
+CFLAGS="$SLKCFLAGS" \
+./configure \
+  --prefix=/opt/nerdtools \
+  --libdir=/opt/nerdtools/lib${LIBDIRSUFFIX} \
+  --enable-shared \
+  --enable-threads \
+  --mandir=/opt/nerdtools/man \
+  --enable-man-symlinks \
+  ${CONFARGS} \
+  --build=$ARCH-slackware-linux || exit 1
+
+make $NUMJOBS || exit 1
+
+# Fix paths in tclConfig.sh:
+ sed -e "s@^\(TCL_SRC_DIR='\).*@\1/opt/nerdtools/include'@" \
+     -e "/TCL_B/s@='\(-L\)\?.*unix@='\1/opt/nerdtools/lib${LIBDIRSUFFIX}@" \
+     -i tclConfig.sh
+
+make install DESTDIR=$PKG || exit 1
+
+# Some sources require Tcl's private headers, which might not be the
+# best thing but we'll include them where we've seen other teams
+# doing the same thing:
+make install-private-headers DESTDIR=$PKG || exit 1
+
+# If the man3/Thread.3 page also appears in Perl, then rename this one:
+if grep -q "^usr/man/man3/Thread.3.gz$" /var/lib/pkgtools/packages/perl-* ; then
+  mv $PKG/opt/nerdtools/man/man3/Thread.3 $PKG/opt/nerdtools/man/man3/Thread_tcl.3
+fi
+
+( cd $PKG/opt/nerdtools/bin
+  rm -f tclsh
+  ln -sf tclsh8.6 tclsh
+)
+( cd $PKG/opt/nerdtools/lib${LIBDIRSUFFIX}
+  rm -f libtcl.so
+  ln -sf libtcl8.6.so libtcl.so
+)
+
+find $PKG | xargs file | grep -e "executable" -e "shared object" \
+  | grep ELF | cut -f 1 -d : | xargs strip --strip-unneeded 2> /dev/null
+
+# Compress manual pages:
+find $PKG/opt/nerdtools/man -type f -exec gzip -9 {} \+
+for i in $( find $PKG/opt/nerdtools/man -type l ) ; do
+  ln -s $( readlink $i ).gz $i.gz
+  rm $i
+done
+
+mkdir -p $PKG/install
+cat $CWD/slack-desc > $PKG/install/slack-desc
+
+cd $PKG
+/sbin/makepkg -l n -c n ${OUTPUT:-/out}/tcl-$VERSION-$ARCH-$BUILD.txz

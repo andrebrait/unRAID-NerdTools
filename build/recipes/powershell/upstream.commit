@@ -1,0 +1,19 @@
+tree 88161cb49c20f66f06575bed08518432f23a8283
+parent 3a0b9fb386a321f664ab6dd6a39abaf2313c76bf
+author Dongbo Wang <dongbow@microsoft.com> 1792911421 +0000
+committer Dongbo Wang <dongbow@microsoft.com> 1792911421 +0000
+
+Merged PR 42316: [release/v7.6.9] Add changelog for v7.6.9 release
+
+Add changelog for v7.6.9 release
+
+----
+#### AI description  (iteration 1)
+#### PR Classification
+Documentation update.
+
+#### PR Summary
+Adds changelog entry for the v7.6.9 release.
+- `CHANGELOG/7.6.md`: Documents the v7.6.9 release, including the .NET SDK update to 10.0.403.
+<!-- GitOpsUserAgent=GitOps.Apps.Server.pullrequestcopilot -->
+

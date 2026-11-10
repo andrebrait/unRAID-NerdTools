@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0": {
+      "DotNetAnalyzers.DocumentationAnalyzers": {
+        "type": "Direct",
+        "requested": "[1.0.0-beta.59, )",
+        "resolved": "1.0.0-beta.59",
+        "contentHash": "+cjn5bzar9cqDABF2SUsMEof8yoMXSNdHYdpCVNnj/M/cRACbKYHzYpgilSEvFlHGuolzJJ2WN++/EXwBzSsYQ==",
+        "dependencies": {
+          "DotNetAnalyzers.DocumentationAnalyzers.Unstable": "1.0.0.59"
+        }
+      },
+      "Microsoft.Signed.Wix": {
+        "type": "Direct",
+        "requested": "[3.14.1-8722.20240403.1, )",
+        "resolved": "3.14.1-8722.20240403.1",
+        "contentHash": "CGWQwp4lJXT9wee1kERcQWeynPVN8udwl+0Rj7VHLvT5ScYRsoJfqVerRAnPyPQsW0L705oR8qV8ps5Mdgk+3A=="
+      },
+      "StyleCop.Analyzers": {
+        "type": "Direct",
+        "requested": "[1.2.0-beta.556, )",
+        "resolved": "1.2.0-beta.556",
+        "contentHash": "llRPgmA1fhC0I0QyFLEcjvtM2239QzKr/tcnbsjArLMJxJlu0AA5G7Fft0OI30pHF3MW63Gf4aSSsjc5m82J1Q==",
+        "dependencies": {
+          "StyleCop.Analyzers.Unstable": "1.2.0.556"
+        }
+      },
+      "DotNetAnalyzers.DocumentationAnalyzers.Unstable": {
+        "type": "Transitive",
+        "resolved": "1.0.0.59",
+        "contentHash": "ekGYoPsAGTJs5cFbRdzfHKX2n2DzEATZyowGw3QJnozelzmhQ5tGCJhyolN5NWDq1p/GkBPKgRcQ5QGTKxaGrA=="
+      },
+      "StyleCop.Analyzers.Unstable": {
+        "type": "Transitive",
+        "resolved": "1.2.0.556",
+        "contentHash": "zvn9Mqs/ox/83cpYPignI8hJEM2A93s2HkHs8HYMOAQW0PkampyoErAiIyKxgTLqbbad29HX/shv/6LGSjPJNQ=="
+      }
+    },
+    "net10.0/linux-x64": {}
+  }
+}
