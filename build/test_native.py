@@ -11,6 +11,7 @@ import subprocess
 import tarfile
 import tempfile
 import unittest
+import zipfile
 from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location("native", Path(__file__).with_name("native.py"))
@@ -124,6 +125,28 @@ class NativeBuildTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 rootfs.validate_target("7.3.4", url, digest)
         rootfs.validate_target("7.4.0-rc.2", "https://releases.unraid.net/dl/next/7.4.0-rc.2/root.zip", "a" * 64)
+
+    def test_unraid_usr_layer_is_extracted_from_release_zip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "squash-source"
+            (source / "bin").mkdir(parents=True)
+            (source / "bin/id").write_text("baseline identity tool")
+            layer = root / "bzmodules"
+            subprocess.run(["mksquashfs", str(source), str(layer), "-noappend", "-no-progress", "-no-xattrs", "-processors", "1"],
+                           check=True, stdout=subprocess.DEVNULL)
+            release = root / "release.zip"
+            with zipfile.ZipFile(release, "w") as archive:
+                archive.write(layer, "bzmodules")
+            target = root / "target"
+            (target / "usr").mkdir(parents=True)
+            with zipfile.ZipFile(release) as archive:
+                rootfs.extract_usr_layer(archive, target)
+            self.assertEqual((target / "usr/bin/id").read_text(), "baseline identity tool")
+            with zipfile.ZipFile(release) as archive:
+                with self.assertRaisesRegex(ValueError, "empty /usr"):
+                    rootfs.extract_usr_layer(archive, target)
+            self.assertEqual((target / "usr/bin/id").read_text(), "baseline identity tool")
 
     def test_initramfs_split_skips_microcode_and_preserves_compression(self):
         name = b"TRAILER!!!\0"

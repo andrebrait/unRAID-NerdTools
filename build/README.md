@@ -6,7 +6,7 @@ No successful build or compatibility result is implied by committing these recip
 
 ## Pinned baseline and isolated roots
 
-`baseline.json` is the canonical Unraid **7.3.4** input lock. Its ZIP SHA256 was obtained from the [official release feed](https://releases.unraid.net/os) and independently checked against the downloaded versioned ZIP; its `bzroot` digest was independently checked too. The ZIP includes an early microcode cpio followed by the compressed main root. The bootstrap parses that framing rather than searching for a coincidental compression signature.
+`baseline.json` is the canonical Unraid **7.3.4** input lock. Its ZIP SHA256 was obtained from the [official release feed](https://releases.unraid.net/os) and independently checked against the downloaded versioned ZIP; its `bzroot` digest was independently checked too. The bootstrap extracts the compressed root filesystem from `bzroot` and the `/usr` SquashFS layer from `bzmodules`, both authenticated by the ZIP checksum.
 
 The official root is unpacked only inside a disposable Linux x86_64 runner. SHA256-locked development packages are added to a separate copy. Existing baseline runtime files are not replaced, including glibc and libstdc++. Standard makepkg symlinks are restored only when absent; arbitrary toolchain install scripts are never executed. Each package gets a fresh copy of that development root, its declared dependency packages, checked recipe files, and verified input archives. Compilation has no network access.
 

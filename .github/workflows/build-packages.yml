@@ -54,6 +54,8 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+      - name: Install SquashFS test tools
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends --yes squashfs-tools
       - name: Test the trust boundaries and catalog contract
         run: python3 -m unittest discover -s build -p 'test_*.py'
       - name: Validate checked recipes, pins, dependency closure, and complete catalog

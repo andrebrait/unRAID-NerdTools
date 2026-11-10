@@ -140,6 +140,16 @@ def root_payload(data):
             if not payload.startswith((b"\x28\xb5\x2f\xfd", b"\xfd7zXZ\x00", b"\x1f\x8b", b"070701")):
                 raise ValueError("Unsupported main initramfs compression")
             return payload
+def extract_usr_layer(image, root):
+    destination = root / "usr"
+    if destination.is_symlink() or not destination.is_dir() or any(destination.iterdir()):
+        raise ValueError("Unraid root must contain an empty /usr mountpoint")
+    with image.open("bzmodules") as source, tempfile.NamedTemporaryFile() as layer:
+        shutil.copyfileobj(source, layer)
+        layer.flush()
+        run(["unsquashfs", "-no-progress", "-force", "-dest", destination, layer.name])
+
+
 def prepare_image(item, version, cache, root, bzroot_sha256=None, kernel=None):
     archive = fetch(item, cache)
     with zipfile.ZipFile(archive) as image:
@@ -170,6 +180,8 @@ def prepare_image(item, version, cache, root, bzroot_sha256=None, kernel=None):
     actual = (root / "etc/unraid-version").read_text()
     if not re.search(r'^version="?' + re.escape(version) + r'"?\s*$', actual, re.MULTILINE):
         raise ValueError(f"Downloaded image version mismatch: wanted {version}")
+    with zipfile.ZipFile(archive) as image:
+        extract_usr_layer(image, root)
     (root / "proc").mkdir(exist_ok=True)
     (root / "tmp").mkdir(exist_ok=True)
     (root / "dev").mkdir(exist_ok=True)
