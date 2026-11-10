@@ -44,6 +44,8 @@ The internal libical dependency retains upstream source documentation but does n
 PowerTOP includes private, source-built libtracefs and libtraceevent dependencies. The GnuPG build uses headers from the matching TPM2-TSS 4.1.3 source as a build-only dependency and links Unraid's existing TPM libraries.
 Nmap retains Ndiff and Zenmap. Zenmap includes source-built private Python bindings and generated GObject typelibs against baseline GTK libraries, plus a desktop entry; displaying windows requires an available graphical session.
 
+Node.js reuses the [official Slackware recipe](https://git.slackware.nl/current/plain/source/l/nodejs/nodejs.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61), adapted to the private prefix, rather than inventing a build process. Existing [Unraid packages](https://github.com/shinji257/unraid_pkgs) were evaluated, but their older Node package has no checked Node recipe there. Importing Slackware's `/usr` binary would still require npm/path adaptation and exact-baseline ABI validation, so the existing source recipe remains the simpler auditable choice.
+
 `locks/toolchain.json` is an array of `{name,url,file,sha256}` inputs, separate from distributable package recipes. Toolchain versions must be selected against the baseline, not a mutable rolling image.
 
 Recipe working directory: `/work/recipe`. Its input archives are copied alongside the `.SlackBuild`. Important environment values:
