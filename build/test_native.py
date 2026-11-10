@@ -41,6 +41,10 @@ class NativeBuildTests(unittest.TestCase):
                 path.mkdir(parents=True, exist_ok=True)
             (target / "etc").chmod(0o755)
             (target / "etc/config").write_text("existing")
+            (target / "var").mkdir()
+            outside = root / "outside"
+            outside.mkdir()
+            (target / "var/run").symlink_to(outside)
             for path in ("usr/bin/gcc", "usr/bin/g++", "usr/bin/make", "usr/include/stdio.h"):
                 (target / path).touch()
             (tools / "tar").symlink_to(tar_bin)
@@ -49,7 +53,8 @@ class NativeBuildTests(unittest.TestCase):
                 directory = tarfile.TarInfo("etc")
                 directory.type, directory.mode = tarfile.DIRTYPE, 0o777
                 tar.addfile(directory)
-                for name, data in (("etc/config", b"replacement"), ("etc/new", b"new")):
+                for name, data in (("etc/config", b"replacement"), ("etc/new", b"new"),
+                                   ("var/run/nscd", b"toolchain runtime state")):
                     entry = tarfile.TarInfo(name)
                     entry.size = len(data)
                     tar.addfile(entry, io.BytesIO(data))
@@ -62,6 +67,8 @@ class NativeBuildTests(unittest.TestCase):
             self.assertEqual((target / "etc/config").read_text(), "existing")
             self.assertEqual((target / "etc/new").read_text(), "new")
             self.assertEqual((target / "etc").stat().st_mode & 0o777, 0o755)
+            self.assertEqual(os.readlink(target / "var/run"), str(outside))
+            self.assertFalse((outside / "nscd").exists())
 
     def test_dependency_order_is_topological_and_rejects_cycles(self):
         packages = [{"name": "app", "dependencies": ["lib"], "build_dependencies": []}, {"name": "lib", "dependencies": [], "build_dependencies": []}]

@@ -198,12 +198,15 @@ def prepare_toolchain(root, cache, lock):
         archive = fetch(item, cache)
         with tarfile.open(archive) as tar:
             for member in tar.getmembers():
+                path = checked_path(member.name)
+                if path.parts and path.parts[0] in ("install", "var"):
+                    continue
                 contained(root, member.name)
             try:
                 script = tar.extractfile("install/doinst.sh").read().decode()
             except KeyError:
                 script = ""
-        run(["tar", "--extract", "--file", archive, "--directory", root, "--skip-old-files", "--exclude=install"])
+        run(["tar", "--extract", "--file", archive, "--directory", root, "--skip-old-files", "--exclude=install", "--exclude=var"])
         restore_toolchain_links(script, root)
     for executable in ("usr/bin/gcc", "usr/bin/g++", "usr/bin/make", "usr/include/stdio.h"):
         if not (root / executable).exists():
