@@ -4,7 +4,7 @@
      Push-Location "$PSScriptRoot/src/TypeCatalogGen"
      try {
 -        Start-NativeExecution { dotnet run -- ../System.Management.Automation/CoreCLR/CorePsTypeCatalog.cs $IncFileName }
-+        Start-NativeExecution { dotnet run --runtime linux-x64 -- ../System.Management.Automation/CoreCLR/CorePsTypeCatalog.cs $IncFileName }
++        Start-NativeExecution { dotnet run --runtime linux-x64 --property:RuntimeIdentifiers=linux-x64 -- ../System.Management.Automation/CoreCLR/CorePsTypeCatalog.cs $IncFileName }
      } finally {
          Pop-Location
      }
@@ -13,7 +13,7 @@
      Push-Location "$PSScriptRoot/src/ResGen"
      try {
 -        Start-NativeExecution { dotnet run --verbosity normal } -VerboseOutputOnError
-+        Start-NativeExecution { dotnet run --runtime linux-x64 --verbosity normal } -VerboseOutputOnError
++        Start-NativeExecution { dotnet run --runtime linux-x64 --property:RuntimeIdentifiers=linux-x64 --verbosity normal } -VerboseOutputOnError
      } finally {
          Pop-Location
      }

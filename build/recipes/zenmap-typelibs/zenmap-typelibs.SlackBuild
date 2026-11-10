@@ -51,8 +51,9 @@ for namespace in GLib-2.0 GObject-2.0 GModule-2.0 Gio-2.0; do
   install -m 0644 "$WORK/build-gobject-introspection-1.86.0/gir/$namespace.typelib" "$SDK/lib64/girepository-1.0/"
 done
 build_metadata atk-2.38.0 -Dintrospection=true -Ddocs=false
+# MIME sniffing and Glycin are unnecessary for GIR generation; Unraid supplies the runtime library.
 build_metadata gdk-pixbuf-2.44.8 -Dintrospection=enabled -Ddocumentation=false \
-  -Dman=false -Dtests=false -Dinstalled_tests=false
+  -Dman=false -Dtests=false -Dinstalled_tests=false -Dgio_sniffing=false -Dglycin=disabled
 build_metadata harfbuzz-14.6.0 -Dglib=enabled -Dgobject=enabled -Dintrospection=enabled \
   -Dtests=disabled -Ddocs=disabled -Dutilities=disabled
 build_metadata pango-1.58.2 -Dintrospection=enabled -Dcairo=enabled -Dfontconfig=enabled \

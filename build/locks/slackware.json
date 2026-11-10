@@ -3,7 +3,7 @@
     "name": "zenmap-typelibs",
     "version": "3.24.52",
     "recipe": "build/recipes/zenmap-typelibs/zenmap-typelibs.SlackBuild",
-    "recipe_sha256": "3d74f4454a0eba86ee6cd87cbe8b628190be9ebaa2f3868260ebc0782792357d",
+    "recipe_sha256": "836e422fedab643c3ac8e721336606bdce38cb97bf3a2a579c5f792959bc41ac",
     "provenance": {
       "kind": "source",
       "url": "https://www.gtk.org/",
@@ -632,7 +632,7 @@
     "name": "powertop",
     "version": "2.16.1",
     "recipe": "build/recipes/powertop/powertop.SlackBuild",
-    "recipe_sha256": "0c7e958fe8f1cd424722a90ebf024d60877299acc1853ba3b3644df5311b4de2",
+    "recipe_sha256": "90d998612a5004c1088b0e40bfc69b557d4ca34d67378cbe265081934f69d5dd",
     "provenance": {
       "kind": "source",
       "url": "https://git.slackware.nl/current/plain/source/ap/powertop/powertop.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
@@ -731,7 +731,7 @@
     },
     "inputs": [
       {
-        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/d/python-setuptools/setuptools-84.2.1.tar.lz",
+        "url": "https://slackware.uk/slackware/slackware64-current/source/d/python-setuptools/setuptools-84.2.1.tar.lz",
         "file": "setuptools-84.2.1.tar.lz",
         "sha256": "c226c3a3ac774c33c69f899e88362a7ce704e11a593c79a8a62c2227555b8cb6"
       }

@@ -23,7 +23,7 @@
 cd $(dirname $0) ; CWD=$(pwd)
 
 # NerdTools adaptation of https://git.slackware.nl/current/plain/source/ap/powertop/powertop.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61
-# Private prefix; upstream patch/config/license files remain pinned in the lock.
+# Private prefix; omit the obsolete sbin alias to keep launcher names unique.
 export PKG_CONFIG_PATH=/opt/nerdtools/lib64/pkgconfig:/opt/nerdtools/lib/pkgconfig:/opt/nerdtools/share/pkgconfig
 export CPPFLAGS="-I/opt/nerdtools/include ${CPPFLAGS:-}"
 export LDFLAGS="-L/opt/nerdtools/lib64 -L/opt/nerdtools/lib ${LDFLAGS:-}"
@@ -104,10 +104,6 @@ meson setup \
   "${NINJA:=ninja}" $NUMJOBS || exit 1
   DESTDIR=$PKG $NINJA install || exit 1
 cd ..
-
-# powertop used to be installed in /opt/nerdtools/sbin, so let's make a link:
-mkdir -p $PKG/opt/nerdtools/sbin
-( cd $PKG/opt/nerdtools/sbin ; ln -sf ../bin/powertop . )
 
 # Strip binaries:
 find $PKG | xargs file | grep -e "executable" -e "shared object" | grep ELF \

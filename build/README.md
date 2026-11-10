@@ -18,6 +18,8 @@ Compilation uses Bubblewrap with a separate user namespace mapping guest IDs0–
 
 The original Unraid ZIP, extracted roots and bootable test initramfs remain private to the job. They are neither uploaded as artifacts nor cached or published. Do not run this privileged build on an Unraid host or other persistent machine.
 
+The host runner is explicitly pinned to Ubuntu 24.04, not `ubuntu-latest`. Ubuntu 26.04 host utility changes therefore do not affect the current jobs. Recipe commands use the locked Unraid development root's utilities, not the host's coreutils; a future runner upgrade still requires bootstrap and sandbox verification.
+
 ## Recipes and locks
 
 `locks/slackware.json` and `locks/slackbuilds.json` are arrays of:

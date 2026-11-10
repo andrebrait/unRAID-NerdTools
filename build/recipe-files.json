@@ -892,7 +892,7 @@
   },
   "powershell/linux-x64-build-tools.patch": {
     "executable": false,
-    "sha256": "eee999a2bfba6d7d9135caa74ea7b8dc5ac3546c5bfde3f525f20f15b0ef9abd",
+    "sha256": "4e669e6388d1ccff6881b26b34f4178725b67ee52bed26b890a1e3e915a087a4",
     "type": "file"
   },
   "powershell/nuget-locks": {
@@ -1005,7 +1005,7 @@
   },
   "powershell/powershell.SlackBuild": {
     "executable": true,
-    "sha256": "ef7935cf66c58f1b1fe36e457a1cb32078ba9ec59f9101c46874e68f17a9c6fe",
+    "sha256": "9148a30f87a92d65235fb9db5b72b70c28f2005373b85ffec1d87564e7dc235a",
     "type": "file"
   },
   "powershell/slack-desc": {
@@ -1028,7 +1028,7 @@
   },
   "powertop/powertop.SlackBuild": {
     "executable": true,
-    "sha256": "0c7e958fe8f1cd424722a90ebf024d60877299acc1853ba3b3644df5311b4de2",
+    "sha256": "90d998612a5004c1088b0e40bfc69b557d4ca34d67378cbe265081934f69d5dd",
     "type": "file"
   },
   "powertop/slack-desc": {
@@ -1505,7 +1505,7 @@
   },
   "zenmap-typelibs/zenmap-typelibs.SlackBuild": {
     "executable": true,
-    "sha256": "3d74f4454a0eba86ee6cd87cbe8b628190be9ebaa2f3868260ebc0782792357d",
+    "sha256": "836e422fedab643c3ac8e721336606bdce38cb97bf3a2a579c5f792959bc41ac",
     "type": "file"
   },
   "zsh": {
