@@ -3,7 +3,7 @@
     "name": "zenmap-typelibs",
     "version": "3.24.52",
     "recipe": "build/recipes/zenmap-typelibs/zenmap-typelibs.SlackBuild",
-    "recipe_sha256": "b4e20681865688d63a1b5a3eec0a795fe5fb3ae935725bf54288598c62f9475a",
+    "recipe_sha256": "3d74f4454a0eba86ee6cd87cbe8b628190be9ebaa2f3868260ebc0782792357d",
     "provenance": {
       "kind": "source",
       "url": "https://www.gtk.org/",
@@ -1366,7 +1366,7 @@
     "name": "libtracefs",
     "version": "1.8.4",
     "recipe": "build/recipes/libtracefs/libtracefs.SlackBuild",
-    "recipe_sha256": "56064cf38db78e51489348482a3f7b78732217acc7983bb59a9a68ad852fd327",
+    "recipe_sha256": "b03c93dcd42782d1c766f7791d380b41e295099b9a996c3325e6ce7eaf684dee",
     "provenance": {
       "kind": "source",
       "url": "https://git.slackware.nl/current/plain/source/l/libtracefs/libtracefs.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",

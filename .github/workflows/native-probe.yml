@@ -23,7 +23,7 @@ jobs:
           sys.path.insert(0, 'build')
           import native
           with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
-              selected = {'nmap'}
+              selected = {'zenmap-typelibs', 'nmap', 'libtracefs', 'powertop', 'powershell'}
               out.write('names=' + json.dumps([p['name'] for p in native.load_packages() if p['name'] in selected]) + '\n')
           PY
 

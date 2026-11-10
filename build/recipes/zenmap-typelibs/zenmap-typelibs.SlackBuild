@@ -41,9 +41,11 @@ build_metadata() {
 }
 
 # GI 1.86 generates the core namespaces from the exact GLib SDK and source annotations.
-# Its install target deliberately omits these four generated GIRs/typelibs.
+# Its uninstalled core typelibs are not default targets, so request them explicitly.
 build_metadata gobject-introspection-1.86.0 -Dpython="$PYTHON" \
   -Dglib_src_dir="$WORK/src/glib-2.90.1" -Dtests=false -Ddoctool=disabled -Dgtk_doc=false
+ninja -C "$WORK/build-gobject-introspection-1.86.0" ${NUMJOBS:--j$(nproc)} \
+  gir/GLib-2.0.typelib gir/GObject-2.0.typelib gir/GModule-2.0.typelib gir/Gio-2.0.typelib
 for namespace in GLib-2.0 GObject-2.0 GModule-2.0 Gio-2.0; do
   install -m 0644 "$WORK/build-gobject-introspection-1.86.0/gir/$namespace.gir" "$SDK/share/gir-1.0/"
   install -m 0644 "$WORK/build-gobject-introspection-1.86.0/gir/$namespace.typelib" "$SDK/lib64/girepository-1.0/"

@@ -20,7 +20,8 @@ tar xf "$CWD/$PKGNAM-$VERSION.tar.lz" -C "$TMP"
 cd "$TMP/$PKGNAM-$VERSION"
 chown -R root:root .
 chmod -R a-st,u+rwX,go-w+rX .
-make ${NUMJOBS:--j$(nproc)} CFLAGS="$CFLAGS" prefix=/opt/nerdtools libdir_relative=lib64 \
+# Keep CFLAGS in the environment so recursive make retains upstream's required includes and defines.
+make ${NUMJOBS:--j$(nproc)} prefix=/opt/nerdtools libdir_relative=lib64 \
   pkgconfig_dir=/opt/nerdtools/lib64/pkgconfig DESTDIR="$PKG" V=1 install
 rm "$PKG/opt/nerdtools/lib64/libtracefs.a"
 find "$PKG/opt/nerdtools/lib64" -type f -name '*.so*' -exec strip --strip-unneeded {} +

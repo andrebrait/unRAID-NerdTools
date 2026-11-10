@@ -57,6 +57,8 @@ test "$(git hash-object -t tag -w "$CWD/upstream.tag")" = a0edd6969993766081edc6
 printf '%s\n' bf5fc434120666e5f1a8d1dfd6ecac7efc17a4be > .git/shallow
 git update-ref HEAD bf5fc434120666e5f1a8d1dfd6ecac7efc17a4be
 git update-ref refs/tags/v7.6.9 a0edd6969993766081edc6bf0306696d1adef88a
+# Generator restores must use the same runtime as the locked initial restore.
+git apply "$CWD/linux-x64-build-tools.patch"
 cp -a "$CWD/nuget-locks/." .
 # Every source, including Gallery modules and WiX build tools, resolves only from locked local inputs.
 for config in nuget.config src/Modules/nuget.config tools/wix/nuget.config; do

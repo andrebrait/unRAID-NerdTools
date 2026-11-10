@@ -1,0 +1,20 @@
+--- a/build.psm1
++++ b/build.psm1
+@@ -3306,7 +3306,7 @@
+     Push-Location "$PSScriptRoot/src/TypeCatalogGen"
+     try {
+-        Start-NativeExecution { dotnet run -- ../System.Management.Automation/CoreCLR/CorePsTypeCatalog.cs $IncFileName }
++        Start-NativeExecution { dotnet run --runtime linux-x64 -- ../System.Management.Automation/CoreCLR/CorePsTypeCatalog.cs $IncFileName }
+     } finally {
+         Pop-Location
+     }
+ }
+@@ -3329,7 +3329,7 @@
+     Push-Location "$PSScriptRoot/src/ResGen"
+     try {
+-        Start-NativeExecution { dotnet run --verbosity normal } -VerboseOutputOnError
++        Start-NativeExecution { dotnet run --runtime linux-x64 --verbosity normal } -VerboseOutputOnError
+     } finally {
+         Pop-Location
+     }
+ }
