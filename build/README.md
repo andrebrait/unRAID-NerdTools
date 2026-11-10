@@ -53,6 +53,8 @@ Recipe working directory: `/work/recipe`. Its input archives are copied alongsid
 
 Each recipe produces exactly one `/out/*.txz`. Packages retain required features, while executable/library payloads use `/opt/nerdtools`. New service policy/configuration can use `/etc`, `/usr/share` and `/var`; collisions cannot overwrite baseline files. Generated `.new` hooks preserve existing settings and dangling links; upstream hooks are not executed and no daemon starts automatically. Private `bin`/`sbin` executables get owned `/usr/local/bin/nerdtools-<command>` launchers with process-scoped private PATH/library paths. The plugin may add separately tracked bare aliases only when the host command is absent; foreign commands are never overwritten or shadowed. Shared libraries never replace Unraid's libraries.
 
+Each package build has a five-hour compilation limit inside the six-hour CI job; large source builds such as Node.js can exceed one hour on standard runners.
+
 Secure locate tools retain the baseline `slocate` GID 21, database privacy permissions and narrowly allowed setgid executable metadata. Other unexpected ownership or privileged files are rejected, not normalized into a root-privileged executable.
 
 Inputs, recipes, compiler/development packages, epoch and packaging are pinned or canonicalized. This is an inspectable repeatable build procedure, not a claim that every upstream build is bit-identical across independent runs. The default pipeline builds each package once; it does not double the catalog build cost to assert byte reproducibility.

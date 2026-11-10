@@ -365,7 +365,7 @@ def build_package(package, development, cache, built, output, work):
         goroot = go_root(root)
         environment = {**ENV, "GOROOT": goroot, "PATH": goroot + "/bin:" + ENV["PATH"]}
         with mapped_root(root):
-            run_sandbox(root, ["/bin/bash", recipe.name], environment, cwd="/work/recipe")
+            run_sandbox(root, ["/bin/bash", recipe.name], environment, cwd="/work/recipe", timeout=18000)
         results = list((root / "out").glob("*.txz"))
         if len(results) != 1:
             raise ValueError(f"Expected exactly one built package for {package['name']}, found {len(results)}")
