@@ -73,6 +73,25 @@ def build_order(packages):
     return result
 
 
+def dependency_closure(packages, name):
+    ordered = build_order(packages)
+    by_name = {package["name"]: package for package in ordered}
+    if name not in by_name:
+        raise ValueError(f"Unknown package: {name}")
+    needed = set()
+
+    def include(name):
+        if name in needed:
+            return
+        needed.add(name)
+        package = by_name[name]
+        for dependency in package["dependencies"] + package["build_dependencies"]:
+            include(dependency)
+
+    include(name)
+    return [package for package in ordered if package["name"] in needed]
+
+
 def recipe_inventory(root):
     inventory = {}
     for path in sorted(root.rglob("*")):
@@ -575,6 +594,54 @@ def sandbox_check(args):
     print("Sandbox identity mapping, host-path exclusion and capability probe passed.")
 
 
+def prepared_roots(baseline_root, development_root):
+    baseline, development = baseline_root.resolve(), development_root.resolve()
+    if baseline.parent != development.parent or baseline.name != "baseline" or development.name != "development":
+        raise ValueError("Prepared roots must come from the same bootstrap workspace")
+    evidence = json.loads((baseline.parent / "bootstrap.json").read_text())
+    expected = {"version": BASELINE["version"], "image_sha256": BASELINE["image"]["sha256"],
+                "bzroot_sha256": BASELINE["bzroot_sha256"],
+                "toolchain_sha256": digest(REPO / "build/locks/toolchain.json")}
+    if evidence != expected:
+        raise ValueError("Prepared roots do not match the pinned baseline and toolchain")
+    return baseline, development, baseline.parent / "inputs"
+
+
+def build_one(args):
+    """Check one dependency closure; retain only its normalized package, never release metadata."""
+    if args.publish:
+        raise ValueError("build-one cannot publish; use the full-catalog build compatibility gate")
+    if not args.package or not args.baseline_root or not args.development_root:
+        raise ValueError("build-one requires --package, --baseline-root and --development-root")
+    if os.geteuid() != 0 or sys.platform != "linux" or os.uname().machine != "x86_64":
+        raise ValueError("Builds require a disposable Linux x86_64 CI runner, running as root")
+    packages = dependency_closure(load_packages(), args.package)
+    baseline, development, cache = prepared_roots(args.baseline_root, args.development_root)
+    require_slocate_group(baseline)
+    require_provided(baseline)
+    output = args.output.resolve()
+    output.mkdir(parents=True, exist_ok=True)
+    if any(output.iterdir()):
+        raise ValueError("Output directory must be empty")
+    args.work.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="nerdtools-one-", dir=args.work) as temporary:
+        work = Path(temporary)
+        work.chmod(0o711)
+        dependencies = work / "dependencies"
+        dependencies.mkdir()
+        if args.source_bundle:
+            seed_sources(packages, args.source_bundle, cache)
+        for package in packages:
+            for item in package["inputs"]:
+                fetch(item, cache)
+        built = {}
+        for package in packages:
+            target_output = output if package["name"] == args.package else dependencies
+            artifact = build_package(package, development, cache, built, target_output, work)
+            built[package["name"]] = (package, artifact)
+    print(f"Built {args.package} and its dependency closure; no full-catalog compatibility or publication claim.")
+
+
 def build(args):
     if os.geteuid() != 0 or sys.platform != "linux" or os.uname().machine != "x86_64":
         raise ValueError("Builds require a disposable Linux x86_64 CI runner, running as root")
@@ -597,15 +664,7 @@ def build(args):
         if bool(args.baseline_root) != bool(args.development_root):
             raise ValueError("Both prepared root paths are required together")
         if args.baseline_root:
-            baseline, development = args.baseline_root.resolve(), args.development_root.resolve()
-            if baseline.parent != development.parent or baseline.name != "baseline" or development.name != "development":
-                raise ValueError("Prepared roots must come from the same bootstrap workspace")
-            evidence = json.loads((baseline.parent / "bootstrap.json").read_text())
-            expected = {"version": BASELINE["version"], "image_sha256": BASELINE["image"]["sha256"],
-                        "bzroot_sha256": BASELINE["bzroot_sha256"], "toolchain_sha256": digest(lock)}
-            if evidence != expected:
-                raise ValueError("Prepared roots do not match the pinned baseline and toolchain")
-            cache = baseline.parent / "inputs"
+            baseline, development, cache = prepared_roots(args.baseline_root, args.development_root)
         else:
             cache = work / "inputs"
             baseline = work / "baseline"
@@ -667,7 +726,8 @@ def build(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("build", "validate", "pin-recipes", "sandbox-check"))
+    parser.add_argument("command", choices=("build", "build-one", "validate", "pin-recipes", "sandbox-check"))
+    parser.add_argument("--package", help="Package to build with its transitive dependencies (build-one only)")
     parser.add_argument("--unraid-version", default=BASELINE["version"])
     parser.add_argument("--unraid-url", default=BASELINE["image"]["url"])
     parser.add_argument("--unraid-sha256", default=BASELINE["image"]["sha256"])
@@ -679,6 +739,11 @@ def main():
     parser.add_argument("--source-bundle", type=Path)
     parser.add_argument("--work", type=Path, default=Path(os.environ.get("RUNNER_TEMP", tempfile.gettempdir())))
     args = parser.parse_args()
+    if args.package and args.command != "build-one":
+        parser.error("--package is only valid with build-one; full-catalog builds cannot be narrowed")
+    if args.command == "build-one":
+        build_one(args)
+        return
     if args.command == "pin-recipes":
         (REPO / "build/recipe-files.json").write_text(json.dumps(recipe_inventory(REPO / "build/recipes"), indent=2, sort_keys=True) + "\n")
         return

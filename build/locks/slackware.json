@@ -1120,7 +1120,7 @@
     "name": "libical",
     "version": "3.0.20",
     "recipe": "build/recipes/libical/libical.SlackBuild",
-    "recipe_sha256": "91ee1db9f0b90ba4e7130f77816b3e3eb5671dc60207902d8dbc882004a603ef",
+    "recipe_sha256": "ebd26a6ef4584de8a4c0ea0368fa5d99799186cf2543f668b11d6a8a37eb4b56",
     "provenance": {
       "kind": "source",
       "url": "https://git.slackware.nl/current/plain/source/l/libical/libical.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",

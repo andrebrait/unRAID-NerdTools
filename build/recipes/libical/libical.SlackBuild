@@ -105,6 +105,7 @@ cmake \
   -DCMAKE_INSTALL_LIBDIR=lib${LIBDIRSUFFIX} \
   -DGOBJECT_INTROSPECTION=false \
   -DICAL_GLIB_VAPI=false \
+  -DENABLE_GTK_DOC=OFF \
   -DSHARED_ONLY:BOOL=true \
   .. || exit 1
 make $NUMJOBS || exit 1

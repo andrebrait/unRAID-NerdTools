@@ -91,6 +91,41 @@ class NativeBuildTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Unknown dependency"):
             native.build_order([{"name": "app", "dependencies": ["missing"]}])
 
+    def test_dependency_closure_includes_runtime_and_build_dependencies_once(self):
+        packages = [
+            {"name": "app", "dependencies": ["runtime"], "build_dependencies": ["compiler"]},
+            {"name": "unrelated", "dependencies": [], "build_dependencies": []},
+            {"name": "compiler", "dependencies": ["shared"], "build_dependencies": []},
+            {"name": "runtime", "dependencies": ["shared"], "build_dependencies": []},
+            {"name": "shared", "dependencies": [], "build_dependencies": []},
+        ]
+        self.assertEqual([p["name"] for p in native.dependency_closure(packages, "app")],
+                         ["shared", "runtime", "compiler", "app"])
+        with self.assertRaisesRegex(ValueError, "Unknown package"):
+            native.dependency_closure(packages, "missing")
+
+    def test_build_one_refuses_publication_and_requires_package_and_prepared_roots(self):
+        args = native.argparse.Namespace(package="app", publish=True, baseline_root=Path("/baseline"),
+                                        development_root=Path("/development"))
+        with self.assertRaisesRegex(ValueError, "cannot publish"):
+            native.build_one(args)
+        args.publish = False
+        for key in ("package", "baseline_root", "development_root"):
+            with self.subTest(key=key), patch.object(args, key, None):
+                with self.assertRaisesRegex(ValueError, "requires"):
+                    native.build_one(args)
+
+
+    def test_prepared_roots_reject_mismatched_workspace_and_bootstrap_pins(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            baseline, development = root / "baseline", root / "development"
+            with self.assertRaisesRegex(ValueError, "same bootstrap workspace"):
+                native.prepared_roots(baseline, root / "other/development")
+            (root / "bootstrap.json").write_text("{}")
+            with self.assertRaisesRegex(ValueError, "pinned baseline and toolchain"):
+                native.prepared_roots(baseline, development)
+
     def test_package_policy_rejects_host_libraries_and_escaping_links(self):
         for name, target in [("usr/lib64/libc.so.6", None), ("opt/nerdtools/bin/escape", "../../../../etc/shadow"), ("../../etc/shadow", None)]:
             with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:

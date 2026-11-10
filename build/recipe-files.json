@@ -470,7 +470,7 @@
   },
   "libical/libical.SlackBuild": {
     "executable": true,
-    "sha256": "91ee1db9f0b90ba4e7130f77816b3e3eb5671dc60207902d8dbc882004a603ef",
+    "sha256": "ebd26a6ef4584de8a4c0ea0368fa5d99799186cf2543f668b11d6a8a37eb4b56",
     "type": "file"
   },
   "libical/slack-desc": {

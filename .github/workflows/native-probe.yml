@@ -8,7 +8,31 @@ permissions:
   contents: read
 
 jobs:
+  packages:
+    runs-on: ubuntu-24.04
+    outputs:
+      names: ${{ steps.names.outputs.names }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - id: names
+        run: |
+          python3 - <<'PY'
+          import json, os, sys
+          sys.path.insert(0, 'build')
+          import native
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              out.write('names=' + json.dumps([p['name'] for p in native.load_packages()]) + '\n')
+          PY
+
   build:
+    needs: packages
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        package: ${{ fromJSON(needs.packages.outputs.names) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     steps:
@@ -48,20 +72,11 @@ jobs:
         env:
           DEVELOPMENT_ROOT: ${{ steps.roots.outputs.development-root }}
         run: sudo python3 build/native.py sandbox-check --development-root "$DEVELOPMENT_ROOT" --work /tmp
-      - name: Build and validate complete catalog without publishing
+      - name: Build one package and its dependencies
         env:
+          PACKAGE: ${{ matrix.package }}
           BASELINE_ROOT: ${{ steps.roots.outputs.baseline-root }}
           DEVELOPMENT_ROOT: ${{ steps.roots.outputs.development-root }}
         run: |
-          sudo --preserve-env=GITHUB_REPOSITORY,GITHUB_SHA,RUNNER_TEMP python3 build/native.py build \
-            --work /tmp --baseline-root "$BASELINE_ROOT" --development-root "$DEVELOPMENT_ROOT" --publish
-      - name: Retain compatibility report
-        if: success()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: native-probe-${{ github.run_id }}
-          path: |
-            dist/compatibility-7.3.json
-            dist/provenance-7.3.json
-            dist/kernel-smoke-7.3.log
-          if-no-files-found: error
+          sudo --preserve-env=GITHUB_REPOSITORY,GITHUB_SHA,RUNNER_TEMP python3 build/native.py build-one \
+            --package "$PACKAGE" --work /tmp --baseline-root "$BASELINE_ROOT" --development-root "$DEVELOPMENT_ROOT"
