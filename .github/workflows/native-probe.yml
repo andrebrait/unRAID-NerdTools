@@ -1,7 +1,8 @@
 name: Verify native build on task branch
 
 on:
-  workflow_dispatch:
+  push:
+    branches: [implement-maintenance]
 
 permissions:
   contents: read
@@ -22,7 +23,13 @@ jobs:
           sys.path.insert(0, 'build')
           import native
           with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
-              out.write('names=' + json.dumps([p['name'] for p in native.load_packages()]) + '\n')
+              selected = {'gnupg2', 'libksba', 'bluez', 'iftop', 'gpgme', 'neofetch', 'utf8proc',
+                          'powertop', 'pinentry', 'python-pip', 'python2', 'python-setuptools', 'ruby',
+                          'nmap', 'screen', 'vim', 'stunnel', 'wget2', 'audit', 'llfuse', 'msgpack-python',
+                          'exiftool', 'fish', 'iotop', 'fzf', 'ipmitool', 'libzen', 'libmediainfo',
+                          'mediainfo', 'rar2fs', 'restic', 'rclone', 'powershell', 'libtraceevent',
+                          'libtracefs', 'tpm2-tss'}
+              out.write('names=' + json.dumps([p['name'] for p in native.load_packages() if p['name'] in selected]) + '\n')
           PY
 
   build:

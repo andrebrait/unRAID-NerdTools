@@ -1662,5 +1662,83 @@
       "signature_url": "https://slackware.uk/cumulative/slackware64-current/slackware64/n/curl-8.23.0-x86_64-1.txz.asc",
       "signature_sha256": "b0f596ad203c84d6f61f67c8bd82bb52f91c84436266ba08a1659d3b2d9082dc"
     }
+  },
+  {
+    "name": "python-vcs_versioning",
+    "url": "https://slackware.uk/cumulative/slackware64-current/slackware64/l/python-vcs_versioning-2.6.0-x86_64-1.txz",
+    "file": "python-vcs_versioning-2.6.0-x86_64-1.txz",
+    "sha256": "148ff1dce6c91a497c0f335af86637c8ffa188c4da1f7e53f11f172c99cd79e7",
+    "provenance": {
+      "kind": "upstream-binary",
+      "url": "https://www.slackware.com/gpg-key",
+      "revision": "EC5649DA401E22ABFA6736EF6A4463C040102233",
+      "signature_url": "https://slackware.uk/cumulative/slackware64-current/slackware64/l/python-vcs_versioning-2.6.0-x86_64-1.txz.asc",
+      "signature_sha256": "2581735be70f4d6c5e718eae1d0e8816085c77f4ce4a8e802cac699c96b2c102"
+    }
+  },
+  {
+    "name": "lzlib",
+    "url": "https://slackware.uk/cumulative/slackware64-current/slackware64/a/lzlib-1.16-x86_64-2.txz",
+    "file": "lzlib-1.16-x86_64-2.txz",
+    "sha256": "f70ebb3127a6d684f75d762cbed9d2dc53255a735400b2ba72c17ec2ed29d66c",
+    "provenance": {
+      "kind": "upstream-binary",
+      "url": "https://www.slackware.com/gpg-key",
+      "revision": "EC5649DA401E22ABFA6736EF6A4463C040102233",
+      "signature_url": "https://slackware.uk/cumulative/slackware64-current/slackware64/a/lzlib-1.16-x86_64-2.txz.asc",
+      "signature_sha256": "6cf147f7fdeccdbeb12b0112204a2bafda6610ead6cb1bb3ac70cbd1a4242dbf"
+    }
+  },
+  {
+    "name": "openldap",
+    "url": "https://slackware.uk/cumulative/slackware64-current/slackware64/n/openldap-2.7.2-x86_64-1.txz",
+    "file": "openldap-2.7.2-x86_64-1.txz",
+    "sha256": "6a4008fca2e6b3b825169bcc284822a64256aadc38ebe42b5680b1b927797046",
+    "provenance": {
+      "kind": "upstream-binary",
+      "url": "https://www.slackware.com/gpg-key",
+      "revision": "EC5649DA401E22ABFA6736EF6A4463C040102233",
+      "signature_url": "https://slackware.uk/cumulative/slackware64-current/slackware64/n/openldap-2.7.2-x86_64-1.txz.asc",
+      "signature_sha256": "a5c61d353211b7db422b5352a4376148761962060204ff9e97879973d5286521"
+    }
+  },
+  {
+    "name": "cyrus-sasl",
+    "url": "https://slackware.uk/cumulative/slackware64-current/slackware64/n/cyrus-sasl-2.1.28-x86_64-6.txz",
+    "file": "cyrus-sasl-2.1.28-x86_64-6.txz",
+    "sha256": "2b6a3f771abb570eecf9deac1632de02eb7d46828d05735dbee16ac1d1629e5d",
+    "provenance": {
+      "kind": "upstream-binary",
+      "url": "https://www.slackware.com/gpg-key",
+      "revision": "EC5649DA401E22ABFA6736EF6A4463C040102233",
+      "signature_url": "https://slackware.uk/cumulative/slackware64-current/slackware64/n/cyrus-sasl-2.1.28-x86_64-6.txz.asc",
+      "signature_sha256": "bc6b4131288e5cd5cc08e106080851fbf08fba1ae67c6d58e9129bb24c0d5aab"
+    }
+  },
+  {
+    "name": "libnsl",
+    "url": "https://slackware.uk/cumulative/slackware64-current/slackware64/l/libnsl-2.0.1-x86_64-2.txz",
+    "file": "libnsl-2.0.1-x86_64-2.txz",
+    "sha256": "248d0e92dd579aa290f24b4b3e5c32dc6638152281ab598fee7eb97e6c7f7f18",
+    "provenance": {
+      "kind": "upstream-binary",
+      "url": "https://www.slackware.com/gpg-key",
+      "revision": "EC5649DA401E22ABFA6736EF6A4463C040102233",
+      "signature_url": "https://slackware.uk/cumulative/slackware64-current/slackware64/l/libnsl-2.0.1-x86_64-2.txz.asc",
+      "signature_sha256": "f28ca63d04651b733dce6ea59c82859324a8214ceb7227a680431fe64e04d291"
+    }
+  },
+  {
+    "name": "elogind",
+    "url": "https://slackware.uk/cumulative/slackware64-current/slackware64/a/elogind-257.16-x86_64-6.txz",
+    "file": "elogind-257.16-x86_64-6.txz",
+    "sha256": "356e56095be26dd2d9480c3d44a22b07d5189e6d6765b08c62d0ece4521ed330",
+    "provenance": {
+      "kind": "upstream-binary",
+      "url": "https://www.slackware.com/gpg-key",
+      "revision": "EC5649DA401E22ABFA6736EF6A4463C040102233",
+      "signature_url": "https://slackware.uk/cumulative/slackware64-current/slackware64/a/elogind-257.16-x86_64-6.txz.asc",
+      "signature_sha256": "1a9f4222dbd8dfd973093709b6a71d928fe1616ba241178fed50cec82339fb3d"
+    }
   }
 ]

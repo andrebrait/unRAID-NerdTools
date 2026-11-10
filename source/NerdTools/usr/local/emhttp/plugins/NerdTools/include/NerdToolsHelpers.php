@@ -379,7 +379,7 @@ class NerdTools {
         $records = []; $configs = [];
         $tool = nt_tool_name(nt_package_name(nt_record(basename($file))) ?? '');
         $normalize = function($path) {
-            if (!preg_match('#^[A-Za-z0-9_+.,/ @-]+$#D', $path)) throw new RuntimeException('Unsafe archive path');
+            if (!preg_match('#^[A-Za-z0-9_+.,/ @%()-]+$#D', $path)) throw new RuntimeException('Unsafe archive path');
             $parts = [];
             foreach (explode('/', $path) as $part) {
                 if ($part === '' || $part === '.') continue;

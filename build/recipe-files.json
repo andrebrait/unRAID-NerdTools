@@ -55,7 +55,7 @@
   },
   "audit/audit.SlackBuild": {
     "executable": true,
-    "sha256": "731ad20b42488abae82756b1e79574cc0f43033016bd94aa3293d0b90180744d",
+    "sha256": "cae31e48b7af4ad7bdcb8466e77a203c2dac85581956a2dd6cca8f730bcad616",
     "type": "file"
   },
   "audit/rc.auditd": {
@@ -254,7 +254,7 @@
   },
   "fish/fish.SlackBuild": {
     "executable": true,
-    "sha256": "817bdc732292dbf06303aa939d52604ee7e9dd8f3e69014761ed1db74f57fb17",
+    "sha256": "53b24effb47eee966422b3427324e0b3da5658439487e996521c95343f85b31d",
     "type": "file"
   },
   "fish/slack-desc": {
@@ -329,7 +329,7 @@
   },
   "iotop/iotop.SlackBuild": {
     "executable": true,
-    "sha256": "ec81055c350ee17dd6dd300fec60222ab344456aab4270f03762de5123ad7111",
+    "sha256": "ff8568148deda00935886f77a7566167d0b526f8262d6356091c08ea20e1dcfc",
     "type": "file"
   },
   "iotop/slack-desc": {
@@ -406,6 +406,11 @@
   "ipmitool/patches/0012-CVE-2020-5208.patch": {
     "executable": false,
     "sha256": "ff8c1b57fe70ac0d30e4440c2777a890104fdc4a43f4e35210aedda4ec5cb186",
+    "type": "file"
+  },
+  "ipmitool/patches/0013-interface-size-prototypes.patch": {
+    "executable": false,
+    "sha256": "e7f07fe8fcc0bbcfd0441023f7555704541ca049f721a91dfc2e517d563daf21",
     "type": "file"
   },
   "ipmitool/slack-desc": {
@@ -509,7 +514,7 @@
   },
   "libmediainfo/libmediainfo.SlackBuild": {
     "executable": true,
-    "sha256": "e119dcb7e12bbdc5ab2e326a1a85f9ae09db2aebdbfd98773478b9b4450a0e25",
+    "sha256": "05496b6a8de12819be569da80b618c66caf19e3a31416e791c3245e2de329901",
     "type": "file"
   },
   "libmediainfo/slack-desc": {
@@ -543,6 +548,32 @@
     "sha256": "0dcc5cb2a23dd35e34160c96bb2bc719880884b5bf43ee8e1a5b908495f96566",
     "type": "file"
   },
+  "libtraceevent": {
+    "type": "directory"
+  },
+  "libtraceevent/libtraceevent.SlackBuild": {
+    "executable": true,
+    "sha256": "29b0d23ac4bd7ca22eb4cfe30eb01b60b37561a2b559bee345a8c1c842c506ed",
+    "type": "file"
+  },
+  "libtraceevent/slack-desc": {
+    "executable": false,
+    "sha256": "fe621abc577a7e7c9464a2bdb02c8bb52e7b099fe29f1260d0bd690b87ea2d94",
+    "type": "file"
+  },
+  "libtracefs": {
+    "type": "directory"
+  },
+  "libtracefs/libtracefs.SlackBuild": {
+    "executable": true,
+    "sha256": "b7265a3ed4d296bdf07d7c07485ad5c349fc1f58f61b549dbc55b982a0f9a725",
+    "type": "file"
+  },
+  "libtracefs/slack-desc": {
+    "executable": false,
+    "sha256": "cea90bdb4e2f829e629e90666fa4a3e01711809613d092bdddf7779b65b0eeb9",
+    "type": "file"
+  },
   "liburing": {
     "type": "directory"
   },
@@ -574,7 +605,7 @@
   },
   "libzen/libzen.SlackBuild": {
     "executable": true,
-    "sha256": "0610f2e44e1c0e1aba1659fd25204f0e3c906ce39b0407a4dfabb305bbefddbc",
+    "sha256": "c07f17b06fe3bb07a056c4bba2c4cdfde5c41dff3ee90e32065a0cca4e15ce21",
     "type": "file"
   },
   "libzen/slack-desc": {
@@ -948,7 +979,7 @@
   },
   "powershell/nuget-locks/src/powershell-unix/packages.lock.json": {
     "executable": false,
-    "sha256": "fdbfbe3b1e746b7a1f64dacd332fda660c1c003ec8d2ec6802d85bb79cdd3ddb",
+    "sha256": "4766b4792650addb160927a8a461779eaa31e1357392f53e26b5dc08e57d120e",
     "type": "file"
   },
   "powershell/nuget-locks/tools": {
@@ -1080,7 +1111,7 @@
   },
   "rar2fs/rar2fs.SlackBuild": {
     "executable": true,
-    "sha256": "91898ec94d51b6832e73871e1a04b60047759183c65984d32055b861df7adfa9",
+    "sha256": "a77920f71eed2e49eb1e36cd5a79fb7c3206812cf2dc8b8b085013831cc409aa",
     "type": "file"
   },
   "rar2fs/slack-desc": {
@@ -1278,7 +1309,7 @@
   },
   "stunnel/stunnel.SlackBuild": {
     "executable": true,
-    "sha256": "5c88a22c421c012a4e274eca68053d2292750afc93754a960f97ba3835fa8f1c",
+    "sha256": "c7676863739d3a960fe8d4c1bb3e755434d89d09083ad2135c0f532bfa886a9d",
     "type": "file"
   },
   "tcl": {
@@ -1336,6 +1367,19 @@
   "tmux/tmux.conf": {
     "executable": false,
     "sha256": "09146eaa0bfb018813349992e40366005927dbe48d45796e0a66102fbb5576e2",
+    "type": "file"
+  },
+  "tpm2-tss": {
+    "type": "directory"
+  },
+  "tpm2-tss/slack-desc": {
+    "executable": false,
+    "sha256": "1a9326a63d49d0099c93282352f112b8f10c5d16fd66f17d47cd2ebd6b6e88e6",
+    "type": "file"
+  },
+  "tpm2-tss/tpm2-tss.SlackBuild": {
+    "executable": true,
+    "sha256": "04e6ed66444b3b094842859fb7bc530d19d1ab1d71b91ecab98b54ae856c6602",
     "type": "file"
   },
   "unrar": {

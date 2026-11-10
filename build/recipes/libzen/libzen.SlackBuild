@@ -111,11 +111,8 @@ install -m 0644 -D Source/ZenLib/BitStream_Fast.h $PKG/opt/nerdtools/include/Zen
 # Correct version number in .pc file
 sed -i "s/^Version: .*$/Version: $VERSION/" $PKG/opt/nerdtools/lib${LIBDIRSUFFIX}/pkgconfig/libzen.pc
 
-# Create Documentation using doxygen
-
-
 mkdir -p $PKG/opt/nerdtools/doc/$PRGNAM-$VERSION
-cp -a *.txt Doc/ $PKG/opt/nerdtools/doc/$PRGNAM-$VERSION
+cp -a *.txt README.md $PKG/opt/nerdtools/doc/$PRGNAM-$VERSION
 cat $CWD/$PRGNAM.SlackBuild > $PKG/opt/nerdtools/doc/$PRGNAM-$VERSION/$PRGNAM.SlackBuild
 find $PKG/opt/nerdtools/doc/$PRGNAM-$VERSION -type f -exec chmod 644 {} \;
 

@@ -190,7 +190,7 @@ def inspect_package(archive, tool):
         links = set()
         for member in members:
             path = checked_path(member.name)
-            if not re.fullmatch(r"[A-Za-z0-9_+.,/ @-]+", member.name) or path in seen:
+            if not re.fullmatch(r"[A-Za-z0-9_+.,/ @%()-]+", member.name) or path in seen:
                 raise ValueError(f"Unsupported or duplicate package path: {member.name}")
             seen.add(path)
             check_destination(tool, member, path)
@@ -216,7 +216,7 @@ def inspect_package(archive, tool):
             if member.mode & stat.S_ISUID or (member.mode & stat.S_ISGID and not secure_locate):
                 raise ValueError(f"Unapproved privileged file in package: {member.name}")
             if member.issym() or member.islnk():
-                if not re.fullmatch(r"[A-Za-z0-9_+.,/ @-]+", member.linkname):
+                if not re.fullmatch(r"[A-Za-z0-9_+.,/ @%()-]+", member.linkname):
                     raise ValueError(f"Unsupported link target: {member.name}")
                 if member.islnk() and checked_path(member.linkname) not in regular:
                     raise ValueError(f"Hardlink must name a regular private archive member: {member.name}")
@@ -330,6 +330,13 @@ def install_payload(archive, root):
 
 
 
+def go_root(root):
+    binaries = list(root.glob("usr/lib64/go*/go/bin/go"))
+    if len(binaries) != 1 or not binaries[0].is_file():
+        raise ValueError("Expected exactly one Go toolchain in the development root")
+    return "/" + str(binaries[0].parent.parent.relative_to(root))
+
+
 def build_package(package, development, cache, built, output, work):
     with tempfile.TemporaryDirectory(prefix=package["name"] + "-", dir=work) as temporary:
         temporary = Path(temporary)
@@ -355,8 +362,10 @@ def build_package(package, development, cache, built, output, work):
         for item in package["inputs"]:
             shutil.copyfile(fetch(item, cache), destination / item["file"])
         (root / "out").mkdir(exist_ok=True)
+        goroot = go_root(root)
+        environment = {**ENV, "GOROOT": goroot, "PATH": goroot + "/bin:" + ENV["PATH"]}
         with mapped_root(root):
-            run_sandbox(root, ["/bin/bash", recipe.name], ENV, cwd="/work/recipe")
+            run_sandbox(root, ["/bin/bash", recipe.name], environment, cwd="/work/recipe")
         results = list((root / "out").glob("*.txz"))
         if len(results) != 1:
             raise ValueError(f"Expected exactly one built package for {package['name']}, found {len(results)}")

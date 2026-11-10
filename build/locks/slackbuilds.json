@@ -29,7 +29,7 @@
     "name": "audit",
     "version": "4.1.4",
     "recipe": "build/recipes/audit/audit.SlackBuild",
-    "recipe_sha256": "731ad20b42488abae82756b1e79574cc0f43033016bd94aa3293d0b90180744d",
+    "recipe_sha256": "cae31e48b7af4ad7bdcb8466e77a203c2dac85581956a2dd6cca8f730bcad616",
     "provenance": {
       "kind": "source",
       "url": "https://git.slackbuilds.org/slackbuilds/tree/system/audit?id=61c20c2400f83c5911a54921b62682cc38410afc",
@@ -337,7 +337,7 @@
     "name": "fish",
     "version": "4.9.2",
     "recipe": "build/recipes/fish/fish.SlackBuild",
-    "recipe_sha256": "817bdc732292dbf06303aa939d52604ee7e9dd8f3e69014761ed1db74f57fb17",
+    "recipe_sha256": "53b24effb47eee966422b3427324e0b3da5658439487e996521c95343f85b31d",
     "provenance": {
       "kind": "source",
       "url": "https://git.slackbuilds.org/slackbuilds/tree/system/fish?id=61c20c2400f83c5911a54921b62682cc38410afc",
@@ -459,7 +459,7 @@
     "name": "iotop",
     "version": "0.6",
     "recipe": "build/recipes/iotop/iotop.SlackBuild",
-    "recipe_sha256": "ec81055c350ee17dd6dd300fec60222ab344456aab4270f03762de5123ad7111",
+    "recipe_sha256": "ff8568148deda00935886f77a7566167d0b526f8262d6356091c08ea20e1dcfc",
     "provenance": {
       "kind": "source",
       "url": "https://git.slackbuilds.org/slackbuilds/tree/system/iotop?id=61c20c2400f83c5911a54921b62682cc38410afc",
@@ -576,7 +576,7 @@
     "name": "libmediainfo",
     "version": "26.10",
     "recipe": "build/recipes/libmediainfo/libmediainfo.SlackBuild",
-    "recipe_sha256": "e119dcb7e12bbdc5ab2e326a1a85f9ae09db2aebdbfd98773478b9b4450a0e25",
+    "recipe_sha256": "05496b6a8de12819be569da80b618c66caf19e3a31416e791c3245e2de329901",
     "provenance": {
       "kind": "source",
       "url": "https://git.slackbuilds.org/slackbuilds/tree/libraries/libmediainfo?id=61c20c2400f83c5911a54921b62682cc38410afc",
@@ -601,7 +601,7 @@
     "name": "libzen",
     "version": "0.4.41",
     "recipe": "build/recipes/libzen/libzen.SlackBuild",
-    "recipe_sha256": "0610f2e44e1c0e1aba1659fd25204f0e3c906ce39b0407a4dfabb305bbefddbc",
+    "recipe_sha256": "c07f17b06fe3bb07a056c4bba2c4cdfde5c41dff3ee90e32065a0cca4e15ce21",
     "provenance": {
       "kind": "source",
       "url": "https://git.slackbuilds.org/slackbuilds/tree/libraries/libzen?id=61c20c2400f83c5911a54921b62682cc38410afc",
@@ -1487,7 +1487,7 @@
     "name": "rar2fs",
     "version": "1.29.7",
     "recipe": "build/recipes/rar2fs/rar2fs.SlackBuild",
-    "recipe_sha256": "91898ec94d51b6832e73871e1a04b60047759183c65984d32055b861df7adfa9",
+    "recipe_sha256": "a77920f71eed2e49eb1e36cd5a79fb7c3206812cf2dc8b8b085013831cc409aa",
     "provenance": {
       "kind": "source",
       "url": "https://git.slackbuilds.org/slackbuilds/tree/system/rar2fs?id=61c20c2400f83c5911a54921b62682cc38410afc",

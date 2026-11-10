@@ -1,0 +1,11 @@
+tpm2-tss: tpm2-tss (matching Unraid TPM2 development headers)
+tpm2-tss:
+tpm2-tss: Source headers matching Unraid 7.3.4's tpm2-tss 4.1.3 runtime.
+tpm2-tss: Build-only input; does not replace or redistribute host libraries.
+tpm2-tss:
+tpm2-tss: https://github.com/tpm2-software/tpm2-tss
+tpm2-tss:
+tpm2-tss:
+tpm2-tss:
+tpm2-tss:
+tpm2-tss:

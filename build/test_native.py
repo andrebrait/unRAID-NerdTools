@@ -104,6 +104,19 @@ class NativeBuildTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Unknown package"):
             native.dependency_closure(packages, "missing")
 
+    def test_build_toolchain_finds_pinned_go_and_rejects_ambiguity(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            go = root / "usr/lib64/go1.27.3/go/bin/go"
+            go.parent.mkdir(parents=True)
+            go.write_bytes(b"go")
+            self.assertEqual(native.go_root(root), "/usr/lib64/go1.27.3/go")
+            other = root / "usr/lib64/go1.28/go/bin/go"
+            other.parent.mkdir(parents=True)
+            other.write_bytes(b"go")
+            with self.assertRaisesRegex(ValueError, "Go toolchain"):
+                native.go_root(root)
+
     def test_aggregate_requires_exact_complete_package_set(self):
         packages = [{"name": "app", "version": "1.0"}, {"name": "dep", "version": "2.0", "catalog": False}]
         with tempfile.TemporaryDirectory() as tmp:
@@ -177,6 +190,16 @@ class NativeBuildTests(unittest.TestCase):
                 data.size = 1
                 tar.addfile(data, io.BytesIO(b"x"))
             self.assertEqual(len(native.inspect_package(archive, "alsa-lib")), 1)
+
+    def test_package_policy_accepts_python_and_ruby_documentation_names(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = Path(tmp) / "docs.txz"
+            with tarfile.open(archive, "w:xz") as tar:
+                for name in ("2 to 3 - Module Deletion (docs).tmSnippet", "binmode%3f-i.ri"):
+                    data = tarfile.TarInfo("opt/nerdtools/share/" + name)
+                    data.size = 1
+                    tar.addfile(data, io.BytesIO(b"x"))
+            self.assertEqual(len(native.inspect_package(archive, "example")), 2)
 
     def test_manifest_hashes_actual_asset_and_keeps_external_rar_separate(self):
         with tempfile.TemporaryDirectory() as tmp:

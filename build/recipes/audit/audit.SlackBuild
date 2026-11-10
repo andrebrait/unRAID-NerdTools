@@ -93,7 +93,6 @@ CFLAGS="$SLKCFLAGS -std=gnu17" \
   --program-suffix= \
   --sbindir=/opt/nerdtools/sbin \
   --enable-static=no \
-  --enable-systemd=no \
   --with-libcap-ng=yes \
   --enable-gssapi-krb5=yes \
   --build=$ARCH-slackware-linux

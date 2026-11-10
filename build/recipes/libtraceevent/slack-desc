@@ -1,0 +1,11 @@
+libtraceevent: libtraceevent (Linux trace event parsing library)
+libtraceevent:
+libtraceevent: Parses Linux kernel trace events for powertop.
+libtraceevent: Includes the upstream event parsing plugins.
+libtraceevent:
+libtraceevent: https://git.kernel.org/pub/scm/libs/libtrace/libtraceevent.git/
+libtraceevent:
+libtraceevent:
+libtraceevent:
+libtraceevent:
+libtraceevent:

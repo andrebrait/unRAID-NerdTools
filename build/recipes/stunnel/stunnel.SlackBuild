@@ -123,8 +123,6 @@ rmdir $PKG/opt/nerdtools/share
 
 mkdir -p $PKG/opt/nerdtools/man/pl/man8
 mv $PKG/opt/nerdtools/man/man8/stunnel.pl.8 $PKG/opt/nerdtools/man/pl/man8/stunnel.8
-mkdir -p $PKG/opt/nerdtools/man/fr/man8
-mv $PKG/opt/nerdtools/man/man8/stunnel.fr.8 $PKG/opt/nerdtools/man/fr/man8/stunnel.8
 gzip -9 $PKG/opt/nerdtools/man/*/man?/*.? $PKG/opt/nerdtools/man/man?/*.?
 
 find $PKG | xargs file | grep -e "executable" -e "shared object" \
@@ -132,8 +130,8 @@ find $PKG | xargs file | grep -e "executable" -e "shared object" \
 
 # The 4.15 version of stunnel caused some bizarre perms, so
 # we'll protect against that:
-chmod 0755 $PKG/opt/nerdtools/var/lib
-chown root:root $PKG/opt/nerdtools/var/lib
+chmod 0755 $PKG/opt/nerdtools/var/lib $PKG/opt/nerdtools/var/lib/stunnel
+chown root:root $PKG/opt/nerdtools/var/lib $PKG/opt/nerdtools/var/lib/stunnel
 
 # If there's a ChangeLog, installing at least part of the recent history
 # is useful, but don't let it get totally out of control:

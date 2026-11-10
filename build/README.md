@@ -39,6 +39,7 @@ The original Unraid ZIP, extracted roots and bootable test initramfs remain priv
 The example documents the schema, not an actual recipe or fallback. Real entries require complete pins and files. `provenance.kind` is `source` or `upstream-binary`; binary repacks are never described as source-built. Extra runtime dependencies use `internal: true`, are explicit assets and have sole file ownership. Build-only dependencies use `catalog: false`. Every original name must be covered by a native package or explicit baseline provider. Recipe graph names stay original; emitted Slackware/catalog identities and dependency edges use `nerdtools-<original>`, with `tool` retaining the display/migration identity.
 
 The internal libical dependency retains upstream source documentation but does not generate GTK-Doc API pages; its disabled introspection bindings are not part of the user-facing catalog.
+PowerTOP includes private, source-built libtracefs and libtraceevent dependencies. The GnuPG build uses headers from the matching TPM2-TSS 4.1.3 source as a build-only dependency and links Unraid's existing TPM libraries.
 
 `locks/toolchain.json` is an array of `{name,url,file,sha256}` inputs, separate from distributable package recipes. Toolchain versions must be selected against the baseline, not a mutable rolling image.
 

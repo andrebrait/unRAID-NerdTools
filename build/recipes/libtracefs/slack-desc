@@ -1,0 +1,11 @@
+libtracefs: libtracefs (Linux trace filesystem library)
+libtracefs:
+libtracefs: Provides the complete Linux tracefs API used by powertop.
+libtracefs:
+libtracefs: https://git.kernel.org/pub/scm/libs/libtrace/libtracefs.git/
+libtracefs:
+libtracefs:
+libtracefs:
+libtracefs:
+libtracefs:
+libtracefs:

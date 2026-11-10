@@ -1,0 +1,29 @@
+#!/bin/bash
+set -euo pipefail
+
+# Private runtime dependency for powertop; upstream Makefile installs all plugins.
+cd "$(dirname "$0")"; CWD=$PWD
+PKGNAM=libtraceevent
+VERSION=1.9.1
+ARCH=${ARCH:-x86_64}
+BUILD=${BUILD:-1}
+TMP=${TMP:-/tmp}
+OUTPUT=${OUTPUT:-/out}
+PKG=$TMP/package-$PKGNAM
+export PKG_CONFIG_PATH=/opt/nerdtools/lib64/pkgconfig:/opt/nerdtools/lib/pkgconfig:/opt/nerdtools/share/pkgconfig
+export CFLAGS="${CFLAGS:--O2 -march=x86-64 -mtune=generic -fPIC}"
+export LDFLAGS="-L/opt/nerdtools/lib64 ${LDFLAGS:-}"
+
+rm -rf "$PKG" "$TMP/$PKGNAM-$VERSION"
+mkdir -p "$TMP" "$PKG" "$OUTPUT"
+tar xf "$CWD/$PKGNAM-$VERSION.tar.lz" -C "$TMP"
+cd "$TMP/$PKGNAM-$VERSION"
+make ${NUMJOBS:--j$(nproc)} CFLAGS="$CFLAGS" prefix=/opt/nerdtools libdir_relative=lib64 \
+  pkgconfig_dir=/opt/nerdtools/lib64/pkgconfig DESTDIR="$PKG" V=1 install
+rm "$PKG/opt/nerdtools/lib64/libtraceevent.a"
+find "$PKG/opt/nerdtools/lib64" -type f -name '*.so*' -exec strip --strip-unneeded {} +
+mkdir -p "$PKG/opt/nerdtools/doc/$PKGNAM-$VERSION" "$PKG/install"
+cp -a LICENSES README* Documentation "$PKG/opt/nerdtools/doc/$PKGNAM-$VERSION/"
+cat "$CWD/slack-desc" > "$PKG/install/slack-desc"
+cd "$PKG"
+/sbin/makepkg -l n -c n "$OUTPUT/$PKGNAM-$VERSION-$ARCH-$BUILD.txz"
