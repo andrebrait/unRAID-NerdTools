@@ -171,7 +171,7 @@ def inspect_package(archive, tool):
         links = set()
         for member in members:
             path = checked_path(member.name)
-            if not re.fullmatch(r"[A-Za-z0-9_+./@-]+", member.name) or path in seen:
+            if not re.fullmatch(r"[A-Za-z0-9_+.,/ @-]+", member.name) or path in seen:
                 raise ValueError(f"Unsupported or duplicate package path: {member.name}")
             seen.add(path)
             check_destination(tool, member, path)
@@ -197,7 +197,7 @@ def inspect_package(archive, tool):
             if member.mode & stat.S_ISUID or (member.mode & stat.S_ISGID and not secure_locate):
                 raise ValueError(f"Unapproved privileged file in package: {member.name}")
             if member.issym() or member.islnk():
-                if not re.fullmatch(r"[A-Za-z0-9_+./@-]+", member.linkname):
+                if not re.fullmatch(r"[A-Za-z0-9_+.,/ @-]+", member.linkname):
                     raise ValueError(f"Unsupported link target: {member.name}")
                 if member.islnk() and checked_path(member.linkname) not in regular:
                     raise ValueError(f"Hardlink must name a regular private archive member: {member.name}")

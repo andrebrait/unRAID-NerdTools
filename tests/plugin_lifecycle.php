@@ -103,6 +103,7 @@ refused(function() use ($manager) { $manager->apply(true,true); }, 'Unsafe packa
 $archiveOverrides = []; $hookOverrides = [];
 $archiveOverrides['tool'] = [
     '-rwxr-xr-x 0/0 10 2026-01-01 00:00:00 opt/nerdtools/bin/tool',
+    '-rw-r--r-- 0/0 10 2026-01-01 00:00:00 opt/nerdtools/share/alsa/Librem 5,codec.conf',
     '-rw-r--r-- 0/0 10 2026-01-01 00:00:00 opt/nerdtools/etc/tool.conf.new',
     '-rwxr-xr-x 0/0 10 2026-01-01 00:00:00 install/doinst.sh',
 ];

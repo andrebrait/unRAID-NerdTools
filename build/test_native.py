@@ -119,6 +119,15 @@ class NativeBuildTests(unittest.TestCase):
                 tar.addfile(link)
             self.assertEqual(len(native.inspect_package(archive, "example")), 2)
 
+    def test_package_policy_accepts_alsa_data_names(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = Path(tmp) / "alsa.txz"
+            with tarfile.open(archive, "w:xz") as tar:
+                data = tarfile.TarInfo("opt/nerdtools/share/alsa/Librem 5,codec.conf")
+                data.size = 1
+                tar.addfile(data, io.BytesIO(b"x"))
+            self.assertEqual(len(native.inspect_package(archive, "alsa-lib")), 1)
+
     def test_manifest_hashes_actual_asset_and_keeps_external_rar_separate(self):
         with tempfile.TemporaryDirectory() as tmp:
             asset = Path(tmp) / "nerdtools-example-1.0-x86_64-1_NT73.txz"
