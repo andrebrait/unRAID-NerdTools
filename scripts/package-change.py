@@ -106,14 +106,14 @@ def select_git(repo, base, head, event_name):
         return sorted(after)
 
 
-def package_selected(repo, package, event_name, event):
+def package_selected(repo, package, event_name, event, merge_sha=None):
     if package not in working_packages(Path(repo)):
         raise ValueError(f"Unknown package: {package}")
     if event_name == "workflow_dispatch":
         return True
     if event_name == "pull_request":
         request = event.get("pull_request", {})
-        base, head = request.get("base", {}).get("sha"), request.get("head", {}).get("sha")
+        base, head = request.get("base", {}).get("sha"), merge_sha or request.get("head", {}).get("sha")
     elif event_name == "push":
         base, head = event.get("before"), event.get("after")
     else:
@@ -129,7 +129,7 @@ def main():
     parser.add_argument("--event-file", type=Path, default=os.environ.get("GITHUB_EVENT_PATH"))
     args = parser.parse_args()
     event = json.loads(args.event_file.read_text()) if args.event_file else {}
-    selected = package_selected(args.repo, args.package, args.event, event)
+    selected = package_selected(args.repo, args.package, args.event, event, os.environ.get("GITHUB_SHA"))
     value = f"selected={str(selected).lower()}\n"
     print(value, end="")
     if os.environ.get("GITHUB_OUTPUT"):

@@ -40,7 +40,7 @@ The example documents the schema, not an actual recipe or fallback. Real entries
 
 The internal libical dependency retains upstream source documentation but does not generate GTK-Doc API pages; its disabled introspection bindings are not part of the user-facing catalog.
 PowerTOP includes private, source-built libtracefs and libtraceevent dependencies. The GnuPG build uses headers from the matching TPM2-TSS 4.1.3 source as a build-only dependency and links Unraid's existing TPM libraries.
-Nmap's Zenmap includes source-built private Python bindings and generated GObject typelibs against baseline GTK libraries; an available graphical session is still required to display its windows.
+Nmap retains Ndiff and Zenmap. Zenmap includes source-built private Python bindings and generated GObject typelibs against baseline GTK libraries, plus a desktop entry; displaying windows requires an available graphical session.
 
 `locks/toolchain.json` is an array of `{name,url,file,sha256}` inputs, separate from distributable package recipes. Toolchain versions must be selected against the baseline, not a mutable rolling image.
 

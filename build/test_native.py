@@ -201,6 +201,18 @@ class NativeBuildTests(unittest.TestCase):
                     tar.addfile(data, io.BytesIO(b"x"))
             self.assertEqual(len(native.inspect_package(archive, "example")), 2)
 
+    def test_only_nmap_may_install_zenmap_desktop_entry(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = Path(tmp) / "nmap.txz"
+            with tarfile.open(archive, "w:xz") as tar:
+                for name in ("opt/nerdtools/bin/nmap", "usr/share/applications/nerdtools-zenmap.desktop"):
+                    entry = tarfile.TarInfo(name)
+                    entry.size = 1
+                    tar.addfile(entry, io.BytesIO(b"x"))
+            self.assertEqual(len(native.inspect_package(archive, "nmap")), 2)
+            with self.assertRaises(ValueError):
+                native.inspect_package(archive, "vim")
+
     def test_manifest_hashes_actual_asset_and_keeps_external_rar_separate(self):
         with tempfile.TemporaryDirectory() as tmp:
             asset = Path(tmp) / "nerdtools-example-1.0-x86_64-1_NT73.txz"

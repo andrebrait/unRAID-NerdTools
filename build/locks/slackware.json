@@ -539,7 +539,7 @@
     "name": "nmap",
     "version": "7.993",
     "recipe": "build/recipes/nmap/nmap.SlackBuild",
-    "recipe_sha256": "18f11db64c15ebb9b097262a54b82e7d6f4c69791bc67901e341149371e3e1b3",
+    "recipe_sha256": "d7571a10fcb6242be6e26cb901e75fe1c4d8dd9771b7a66b4735731d3f65e63f",
     "provenance": {
       "kind": "source",
       "url": "https://git.slackware.nl/current/plain/source/n/nmap/nmap.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
@@ -559,6 +559,8 @@
         "/opt/nerdtools/bin/nmap",
         "--version"
       ],
+      ["/opt/nerdtools/bin/ndiff", "--help"],
+      ["/usr/bin/test", "-x", "/opt/nerdtools/bin/zenmap"],
       [
         "/usr/bin/env",
         "GI_TYPELIB_PATH=/opt/nerdtools/lib64/girepository-1.0",

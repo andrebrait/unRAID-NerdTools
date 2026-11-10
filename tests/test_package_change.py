@@ -142,6 +142,19 @@ class GitImpactTests(unittest.TestCase):
         head = self.commit()
         self.assertEqual(changes.select_git(self.repo, target_base, head, "pull_request"), ["app", "library"])
 
+    def test_pr_uses_merge_result_for_new_base_dependents(self):
+        self.write("build/locks/slackbuilds.json",
+                   [package("app", ["library"]), package("library"), package("baseapp", ["library"])])
+        target = self.commit()
+        self.git("checkout", "--quiet", "--detach", self.base)
+        (self.repo / "build/recipes/library").mkdir(parents=True)
+        self.write("build/recipes/library/patch.diff", "changed")
+        head = self.commit()
+        self.git("merge", "--quiet", "--no-edit", target)
+        merge = self.git("rev-parse", "HEAD")
+        event = {"pull_request": {"base": {"sha": target}, "head": {"sha": head}}}
+        self.assertTrue(changes.package_selected(self.repo, "baseapp", "pull_request", event, merge))
+
     def test_complete_diff_is_not_limited_to_githubs_first_300_files(self):
         (self.repo / "build/recipes/library").mkdir(parents=True)
         self.write("build/recipes/library/patch.diff", "changed")

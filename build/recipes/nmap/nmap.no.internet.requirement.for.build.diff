@@ -1,6 +1,6 @@
---- ./Makefile.in.orig	2026-03-16 12:25:07.000000000 -0500
-+++ ./Makefile.in	2026-03-27 15:00:22.862840301 -0500
-@@ -352,11 +352,11 @@
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -361,11 +361,11 @@
  	$(CXX) -o $@ $(CPPFLAGS) $(CXXFLAGS) $(LDFLAGS) $(OBJS) $(LIBS) $<
  
  build-zenmap: $(ZENMAPDIR)/pyproject.toml $(ZENMAPDIR)/zenmapCore/Version.py
@@ -14,3 +14,34 @@
  	$(INSTALL) -c -m 644 docs/zenmap.1 $(DESTDIR)$(mandir)/man1/
  	$(INSTALL) -c -m 644 $(ZENMAPDIR)/install_scripts/unix/*.desktop $(DESTDIR)$(deskdir)
  # Create a symlink from nmapfe to zenmap if nmapfe doesn't exist or is
+@@ -380,14 +380,14 @@
+ 	cp $^ $@
+ 
+ build-ndiff: $(NDIFFDIR)/pyproject.toml $(NDIFFDIR)/Version.py
+-	$(PYTHON) -m build $(NDIFFDIR)/
++	$(PYTHON) -m build --wheel --no-isolation $(NDIFFDIR)/
+ 
+ build-nping: $(NPINGDIR)/Makefile @NBASE_BUILD@ @NSOCK_BUILD@ build-netutil $(NPINGDIR)/nping.h @DNET_BUILD@ @PCAP_BUILD@
+ 	@cd $(NPINGDIR) && $(MAKE)
+ 
+ install-ndiff:
+ 	mkdir -p $(DESTDIR)$(bindir) $(DESTDIR)$(mandir)/man1
+-	$(PYTHON) -m pip install $(NDIFFDIR)/ $(if $(DESTDIR),--root "$(DESTDIR)")
++	$(PYTHON) -m installer --prefix "$(prefix)" $(if $(DESTDIR),--destdir "$(DESTDIR)") $(NDIFFDIR)/dist/*.whl
+ 	$(INSTALL) -c -m 644 $(NDIFFDIR)/docs/ndiff.1 $(DESTDIR)$(mandir)/man1/
+ 
+ NSE_FILES = scripts/script.db scripts/*.nse
+--- a/zenmap/pyproject.toml
++++ b/zenmap/pyproject.toml
+@@ -24,11 +24,7 @@
+ [project.gui-scripts]
+ zenmap = "zenmapGUI.App:run"
+ 
+-[project.scripts]
+-ndiff = "ndiff:run_main"
+-
+ [tool.setuptools]
+-py-modules = ["ndiff"]
+ include-package-data = true
+ 
+ [tool.setuptools.packages.find]

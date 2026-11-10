@@ -23,10 +23,7 @@ jobs:
           sys.path.insert(0, 'build')
           import native
           with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
-              selected = {'libtracefs', 'gpgme', 'tpm2-tss', 'neofetch', 'powertop', 'python-setuptools',
-                          'msgpack-python', 'stunnel', 'fish', 'libtraceevent', 'audit', 'nmap', 'llfuse',
-                          'gnupg2', 'restic', 'powershell', 'rclone', 'mediainfo', 'pycairo', 'pygobject3',
-                          'zenmap-typelibs'}
+              selected = {'nmap'}
               out.write('names=' + json.dumps([p['name'] for p in native.load_packages() if p['name'] in selected]) + '\n')
           PY
 

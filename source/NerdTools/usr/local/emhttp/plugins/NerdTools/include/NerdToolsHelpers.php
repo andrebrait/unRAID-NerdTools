@@ -171,6 +171,7 @@ function nt_payload_allowed($tool, $path, $type, $permissions, $uid, $gid) {
     $files = [];
     if ($tool === 'audit') $files = ['etc/rc.d/rc.auditd.new'];
     if ($tool === 'screen') $files = ['etc/screenrc.new','etc/skel/.screenrc.new','etc/pam.d/screen.new'];
+    if ($tool === 'nmap') $files = ['usr/share/applications/nerdtools-zenmap.desktop'];
     if ($tool === 'bluez') {
         $files = ['etc/bluetooth/input.conf.new','etc/bluetooth/main.conf.new','etc/bluetooth/network.conf.new',
             'etc/bluetooth/mesh-main.conf.new',

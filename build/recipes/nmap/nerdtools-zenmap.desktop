@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Zenmap
+GenericName=GUI Port Scanner
+Comment=Graphical frontend for the Nmap Security Scanner
+TryExec=/usr/local/bin/nerdtools-zenmap
+Exec=/usr/local/bin/nerdtools-zenmap %F
+Icon=network-workgroup
+Terminal=false
+Categories=Network;Security;

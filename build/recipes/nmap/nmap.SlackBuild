@@ -111,12 +111,15 @@ PYTHON=/opt/nerdtools/bin/python3 \
   --with-libssh2=/usr \
   --mandir=/opt/nerdtools/man \
   --docdir=/opt/nerdtools/doc/nmap-$VERSION \
-  --without-ndiff \
+  --with-zenmap \
+  --with-ndiff \
   --without-nmap-update \
   --build=$ARCH-slackware-linux || exit 1
 
 make $NUMJOBS || exit 1
 make install DESTDIR=$PKG || exit 1
+test -x "$PKG/opt/nerdtools/bin/zenmap" && test -x "$PKG/opt/nerdtools/bin/ndiff" || exit 1
+install -Dm644 "$CWD/nerdtools-zenmap.desktop" "$PKG/usr/share/applications/nerdtools-zenmap.desktop"
 
 mkdir -p $PKG/opt/nerdtools/doc/nmap-$VERSION
 cp -a CONTRIBUTING* HACKING* INSTALL* LICENSE* README* \

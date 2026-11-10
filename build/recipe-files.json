@@ -761,14 +761,19 @@
   "nmap": {
     "type": "directory"
   },
+  "nmap/nerdtools-zenmap.desktop": {
+    "executable": false,
+    "sha256": "3c9883c05fd4ee7a70db33c1ff20bcfbf656a3a838152482c156d79420671a98",
+    "type": "file"
+  },
   "nmap/nmap.SlackBuild": {
     "executable": true,
-    "sha256": "18f11db64c15ebb9b097262a54b82e7d6f4c69791bc67901e341149371e3e1b3",
+    "sha256": "d7571a10fcb6242be6e26cb901e75fe1c4d8dd9771b7a66b4735731d3f65e63f",
     "type": "file"
   },
   "nmap/nmap.no.internet.requirement.for.build.diff": {
     "executable": false,
-    "sha256": "d65345f7afa0a4984ab43526d76c13fa16e813f0bd36597260226130e1208dd8",
+    "sha256": "8348f85ded7e19027ae9914f1cd9349417ab471956a020971fc236abd5eb7f06",
     "type": "file"
   },
   "nmap/nmap.nping.system.libpcap.diff": {

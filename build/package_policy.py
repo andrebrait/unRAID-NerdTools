@@ -4,6 +4,7 @@ from pathlib import PurePosixPath
 PRIVATE = PurePosixPath("opt/nerdtools")
 INTEGRATION = {
     "audit": {"etc/rc.d/rc.auditd.new"},
+    "nmap": {"usr/share/applications/nerdtools-zenmap.desktop"},
     "screen": {"etc/screenrc.new", "etc/skel/.screenrc.new", "etc/pam.d/screen.new"},
     "bluez": {
         "etc/bluetooth/input.conf.new", "etc/bluetooth/main.conf.new", "etc/bluetooth/network.conf.new",

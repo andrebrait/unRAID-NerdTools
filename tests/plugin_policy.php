@@ -19,6 +19,7 @@ $allowed = [
     ['bluez','etc/bluetooth/mesh-main.conf.new','-','rw-r--r--',0,0],
     ['bluez','usr/share/dbus-1/system.d/bluetooth-mesh.conf','-','rw-r--r--',0,0],
     ['bluez','usr/share/dbus-1/services/org.bluez.obex.service','-','rw-r--r--',0,0],
+    ['nmap','usr/share/applications/nerdtools-zenmap.desktop','-','rw-r--r--',0,0],
     ['bluez','var/lib/bluetooth','d','rwx------',0,0],
 ];
 foreach ($allowed as $case) policy_check(nt_payload_allowed(...$case),'Required legitimate payload rejected: '.$case[1]);
@@ -45,6 +46,7 @@ $denied = [
     ['screen','etc/pam.d/screen.new','-','rwxr-xr-x',0,0],
     ['bluez','etc/udev/rules.d/unapproved.rules','-','rw-r--r--',0,0],
     ['bluez','usr/share/dbus-1/system.d/foreign.conf','-','rw-r--r--',0,0],
+    ['vim','usr/share/applications/nerdtools-zenmap.desktop','-','rw-r--r--',0,0],
     ['bluez','var/lib/bluetooth/state','-','rw-------',0,0],
     ['bluez','var/lib/bluetooth','d','rwxr-xr-x',0,0],
 ];
