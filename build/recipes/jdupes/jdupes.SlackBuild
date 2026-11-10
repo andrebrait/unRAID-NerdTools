@@ -86,7 +86,8 @@ find -L . \
 sed -i -e 's|share/man|man|' Makefile
 sed -i -e 's|/usr/local|/opt/nerdtools|g' Makefile
 
-make PREFIX=/opt/nerdtools CFLAGS_EXTRA="$SLKCFLAGS"
+make PREFIX=/opt/nerdtools CFLAGS_EXTRA="$SLKCFLAGS -I/opt/nerdtools/include" \
+  LDFLAGS_EXTRA="-L/opt/nerdtools/lib${LIBDIRSUFFIX}"
 make install PREFIX=/opt/nerdtools DESTDIR=$PKG
 
 find $PKG -print0 | xargs -0 file | grep -e "executable" -e "shared object" | grep ELF \

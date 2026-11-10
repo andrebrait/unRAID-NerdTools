@@ -38,10 +38,13 @@ class NativeBuildTests(unittest.TestCase):
             target = root / "target"
             cache = root / "cache"
             tools = root / "tools"
-            for path in (target / "etc", target / "usr/bin", target / "usr/include", cache, tools):
+            for path in (target / "etc", target / "usr/bin", target / "usr/include", target / "usr/lib64", cache, tools):
                 path.mkdir(parents=True, exist_ok=True)
             (target / "etc").chmod(0o755)
             (target / "etc/config").write_text("existing")
+            (target / "usr/lib64/libicuuc.so.78.3").write_text("baseline ICU78")
+            (target / "usr/lib64/libicuuc.so").symlink_to("libicuuc.so.78.3")
+            (target / "usr/include/uversion.h").write_text("ICU78 headers")
             (target / "var").mkdir()
             outside = root / "outside"
             outside.mkdir()
@@ -55,6 +58,10 @@ class NativeBuildTests(unittest.TestCase):
                 directory.type, directory.mode = tarfile.DIRTYPE, 0o777
                 tar.addfile(directory)
                 for name, data in (("etc/config", b"replacement"), ("etc/new", b"new"),
+                                   ("usr/include/uversion.h", b"ICU79 headers"),
+                                   ("usr/lib64/libicuuc.so.79.1", b"additional ICU79"),
+                                   ("install/doinst.sh", b"( cd usr/lib64 ; ln -sf libicuuc.so.79.1 libicuuc.so )\n"
+                                                        b"( cd usr/lib64 ; ln -sf libicuuc.so.79.1 libicuuc.so.79 )\n"),
                                    ("var/run/nscd", b"toolchain runtime state")):
                     entry = tarfile.TarInfo(name)
                     entry.size = len(data)
@@ -70,6 +77,10 @@ class NativeBuildTests(unittest.TestCase):
             self.assertEqual((target / "etc").stat().st_mode & 0o777, 0o755)
             self.assertEqual(os.readlink(target / "var/run"), str(outside))
             self.assertFalse((outside / "nscd").exists())
+            self.assertEqual((target / "usr/lib64/libicuuc.so").read_text(), "baseline ICU78")
+            self.assertEqual(os.readlink(target / "usr/lib64/libicuuc.so"), "libicuuc.so.78.3")
+            self.assertEqual((target / "usr/include/uversion.h").read_text(), "ICU78 headers")
+            self.assertEqual((target / "usr/lib64/libicuuc.so.79").read_text(), "additional ICU79")
 
     def test_dependency_order_is_topological_and_rejects_cycles(self):
         packages = [{"name": "app", "dependencies": ["lib"], "build_dependencies": []}, {"name": "lib", "dependencies": [], "build_dependencies": []}]

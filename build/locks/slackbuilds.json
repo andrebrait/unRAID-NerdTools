@@ -525,7 +525,7 @@
     "name": "jdupes",
     "version": "1.31.1",
     "recipe": "build/recipes/jdupes/jdupes.SlackBuild",
-    "recipe_sha256": "c975d55729d2ede0762d8e31d4d54e70bc07c8d0edc02a34ebcb7482230a45cb",
+    "recipe_sha256": "7733b270d8db28ecb2f9b3f9f815c3e4387c70d41fde3f0b52e51b1a5ee327d7",
     "provenance": {
       "kind": "source",
       "url": "https://git.slackbuilds.org/slackbuilds/tree/system/jdupes?id=61c20c2400f83c5911a54921b62682cc38410afc",

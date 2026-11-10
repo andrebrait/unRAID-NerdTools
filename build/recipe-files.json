@@ -431,7 +431,7 @@
   },
   "jdupes/jdupes.SlackBuild": {
     "executable": true,
-    "sha256": "c975d55729d2ede0762d8e31d4d54e70bc07c8d0edc02a34ebcb7482230a45cb",
+    "sha256": "7733b270d8db28ecb2f9b3f9f815c3e4387c70d41fde3f0b52e51b1a5ee327d7",
     "type": "file"
   },
   "jdupes/slack-desc": {
