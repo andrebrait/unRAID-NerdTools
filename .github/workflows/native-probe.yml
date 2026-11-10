@@ -1,8 +1,7 @@
 name: Verify native build on task branch
 
 on:
-  push:
-    branches: [implement-maintenance]
+  workflow_dispatch:
 
 permissions:
   contents: read

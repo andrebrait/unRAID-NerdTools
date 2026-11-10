@@ -104,6 +104,21 @@ class NativeBuildTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Unknown package"):
             native.dependency_closure(packages, "missing")
 
+    def test_aggregate_requires_exact_complete_package_set(self):
+        packages = [{"name": "app", "version": "1.0"}, {"name": "dep", "version": "2.0", "catalog": False}]
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            app = directory / "nerdtools-app-1.0-x86_64-1_NT73.txz"
+            dep = directory / "nerdtools-dep-2.0-x86_64-1_NT73.txz"
+            app.write_bytes(b"app")
+            with self.assertRaisesRegex(ValueError, "package artifact set"):
+                native.checked_artifacts(packages, directory)
+            dep.write_bytes(b"dep")
+            self.assertEqual(native.checked_artifacts(packages, directory), {"app": app, "dep": dep})
+            (directory / "unexpected").write_text("bad")
+            with self.assertRaisesRegex(ValueError, "package artifact set"):
+                native.checked_artifacts(packages, directory)
+
     def test_build_one_refuses_publication_and_requires_package_and_prepared_roots(self):
         args = native.argparse.Namespace(package="app", publish=True, baseline_root=Path("/baseline"),
                                         development_root=Path("/development"))

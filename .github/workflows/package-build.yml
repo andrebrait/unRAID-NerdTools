@@ -1,0 +1,91 @@
+name: Reusable native package build
+
+on:
+  workflow_call:
+    inputs:
+      package:
+        description: Locked source package to build with its transitive dependencies
+        required: true
+        type: string
+      retain-artifact:
+        description: Retain the normalized package for the same-run catalog gate
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  select:
+    runs-on: ubuntu-24.04
+    outputs:
+      selected: ${{ steps.changes.outputs.selected }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Select this package from the complete semantic commit diff
+        id: changes
+        env:
+          PACKAGE: ${{ inputs.package }}
+        run: python3 scripts/package-change.py --package "$PACKAGE"
+
+  build:
+    needs: select
+    if: needs.select.outputs.selected == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Read the canonical baseline pins
+        id: baseline
+        run: |
+          python3 - <<'PY'
+          import json, os
+          with open('build/baseline.json') as source:
+              data = json.load(source)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              for key, value in {'version': data['version'], 'url': data['image']['url'], 'sha256': data['image']['sha256'], 'bzroot': data['bzroot_sha256']}.items():
+                  output.write(f'{key}={value}\n')
+          PY
+      - name: Prepare private baseline and development roots
+        id: roots
+        uses: ./build/unraid-build-root
+        with:
+          version: ${{ steps.baseline.outputs.version }}
+          url: ${{ steps.baseline.outputs.url }}
+          sha256: ${{ steps.baseline.outputs.sha256 }}
+          bzroot-sha256: ${{ steps.baseline.outputs.bzroot }}
+          toolchain-lock: build/locks/toolchain.json
+      - name: Install validation tools and configure mapped sandbox identities
+        run: |
+          sudo apt-get install --no-install-recommends --yes binutils bubblewrap uidmap
+          sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 root
+      - name: Require the mapped sandbox to exclude host paths and privileged mounts
+        env:
+          DEVELOPMENT_ROOT: ${{ steps.roots.outputs.development-root }}
+        run: sudo python3 build/native.py sandbox-check --development-root "$DEVELOPMENT_ROOT" --work /tmp
+      - name: Build and validate this package and its transitive dependencies without publishing
+        env:
+          PACKAGE: ${{ inputs.package }}
+          BASELINE_ROOT: ${{ steps.roots.outputs.baseline-root }}
+          DEVELOPMENT_ROOT: ${{ steps.roots.outputs.development-root }}
+        run: |
+          sudo --preserve-env=GITHUB_REPOSITORY,GITHUB_SHA,RUNNER_TEMP python3 build/native.py build-one \
+            --package "$PACKAGE" --work /tmp \
+            --baseline-root "$BASELINE_ROOT" --development-root "$DEVELOPMENT_ROOT"
+      - name: Retain this package for the same-run catalog gate
+        if: inputs.retain-artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: native-package-${{ inputs.package }}
+          path: dist/*.txz
+          if-no-files-found: error
+          retention-days: 1
+      # Never upload or cache proprietary Unraid images or extracted roots.

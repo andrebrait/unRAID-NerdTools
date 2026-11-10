@@ -54,6 +54,9 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+      - name: Restrict publication to the default branch
+        if: github.event_name == 'workflow_dispatch' && inputs.publish && github.ref != format('refs/heads/{0}', github.event.repository.default_branch)
+        run: echo "Publication requires the default branch" >&2; exit 1
       - name: Install SquashFS test tools
         run: sudo apt-get update && sudo apt-get install --no-install-recommends --yes squashfs-tools
       - name: Test the trust boundaries and catalog contract
@@ -61,15 +64,54 @@ jobs:
       - name: Validate checked recipes, pins, dependency closure, and complete catalog
         run: python3 build/native.py validate
 
-  build:
+  package-list:
     if: github.event_name == 'workflow_dispatch'
     needs: validate
+    runs-on: ubuntu-24.04
+    outputs:
+      names: ${{ steps.packages.outputs.names }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - id: packages
+        run: |
+          python3 - <<'PY'
+          import json, os, sys
+          sys.path.insert(0, 'build')
+          import native
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('names=' + json.dumps([p['name'] for p in native.load_packages()]) + '\n')
+          PY
+
+  package:
+    needs: package-list
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        package: ${{ fromJSON(needs.package-list.outputs.names) }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: ${{ matrix.package }}
+      retain-artifact: true
+
+
+  build:
+    if: github.event_name == 'workflow_dispatch'
+    needs: package
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+      - name: Download only packages built in this workflow run
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: native-package-*
+          merge-multiple: true
+          path: package-artifacts
       - name: Read the canonical baseline pins
         id: baseline
         run: |
@@ -107,7 +149,7 @@ jobs:
           BASELINE_ROOT: ${{ steps.roots.outputs.baseline-root }}
           DEVELOPMENT_ROOT: ${{ steps.roots.outputs.development-root }}
         run: |
-          args=()
+          args=(--package-artifacts "$GITHUB_WORKSPACE/package-artifacts")
           if [[ "$PUBLISH" == true ]]; then args+=(--publish); fi
           sudo --preserve-env=GITHUB_REPOSITORY,GITHUB_SHA,RUNNER_TEMP python3 build/native.py build \
             --work /tmp \

@@ -503,7 +503,10 @@ def source_bundle(packages, cache, output, work):
         shutil.copyfile(REPO / "LICENSE", staging / "LICENSE")
         workflow = staging / ".github/workflows"
         workflow.mkdir(parents=True)
-        shutil.copyfile(REPO / ".github/workflows/build-packages.yml", workflow / "build-packages.yml")
+        for name in ("build-packages.yml", "package-build.yml"):
+            shutil.copyfile(REPO / ".github/workflows" / name, workflow / name)
+        (staging / "scripts").mkdir()
+        shutil.copyfile(REPO / "scripts/package-change.py", staging / "scripts/package-change.py")
         for package in packages:
             directory = staging / "sources" / package["name"]
             directory.mkdir(parents=True)
@@ -642,6 +645,18 @@ def build_one(args):
     print(f"Built {args.package} and its dependency closure; no full-catalog compatibility or publication claim.")
 
 
+def checked_artifacts(packages, directory):
+    expected = {
+        f"nerdtools-{package['name']}-{package['version'].replace('-', '_')}-x86_64-1_NT73.txz": package["name"]
+        for package in packages
+    }
+    entries = list(directory.iterdir())
+    if (len(expected) != len(packages) or {entry.name for entry in entries} != set(expected)
+            or any(entry.is_symlink() or not entry.is_file() for entry in entries)):
+        raise ValueError("Incomplete or unexpected package artifact set")
+    return {expected[entry.name]: entry for entry in entries}
+
+
 def build(args):
     if os.geteuid() != 0 or sys.platform != "linux" or os.uname().machine != "x86_64":
         raise ValueError("Builds require a disposable Linux x86_64 CI runner, running as root")
@@ -684,9 +699,14 @@ def build(args):
         records = []
         build_only = work / "build-only"
         build_only.mkdir()
+        artifacts = checked_artifacts(packages, args.package_artifacts) if args.package_artifacts else None
         for package in packages:
             target_output = output if package.get("catalog", True) else build_only
-            artifact = build_package(package, development, cache, built, target_output, work)
+            if artifacts is None:
+                artifact = build_package(package, development, cache, built, target_output, work)
+            else:
+                artifact = target_output / artifacts[package["name"]].name
+                shutil.copyfile(artifacts[package["name"]], artifact)
             built[package["name"]] = (package, artifact)
             if package.get("catalog", True):
                 record = asset_record(package, artifact)
@@ -737,10 +757,13 @@ def main():
     parser.add_argument("--baseline-root", type=Path)
     parser.add_argument("--development-root", type=Path)
     parser.add_argument("--source-bundle", type=Path)
+    parser.add_argument("--package-artifacts", type=Path, help="Complete same-run normalized package artifacts (full-catalog build only)")
     parser.add_argument("--work", type=Path, default=Path(os.environ.get("RUNNER_TEMP", tempfile.gettempdir())))
     args = parser.parse_args()
     if args.package and args.command != "build-one":
         parser.error("--package is only valid with build-one; full-catalog builds cannot be narrowed")
+    if args.package_artifacts and args.command != "build":
+        parser.error("--package-artifacts requires the full-catalog build gate")
     if args.command == "build-one":
         build_one(args)
         return
