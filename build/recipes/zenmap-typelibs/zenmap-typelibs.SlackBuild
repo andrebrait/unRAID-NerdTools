@@ -24,7 +24,7 @@ export GI_TYPELIB_PATH="$SDK/lib64/girepository-1.0"
 export GI_GIR_PATH="$SDK/share/gir-1.0"
 unset PYTHONPATH
 
-for source in glib-2.90.1 gobject-introspection-1.86.0 atk-2.38.0 gdk-pixbuf-2.44.8 harfbuzz-14.6.0 pango-1.58.2 gtk-3.24.52; do
+for source in glib-2.90.1 gobject-introspection-1.86.0 at-spi2-core-2.62.1 gdk-pixbuf-2.44.8 harfbuzz-14.6.0 pango-1.58.2 gtk-3.24.52; do
   tar xf "$CWD/$source.tar.xz" -C "$WORK/src"
 done
 chown -R root:root "$WORK/src"
@@ -50,7 +50,8 @@ for namespace in GLib-2.0 GObject-2.0 GModule-2.0 Gio-2.0; do
   install -m 0644 "$WORK/build-gobject-introspection-1.86.0/gir/$namespace.gir" "$SDK/share/gir-1.0/"
   install -m 0644 "$WORK/build-gobject-introspection-1.86.0/gir/$namespace.typelib" "$SDK/lib64/girepository-1.0/"
 done
-build_metadata atk-2.38.0 -Dintrospection=true -Ddocs=false
+# Unraid's libatk is the 2.62 one from at-spi2-core; an older staged ATK breaks linking against its bridge.
+build_metadata at-spi2-core-2.62.1 -Datk_only=true -Dintrospection=enabled -Ddocs=false -Dx11=disabled
 # MIME sniffing and Glycin are unnecessary for GIR generation; Unraid supplies the runtime library.
 build_metadata gdk-pixbuf-2.44.8 -Dintrospection=enabled -Ddocumentation=false \
   -Dman=false -Dtests=false -Dinstalled_tests=false -Dgio_sniffing=false -Dglycin=disabled
@@ -67,7 +68,7 @@ build_metadata gtk-3.24.52 -Dx11_backend=true -Dwayland_backend=true \
 "$PYTHON" "$CWD/package-typelibs.py" "$SDK" "$PKG/opt/nerdtools/lib64/girepository-1.0"
 DOC=$PKG/opt/nerdtools/doc/$PKGNAM-$VERSION
 mkdir -p "$DOC" "$PKG/install"
-for source in glib-2.90.1 gobject-introspection-1.86.0 atk-2.38.0 gdk-pixbuf-2.44.8 harfbuzz-14.6.0 pango-1.58.2 gtk-3.24.52; do
+for source in glib-2.90.1 gobject-introspection-1.86.0 at-spi2-core-2.62.1 gdk-pixbuf-2.44.8 harfbuzz-14.6.0 pango-1.58.2 gtk-3.24.52; do
   mkdir -p "$DOC/$source"
   find "$WORK/src/$source" -maxdepth 1 -type f \
     \( -name 'COPYING*' -o -name 'LICENSE*' -o -name 'AUTHORS*' -o -name 'README*' -o -name NEWS \) \

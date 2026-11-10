@@ -947,7 +947,7 @@
     "name": "powershell",
     "version": "7.6.9",
     "recipe": "build/recipes/powershell/powershell.SlackBuild",
-    "recipe_sha256": "9148a30f87a92d65235fb9db5b72b70c28f2005373b85ffec1d87564e7dc235a",
+    "recipe_sha256": "7bb539451e26ffa92bd7a28228270cc00b1538a88c15c71e366e5c61d2874cd7",
     "provenance": {
       "kind": "source",
       "url": "https://github.com/PowerShell/PowerShell/tree/bf5fc434120666e5f1a8d1dfd6ecac7efc17a4be",

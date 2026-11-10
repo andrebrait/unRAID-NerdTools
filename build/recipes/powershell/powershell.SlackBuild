@@ -59,6 +59,9 @@ git update-ref HEAD bf5fc434120666e5f1a8d1dfd6ecac7efc17a4be
 git update-ref refs/tags/v7.6.9 a0edd6969993766081edc6bf0306696d1adef88a
 # dotnet run's --runtime alone does not narrow RuntimeIdentifiers for locked generator restores.
 git apply "$CWD/linux-x64-build-tools.patch"
+# dotnet publish's --runtime does not narrow them either; the locks cover linux-x64 only.
+sed -i 's|<RuntimeIdentifiers>linux-x64;osx-x64;</RuntimeIdentifiers>|<RuntimeIdentifiers>linux-x64</RuntimeIdentifiers>|' src/powershell-unix/powershell-unix.csproj
+grep -q '<RuntimeIdentifiers>linux-x64</RuntimeIdentifiers>' src/powershell-unix/powershell-unix.csproj
 cp -a "$CWD/nuget-locks/." .
 # Every source, including Gallery modules and WiX build tools, resolves only from locked local inputs.
 for config in nuget.config src/Modules/nuget.config tools/wix/nuget.config; do

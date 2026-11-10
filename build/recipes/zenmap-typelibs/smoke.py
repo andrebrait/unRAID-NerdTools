@@ -27,7 +27,7 @@ from gi.repository import Atk, GdkPixbuf, Gio, GLib, Gtk, HarfBuzz, Pango, Pango
 assert GLib.check_version(2, 90, 1) is None
 assert Gio.File.new_for_path("/opt/nerdtools").get_path() == "/opt/nerdtools"
 assert GLib.Variant("(si)", ("Zenmap", 7)).unpack() == ("Zenmap", 7)
-assert Atk.get_version() == "2.38.0"
+assert Atk.get_version() == "2.62.1"
 assert Atk.role_for_name("push button") == Atk.Role.PUSH_BUTTON
 assert GdkPixbuf.PIXBUF_VERSION == "2.44.8"
 pixels = GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, True, 8, 2, 2)

@@ -3,11 +3,11 @@
     "name": "zenmap-typelibs",
     "version": "3.24.52",
     "recipe": "build/recipes/zenmap-typelibs/zenmap-typelibs.SlackBuild",
-    "recipe_sha256": "836e422fedab643c3ac8e721336606bdce38cb97bf3a2a579c5f792959bc41ac",
+    "recipe_sha256": "eaae7bbb4ce289708e633d18f1a3fb49705bd9575913cf38c1b52c45d08815a9",
     "provenance": {
       "kind": "source",
       "url": "https://www.gtk.org/",
-      "revision": "GTK 3.24.52; GLib 2.90.1; GI 1.86.0; ATK 2.38.0; GdkPixbuf 2.44.8; HarfBuzz 14.6.0; Pango 1.58.2"
+      "revision": "GTK 3.24.52; GLib 2.90.1; GI 1.86.0; ATK 2.62.1 (at-spi2-core); GdkPixbuf 2.44.8; HarfBuzz 14.6.0; Pango 1.58.2"
     },
     "inputs": [
       {
@@ -21,9 +21,9 @@
         "sha256": "920d1a3fcedeadc32acff95c2e203b319039dd4b4a08dd1a2dfd283d19c0b9ae"
       },
       {
-        "url": "https://download.gnome.org/sources/atk/2.38/atk-2.38.0.tar.xz",
-        "file": "atk-2.38.0.tar.xz",
-        "sha256": "ac4de2a4ef4bd5665052952fe169657e65e895c5057dffb3c2a810f6191a0c36"
+        "url": "https://slackware.uk/slackware/slackware64-current/source/l/at-spi2-core/at-spi2-core-2.62.1.tar.xz",
+        "file": "at-spi2-core-2.62.1.tar.xz",
+        "sha256": "cca6b6a86e4389d89b370288761ce2385ddeceb10c4412da78689bc30c88af2d"
       },
       {
         "url": "https://slackware.uk/slackware/slackware64-current/source/l/gdk-pixbuf2/gdk-pixbuf-2.44.8.tar.xz",

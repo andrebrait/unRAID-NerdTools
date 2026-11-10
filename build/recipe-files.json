@@ -1005,7 +1005,7 @@
   },
   "powershell/powershell.SlackBuild": {
     "executable": true,
-    "sha256": "9148a30f87a92d65235fb9db5b72b70c28f2005373b85ffec1d87564e7dc235a",
+    "sha256": "7bb539451e26ffa92bd7a28228270cc00b1538a88c15c71e366e5c61d2874cd7",
     "type": "file"
   },
   "powershell/slack-desc": {
@@ -1500,12 +1500,12 @@
   },
   "zenmap-typelibs/smoke.py": {
     "executable": false,
-    "sha256": "31b8e4d2e8aaf9a40862156fe1218e1eeb6eb2520ddfc2740fc75e91554933e4",
+    "sha256": "a18f316e89fa9c45a5d49f003fc2f6522f3bf45b28a43587a44b9000450bb46b",
     "type": "file"
   },
   "zenmap-typelibs/zenmap-typelibs.SlackBuild": {
     "executable": true,
-    "sha256": "836e422fedab643c3ac8e721336606bdce38cb97bf3a2a579c5f792959bc41ac",
+    "sha256": "eaae7bbb4ce289708e633d18f1a3fb49705bd9575913cf38c1b52c45d08815a9",
     "type": "file"
   },
   "zsh": {
