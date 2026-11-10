@@ -1,5 +1,132 @@
 [
   {
+    "name": "zenmap-typelibs",
+    "version": "3.24.52",
+    "recipe": "build/recipes/zenmap-typelibs/zenmap-typelibs.SlackBuild",
+    "recipe_sha256": "b4e20681865688d63a1b5a3eec0a795fe5fb3ae935725bf54288598c62f9475a",
+    "provenance": {
+      "kind": "source",
+      "url": "https://www.gtk.org/",
+      "revision": "GTK 3.24.52; GLib 2.90.1; GI 1.86.0; ATK 2.38.0; GdkPixbuf 2.44.8; HarfBuzz 14.6.0; Pango 1.58.2"
+    },
+    "inputs": [
+      {
+        "url": "https://slackware.uk/slackware/slackware64-current/source/l/glib2/glib-2.90.1.tar.xz",
+        "file": "glib-2.90.1.tar.xz",
+        "sha256": "93c941aa17d5eb1d53fe838365f29a8b4e539c222a256d974ec8f30fc413e396"
+      },
+      {
+        "url": "https://slackware.uk/slackware/slackware64-current/source/l/gobject-introspection/gobject-introspection-1.86.0.tar.xz",
+        "file": "gobject-introspection-1.86.0.tar.xz",
+        "sha256": "920d1a3fcedeadc32acff95c2e203b319039dd4b4a08dd1a2dfd283d19c0b9ae"
+      },
+      {
+        "url": "https://download.gnome.org/sources/atk/2.38/atk-2.38.0.tar.xz",
+        "file": "atk-2.38.0.tar.xz",
+        "sha256": "ac4de2a4ef4bd5665052952fe169657e65e895c5057dffb3c2a810f6191a0c36"
+      },
+      {
+        "url": "https://slackware.uk/slackware/slackware64-current/source/l/gdk-pixbuf2/gdk-pixbuf-2.44.8.tar.xz",
+        "file": "gdk-pixbuf-2.44.8.tar.xz",
+        "sha256": "919f529512961a12e81cd4b4b466a48c3933469e7f9a310c6513cd4fb252ba3c"
+      },
+      {
+        "url": "https://github.com/harfbuzz/harfbuzz/releases/download/14.6.0/harfbuzz-14.6.0.tar.xz",
+        "file": "harfbuzz-14.6.0.tar.xz",
+        "sha256": "d07a007327277708a2a73ae437887cdbaf282937f6d03ca5467723e9099af586"
+      },
+      {
+        "url": "https://download.gnome.org/sources/pango/1.58/pango-1.58.2.tar.xz",
+        "file": "pango-1.58.2.tar.xz",
+        "sha256": "342385b6ca3b7c73455d7c80a13b7dbe4489e00bc3bd4c5bd6ed4dce421e374a"
+      },
+      {
+        "url": "https://slackware.uk/slackware/slackware64-current/source/l/gtk+3/gtk-3.24.52.tar.xz",
+        "file": "gtk-3.24.52.tar.xz",
+        "sha256": "80931fa472a77b9a164f6740e3c0b444fac6770054632d35a7ff9d679e5e7b9f"
+      }
+    ],
+    "dependencies": [],
+    "build_dependencies": [
+      "python3",
+      "python-setuptools"
+    ],
+    "internal": true,
+    "smoke": []
+  },
+  {
+    "name": "pycairo",
+    "version": "1.29.2",
+    "recipe": "build/recipes/pycairo/pycairo.SlackBuild",
+    "recipe_sha256": "a96f256c5fea925aad8ff06ad4920ce07d3aa3b85e5605f02d1b9554523f25b4",
+    "provenance": {
+      "kind": "source",
+      "url": "https://pypi.org/project/pycairo/1.29.2/",
+      "revision": "1.29.2"
+    },
+    "inputs": [
+      {
+        "url": "https://files.pythonhosted.org/packages/bb/5e/19ab2572981a996ce96b853a189d2dcced40506b67d9555a7568457abcf2/pycairo-1.29.2.tar.gz",
+        "file": "pycairo-1.29.2.tar.gz",
+        "sha256": "3e69fff74fe64f5ba2dfa31f67c6bdf26413342574047437d2ac520d35e9a489"
+      }
+    ],
+    "dependencies": [
+      "python3"
+    ],
+    "build_dependencies": [
+      "python3"
+    ],
+    "internal": true,
+    "smoke": [
+      [
+        "/usr/bin/env",
+        "GI_TYPELIB_PATH=/opt/nerdtools/lib64/girepository-1.0",
+        "/opt/nerdtools/bin/python3",
+        "-I",
+        "-c",
+        "import io, cairo; assert cairo.cairo_version() >= 11806; assert all(getattr(cairo, feature) for feature in ('HAS_XLIB_SURFACE', 'HAS_XCB_SURFACE', 'HAS_PDF_SURFACE', 'HAS_PS_SURFACE', 'HAS_SVG_SURFACE', 'HAS_PNG_FUNCTIONS', 'HAS_FT_FONT')); surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, 8, 8); context = cairo.Context(surface); context.set_source_rgb(1, 0, 0); context.paint(); output = io.BytesIO(); surface.write_to_png(output); assert output.getvalue().startswith(b'\\x89PNG\\r\\n\\x1a\\n')"
+      ]
+    ]
+  },
+  {
+    "name": "pygobject3",
+    "version": "3.58.1",
+    "recipe": "build/recipes/pygobject3/pygobject3.SlackBuild",
+    "recipe_sha256": "b5b270858c19688e3d259112ef1e6a07a30f6dfa97816fae4748e884b0878e49",
+    "provenance": {
+      "kind": "source",
+      "url": "https://pypi.org/project/pygobject/3.58.1/",
+      "revision": "3.58.1"
+    },
+    "inputs": [
+      {
+        "url": "https://files.pythonhosted.org/packages/65/1e/d590f82e14db75945b03f6b63e0f19662e0340babd8f574fdb1bb5a015e2/pygobject-3.58.1.tar.gz",
+        "file": "pygobject-3.58.1.tar.gz",
+        "sha256": "4c80598ade17fbaa7798e01a25d0bf29ce109740786026a074c5c62bb3e79d23"
+      }
+    ],
+    "dependencies": [
+      "python3",
+      "pycairo"
+    ],
+    "build_dependencies": [
+      "python3",
+      "pycairo"
+    ],
+    "internal": true,
+    "smoke": [
+      [
+        "/usr/bin/env",
+        "GI_TYPELIB_PATH=/opt/nerdtools/lib64/girepository-1.0",
+        "/opt/nerdtools/bin/python3",
+        "-I",
+        "-c",
+        "import gi, gi._gi; assert gi.__version__ == '3.58.1'; gi.require_foreign('cairo'); import gi._gi_cairo"
+      ]
+    ]
+  },
+  {
     "name": "bc",
     "version": "1.08.2",
     "recipe": "build/recipes/bc/bc.SlackBuild",
@@ -386,7 +513,7 @@
     "name": "neofetch",
     "version": "20211210_ccd5d9f5",
     "recipe": "build/recipes/neofetch/neofetch.SlackBuild",
-    "recipe_sha256": "12052177ca9b9dc64aabf6db4942953567bf38948b89a1ed1b46c0aefffc4614",
+    "recipe_sha256": "073b94cb4efb3500b584b5269b5b77ddf6b2b4859adb65fe76d5b2a5062ac0a1",
     "provenance": {
       "kind": "source",
       "url": "https://git.slackware.nl/current/plain/source/ap/neofetch/neofetch.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
@@ -412,7 +539,7 @@
     "name": "nmap",
     "version": "7.993",
     "recipe": "build/recipes/nmap/nmap.SlackBuild",
-    "recipe_sha256": "7b0e21e94cc1ff2184d87a038cedcdf08ebbefbd2ba2f777d2a035ba726b34de",
+    "recipe_sha256": "18f11db64c15ebb9b097262a54b82e7d6f4c69791bc67901e341149371e3e1b3",
     "provenance": {
       "kind": "source",
       "url": "https://git.slackware.nl/current/plain/source/n/nmap/nmap.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
@@ -425,12 +552,20 @@
         "sha256": "bf0fc5fe91d06b7ded9e3990910e83acfd01cd5aea6935073a405d19b94b6609"
       }
     ],
-    "dependencies": [],
-    "build_dependencies": [],
+    "dependencies": ["python3", "pygobject3", "zenmap-typelibs"],
+    "build_dependencies": ["python3"],
     "smoke": [
       [
         "/opt/nerdtools/bin/nmap",
         "--version"
+      ],
+      [
+        "/usr/bin/env",
+        "GI_TYPELIB_PATH=/opt/nerdtools/lib64/girepository-1.0",
+        "/opt/nerdtools/bin/python3",
+        "-I",
+        "-c",
+        "import gi; gi.disable_legacy_autoinit(); gi.require_version('Gtk', '3.0'); gi.require_version('Gdk', '3.0'); gi.require_foreign('cairo'); from gi.repository import GLib, GObject, Gio, GdkPixbuf, Pango, PangoCairo, Gdk, Gtk; assert Gtk.get_major_version() == 3; assert Gtk.get_minor_version() >= 24; assert GLib.MAJOR_VERSION == 2; import gi.overrides.Gtk, gi.overrides.Gdk"
       ]
     ]
   },
@@ -671,7 +806,7 @@
         "sha256": "5c8462af5790baf43a321a1559dbe0db06d1be4300fb85fb53c40060668e548a"
       },
       {
-        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/d/python3/python-3.12.14-docs-text.tar.bz2",
+        "url": "https://slackware.uk/slackware/slackware64-current/source/d/python3/python-3.12.14-docs-text.tar.bz2",
         "file": "python-3.12.14-docs-text.tar.bz2",
         "sha256": "ace61a04b376cd45ce9cb47d13d71cb1c20c86675d0db225345ed67788cf4e4a"
       }
@@ -799,7 +934,7 @@
     "name": "stunnel",
     "version": "5.82",
     "recipe": "build/recipes/stunnel/stunnel.SlackBuild",
-    "recipe_sha256": "c7676863739d3a960fe8d4c1bb3e755434d89d09083ad2135c0f532bfa886a9d",
+    "recipe_sha256": "33140e6bfd5f9738c6d15a79dd42fe54c4eb38a7e2b3fceaee92256092cd62d6",
     "provenance": {
       "kind": "source",
       "url": "https://git.slackware.nl/current/plain/source/n/stunnel/stunnel.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
@@ -1205,7 +1340,7 @@
     "name": "libtraceevent",
     "version": "1.9.1",
     "recipe": "build/recipes/libtraceevent/libtraceevent.SlackBuild",
-    "recipe_sha256": "29b0d23ac4bd7ca22eb4cfe30eb01b60b37561a2b559bee345a8c1c842c506ed",
+    "recipe_sha256": "b341f8948fa2207821815d5aeefd4ac71f12595aae2fdf88b805d92f13b0dbe4",
     "provenance": {
       "kind": "source",
       "url": "https://git.slackware.nl/current/plain/source/l/libtraceevent/libtraceevent.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
@@ -1229,7 +1364,7 @@
     "name": "libtracefs",
     "version": "1.8.4",
     "recipe": "build/recipes/libtracefs/libtracefs.SlackBuild",
-    "recipe_sha256": "b7265a3ed4d296bdf07d7c07485ad5c349fc1f58f61b549dbc55b982a0f9a725",
+    "recipe_sha256": "56064cf38db78e51489348482a3f7b78732217acc7983bb59a9a68ad852fd327",
     "provenance": {
       "kind": "source",
       "url": "https://git.slackware.nl/current/plain/source/l/libtracefs/libtracefs.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
@@ -1253,7 +1388,7 @@
     "name": "tpm2-tss",
     "version": "4.1.3",
     "recipe": "build/recipes/tpm2-tss/tpm2-tss.SlackBuild",
-    "recipe_sha256": "04e6ed66444b3b094842859fb7bc530d19d1ab1d71b91ecab98b54ae856c6602",
+    "recipe_sha256": "2d0da5cdcf64a015c6d67ecc2147d871e27cb609dfab213ff8f22050b120c8a2",
     "provenance": {
       "kind": "source",
       "url": "https://github.com/tpm2-software/tpm2-tss/releases/tag/4.1.3",

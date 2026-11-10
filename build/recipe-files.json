@@ -254,7 +254,7 @@
   },
   "fish/fish.SlackBuild": {
     "executable": true,
-    "sha256": "53b24effb47eee966422b3427324e0b3da5658439487e996521c95343f85b31d",
+    "sha256": "7df35d5a967fa28b5fe6476946228382b93a4b5cea2fb6c5c850e37883533b11",
     "type": "file"
   },
   "fish/slack-desc": {
@@ -514,7 +514,7 @@
   },
   "libmediainfo/libmediainfo.SlackBuild": {
     "executable": true,
-    "sha256": "05496b6a8de12819be569da80b618c66caf19e3a31416e791c3245e2de329901",
+    "sha256": "77cceb9311c635dab721b0d311f561cfcddf7c97d5c4d36815d1022768ef9818",
     "type": "file"
   },
   "libmediainfo/slack-desc": {
@@ -553,7 +553,7 @@
   },
   "libtraceevent/libtraceevent.SlackBuild": {
     "executable": true,
-    "sha256": "29b0d23ac4bd7ca22eb4cfe30eb01b60b37561a2b559bee345a8c1c842c506ed",
+    "sha256": "b341f8948fa2207821815d5aeefd4ac71f12595aae2fdf88b805d92f13b0dbe4",
     "type": "file"
   },
   "libtraceevent/slack-desc": {
@@ -566,7 +566,7 @@
   },
   "libtracefs/libtracefs.SlackBuild": {
     "executable": true,
-    "sha256": "b7265a3ed4d296bdf07d7c07485ad5c349fc1f58f61b549dbc55b982a0f9a725",
+    "sha256": "56064cf38db78e51489348482a3f7b78732217acc7983bb59a9a68ad852fd327",
     "type": "file"
   },
   "libtracefs/slack-desc": {
@@ -724,7 +724,7 @@
   },
   "neofetch/neofetch.SlackBuild": {
     "executable": true,
-    "sha256": "12052177ca9b9dc64aabf6db4942953567bf38948b89a1ed1b46c0aefffc4614",
+    "sha256": "073b94cb4efb3500b584b5269b5b77ddf6b2b4859adb65fe76d5b2a5062ac0a1",
     "type": "file"
   },
   "neofetch/slack-desc": {
@@ -763,12 +763,12 @@
   },
   "nmap/nmap.SlackBuild": {
     "executable": true,
-    "sha256": "7b0e21e94cc1ff2184d87a038cedcdf08ebbefbd2ba2f777d2a035ba726b34de",
+    "sha256": "18f11db64c15ebb9b097262a54b82e7d6f4c69791bc67901e341149371e3e1b3",
     "type": "file"
   },
   "nmap/nmap.no.internet.requirement.for.build.diff": {
     "executable": false,
-    "sha256": "da933c3de7384ad08af72eb3af3965407f1859b4e8b370200611b78f78b574b7",
+    "sha256": "d65345f7afa0a4984ab43526d76c13fa16e813f0bd36597260226130e1208dd8",
     "type": "file"
   },
   "nmap/nmap.nping.system.libpcap.diff": {
@@ -936,7 +936,7 @@
   },
   "powershell/nuget-locks/src/Modules/packages.lock.json": {
     "executable": false,
-    "sha256": "80b52def6daac54913fac79561460809bf1c3d4502d7499f9c36d26cd68b3946",
+    "sha256": "1cbc718605f66530e4edb81c11ce730cbc8339aca1aa76c71f28006ff9003cec",
     "type": "file"
   },
   "powershell/nuget-locks/src/ResGen": {
@@ -1024,6 +1024,32 @@
   "powertop/slack-desc": {
     "executable": false,
     "sha256": "118d0aae6e19184056b1b2b49d5cf97b2cfbfa67d2874bdf130f2e00bbe805f7",
+    "type": "file"
+  },
+  "pycairo": {
+    "type": "directory"
+  },
+  "pycairo/pycairo.SlackBuild": {
+    "executable": true,
+    "sha256": "a96f256c5fea925aad8ff06ad4920ce07d3aa3b85e5605f02d1b9554523f25b4",
+    "type": "file"
+  },
+  "pycairo/slack-desc": {
+    "executable": false,
+    "sha256": "d958dbb9cc133ddf96c7e518f5a5d4ea9a5639775a3ad5b9f2f4cea80212d8b0",
+    "type": "file"
+  },
+  "pygobject3": {
+    "type": "directory"
+  },
+  "pygobject3/pygobject3.SlackBuild": {
+    "executable": true,
+    "sha256": "b5b270858c19688e3d259112ef1e6a07a30f6dfa97816fae4748e884b0878e49",
+    "type": "file"
+  },
+  "pygobject3/slack-desc": {
+    "executable": false,
+    "sha256": "b64626621dd4fa7363b15fe276aa88f2da36eae60fb53a2897f3551022b35581",
     "type": "file"
   },
   "python-packaging": {
@@ -1124,12 +1150,12 @@
   },
   "rclone/go-modules.tsv": {
     "executable": false,
-    "sha256": "d4de40dd653e130a6ade517ac79b3d157076871d8c9efb15bbd7a0c889c71ae2",
+    "sha256": "7c9b402d9aa432e0fa059a70720943108483993b328c22c4639604a36e647238",
     "type": "file"
   },
   "rclone/rclone.SlackBuild": {
     "executable": true,
-    "sha256": "0f242191aef8bff42af17eedd779594618b4021b55441a2afd0b916bc52e64b9",
+    "sha256": "456491f50b2f238ad593e0dcb1dfc4a28534653dbb1f72ad07ee54435e72046c",
     "type": "file"
   },
   "rclone/slack-desc": {
@@ -1147,7 +1173,7 @@
   },
   "restic/restic.SlackBuild": {
     "executable": true,
-    "sha256": "b093d909476d941959ef33b5ed3d9737fa74551974675cd45b2116c32587274b",
+    "sha256": "f527ebd6ca9587a0deabcb205ab302261edf2731db06512e0e3ef5d321ed6d5b",
     "type": "file"
   },
   "restic/slack-desc": {
@@ -1309,7 +1335,7 @@
   },
   "stunnel/stunnel.SlackBuild": {
     "executable": true,
-    "sha256": "c7676863739d3a960fe8d4c1bb3e755434d89d09083ad2135c0f532bfa886a9d",
+    "sha256": "33140e6bfd5f9738c6d15a79dd42fe54c4eb38a7e2b3fceaee92256092cd62d6",
     "type": "file"
   },
   "tcl": {
@@ -1379,7 +1405,7 @@
   },
   "tpm2-tss/tpm2-tss.SlackBuild": {
     "executable": true,
-    "sha256": "04e6ed66444b3b094842859fb7bc530d19d1ab1d71b91ecab98b54ae856c6602",
+    "sha256": "2d0da5cdcf64a015c6d67ecc2147d871e27cb609dfab213ff8f22050b120c8a2",
     "type": "file"
   },
   "unrar": {
@@ -1447,6 +1473,29 @@
   "wget2/wget2.SlackBuild": {
     "executable": true,
     "sha256": "b8252bb4eb9d03537b14023c363daa5a5663dbaaba23faa2c1ca103660c2034c",
+    "type": "file"
+  },
+  "zenmap-typelibs": {
+    "type": "directory"
+  },
+  "zenmap-typelibs/package-typelibs.py": {
+    "executable": false,
+    "sha256": "7b771d3702250c811bf620c413c160f0a6d7d505592df90534e9fb1b61c9af80",
+    "type": "file"
+  },
+  "zenmap-typelibs/slack-desc": {
+    "executable": false,
+    "sha256": "f9bc28ec0fe633627951e425577f41a668426a56c65764d9239a9477f0cd0277",
+    "type": "file"
+  },
+  "zenmap-typelibs/smoke.py": {
+    "executable": false,
+    "sha256": "31b8e4d2e8aaf9a40862156fe1218e1eeb6eb2520ddfc2740fc75e91554933e4",
+    "type": "file"
+  },
+  "zenmap-typelibs/zenmap-typelibs.SlackBuild": {
+    "executable": true,
+    "sha256": "b4e20681865688d63a1b5a3eec0a795fe5fb3ae935725bf54288598c62f9475a",
     "type": "file"
   },
   "zsh": {

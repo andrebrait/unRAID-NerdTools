@@ -40,6 +40,7 @@ ENV = {
     "LDFLAGS": "-Wl,-rpath,/opt/nerdtools/lib64 -Wl,-rpath,/opt/nerdtools/lib",
     "LD_LIBRARY_PATH": "/opt/nerdtools/lib64:/opt/nerdtools/lib",
     "PKG_CONFIG_PATH": "/opt/nerdtools/lib64/pkgconfig:/opt/nerdtools/lib/pkgconfig:/opt/nerdtools/share/pkgconfig",
+    "GI_TYPELIB_PATH": "/opt/nerdtools/lib64/girepository-1.0",
     "DOTNET_GENERATE_ASPNET_CERTIFICATE": "false",
     "DOTNET_CLI_HOME": "/tmp/nerdtools-dotnet",
 }
@@ -281,7 +282,7 @@ def normalize_package(package, original, output, staging):
     for name, target in launchers.items():
         launcher = staging / "usr/local/bin" / ("nerdtools-" + name)
         launcher.parent.mkdir(parents=True, exist_ok=True)
-        launcher.write_text('#!/bin/sh\nexport PATH=/opt/nerdtools/bin:/opt/nerdtools/sbin:$PATH\nexport LD_LIBRARY_PATH=/opt/nerdtools/lib64:/opt/nerdtools/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}\nexec ' + shlex.quote(target) + ' "$@"\n')
+        launcher.write_text('#!/bin/sh\nexport PATH=/opt/nerdtools/bin:/opt/nerdtools/sbin:$PATH\nexport LD_LIBRARY_PATH=/opt/nerdtools/lib64:/opt/nerdtools/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}\nexport GI_TYPELIB_PATH=/opt/nerdtools/lib64/girepository-1.0${GI_TYPELIB_PATH:+:$GI_TYPELIB_PATH}\nexec ' + shlex.quote(target) + ' "$@"\n')
         launcher.chmod(0o755)
     configs = sorted(str(path.relative_to(staging)) for path in staging.rglob("*.new") if path.is_file() and not path.is_symlink())
     if configs:

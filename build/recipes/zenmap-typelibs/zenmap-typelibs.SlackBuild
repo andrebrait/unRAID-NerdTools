@@ -1,0 +1,75 @@
+#!/bin/bash
+set -euo pipefail
+
+cd "$(dirname "$0")"; CWD=$PWD
+PKGNAM=zenmap-typelibs
+VERSION=3.24.52
+ARCH=${ARCH:-x86_64}
+BUILD=${BUILD:-1}
+TMP=${TMP:-/tmp}
+OUTPUT=${OUTPUT:-/out}
+PKG=$TMP/package-$PKGNAM
+WORK=$TMP/$PKGNAM-$VERSION
+SDK=$WORK/sdk
+PYTHON=/opt/nerdtools/bin/python3
+
+rm -rf "$PKG" "$WORK"
+mkdir -p "$PKG/opt/nerdtools/lib64/girepository-1.0" "$WORK/src" "$SDK" "$OUTPUT"
+export PATH="$SDK/bin:/opt/nerdtools/bin:$PATH"
+export PKG_CONFIG_PATH="$SDK/lib64/pkgconfig:$SDK/share/pkgconfig:/opt/nerdtools/lib64/pkgconfig:/opt/nerdtools/lib/pkgconfig:/opt/nerdtools/share/pkgconfig"
+export LD_LIBRARY_PATH="$SDK/lib64:/opt/nerdtools/lib64:/opt/nerdtools/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export XDG_DATA_DIRS="$SDK/share:/usr/local/share:/usr/share"
+export GI_TYPELIB_PATH="$SDK/lib64/girepository-1.0"
+# All GIR includes are source-generated here, not taken from SDK binary typelibs.
+export GI_GIR_PATH="$SDK/share/gir-1.0"
+unset PYTHONPATH
+
+for source in glib-2.90.1 gobject-introspection-1.86.0 atk-2.38.0 gdk-pixbuf-2.44.8 harfbuzz-14.6.0 pango-1.58.2 gtk-3.24.52; do
+  tar xf "$CWD/$source.tar.xz" -C "$WORK/src"
+done
+chown -R root:root "$WORK/src"
+chmod -R a-st,u+rwX,go-w+rX "$WORK/src"
+
+build_metadata() {
+  local source=$1
+  shift
+  meson setup "$WORK/build-$source" "$WORK/src/$source" \
+    --prefix "$SDK" --libdir lib64 --buildtype release --wrap-mode=nofallback \
+    -Ddefault_library=shared "$@"
+  ninja -C "$WORK/build-$source" ${NUMJOBS:--j$(nproc)}
+  meson install -C "$WORK/build-$source" --no-rebuild
+}
+
+# GI 1.86 generates the core namespaces from the exact GLib SDK and source annotations.
+# Its install target deliberately omits these four generated GIRs/typelibs.
+build_metadata gobject-introspection-1.86.0 -Dpython="$PYTHON" \
+  -Dglib_src_dir="$WORK/src/glib-2.90.1" -Dtests=false -Ddoctool=disabled -Dgtk_doc=false
+for namespace in GLib-2.0 GObject-2.0 GModule-2.0 Gio-2.0; do
+  install -m 0644 "$WORK/build-gobject-introspection-1.86.0/gir/$namespace.gir" "$SDK/share/gir-1.0/"
+  install -m 0644 "$WORK/build-gobject-introspection-1.86.0/gir/$namespace.typelib" "$SDK/lib64/girepository-1.0/"
+done
+build_metadata atk-2.38.0 -Dintrospection=true -Ddocs=false
+build_metadata gdk-pixbuf-2.44.8 -Dintrospection=enabled -Ddocumentation=false \
+  -Dman=false -Dtests=false -Dinstalled_tests=false
+build_metadata harfbuzz-14.6.0 -Dglib=enabled -Dgobject=enabled -Dintrospection=enabled \
+  -Dtests=disabled -Ddocs=disabled -Dutilities=disabled
+build_metadata pango-1.58.2 -Dintrospection=enabled -Dcairo=enabled -Dfontconfig=enabled \
+  -Dfreetype=enabled -Dxft=enabled -Ddocumentation=false -Dman-pages=false \
+  -Dbuild-testsuite=false -Dbuild-examples=false
+build_metadata gtk-3.24.52 -Dx11_backend=true -Dwayland_backend=true \
+  -Dintrospection=true -Dgtk_doc=false -Dman=false -Ddemos=false -Dexamples=false \
+  -Dtests=false -Dinstalled_tests=false
+
+# Nothing from the staged native libraries, tools, headers, or locale catalogs ships.
+"$PYTHON" "$CWD/package-typelibs.py" "$SDK" "$PKG/opt/nerdtools/lib64/girepository-1.0"
+DOC=$PKG/opt/nerdtools/doc/$PKGNAM-$VERSION
+mkdir -p "$DOC" "$PKG/install"
+for source in glib-2.90.1 gobject-introspection-1.86.0 atk-2.38.0 gdk-pixbuf-2.44.8 harfbuzz-14.6.0 pango-1.58.2 gtk-3.24.52; do
+  mkdir -p "$DOC/$source"
+  find "$WORK/src/$source" -maxdepth 1 -type f \
+    \( -name 'COPYING*' -o -name 'LICENSE*' -o -name 'AUTHORS*' -o -name 'README*' -o -name NEWS \) \
+    -exec cp -a {} "$DOC/$source/" \;
+done
+cp -a "$CWD/slack-desc" "$PKG/install/slack-desc"
+cd "$PKG"
+/sbin/makepkg -l n -c n "$OUTPUT/$PKGNAM-$VERSION-$ARCH-$BUILD.txz"

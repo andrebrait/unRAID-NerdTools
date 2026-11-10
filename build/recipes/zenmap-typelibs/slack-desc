@@ -1,0 +1,11 @@
+zenmap-typelibs: zenmap-typelibs (source-built GTK3 introspection metadata)
+zenmap-typelibs:
+zenmap-typelibs: GI metadata matching the native GUI libraries in Unraid 7.3.4.
+zenmap-typelibs: Includes GLib, ATK, GdkPixbuf, HarfBuzz, Pango and GTK3 typelibs.
+zenmap-typelibs: The native libraries remain supplied by Unraid, not this package.
+zenmap-typelibs:
+zenmap-typelibs: Set GI_TYPELIB_PATH=/opt/nerdtools/lib64/girepository-1.0.
+zenmap-typelibs: Zenmap also needs private Python, PyGObject and a GUI session.
+zenmap-typelibs:
+zenmap-typelibs: https://www.gtk.org/
+zenmap-typelibs:

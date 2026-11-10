@@ -1,0 +1,11 @@
+pycairo: pycairo (Python bindings for Cairo)
+pycairo:
+pycairo: Source-built Cairo bindings for the private NerdTools Python 3.
+pycairo: Includes image, PDF, PostScript, SVG, Xlib and XCB surface support
+pycairo: provided by Unraid's native Cairo library, plus the extension C API.
+pycairo:
+pycairo: Homepage: https://pycairo.readthedocs.io/
+pycairo:
+pycairo:
+pycairo:
+pycairo:

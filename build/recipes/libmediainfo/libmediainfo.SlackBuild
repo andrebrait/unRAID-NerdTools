@@ -93,6 +93,8 @@ sed -i 's|unsigned int|size_t|' Source/MediaInfo/Export/Export_Graph*
 
 cd Project/GNU/Library
 ./autogen.sh
+# Upstream's curl-config fallback can silently omit -lcurl when its .pc dependencies are missing.
+pkg-config --exists --print-errors libcurl
 
 CFLAGS="$SLKCFLAGS -std=gnu17" \
 CXXFLAGS="$SLKCFLAGS" \

@@ -72,6 +72,8 @@ for archive in root.glob('*.zip'):
                 destination.write_bytes(source.read(member))
 PY
 cp "$CWD/$PRGNAM.SlackBuild" "$DOC/"
+# cp --parents preserves upstream directory modes, including group-write bits.
+find "$DOC" -type d -exec chmod 0755 {} +
 mkdir -p "$PKG/install"
 cp "$CWD/slack-desc" "$PKG/install/slack-desc"
 cd "$PKG"

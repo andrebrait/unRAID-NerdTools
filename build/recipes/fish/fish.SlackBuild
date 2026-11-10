@@ -209,6 +209,7 @@ cp -a "$RUSTDOC"/COPYRIGHT* "$RUSTDOC"/LICENSE* "$RUSTDOC"/licenses \
   "$PKG/opt/nerdtools/doc/$PRGNAM-$VERSION/licenses/rust-runtime/"
 find "$PKG/opt/nerdtools/doc/$PRGNAM-$VERSION/licenses" -type d -exec chmod 0755 {} +
 find "$PKG/opt/nerdtools/doc/$PRGNAM-$VERSION/licenses" -type f -exec chmod 0644 {} +
+chown -R root:root "$PKG"
 
 mkdir -p $PKG/install
 cat $CWD/slack-desc > $PKG/install/slack-desc

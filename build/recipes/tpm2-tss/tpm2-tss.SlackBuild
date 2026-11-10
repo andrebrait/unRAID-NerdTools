@@ -18,7 +18,7 @@ mkdir -p "$TMP" "$OUTPUT" "$PKG/opt/nerdtools/include/tss2" \
 tar xf "$CWD/$PKGNAM-$VERSION.tar.gz" -C "$TMP"
 cd "$TMP/$PKGNAM-$VERSION"
 install -m 644 include/tss2/*.h "$PKG/opt/nerdtools/include/tss2/"
-cp -a LICENSE README.md CHANGELOG.md "$PKG/opt/nerdtools/doc/$PKGNAM-$VERSION/"
+install -m 644 LICENSE README.md CHANGELOG.md "$PKG/opt/nerdtools/doc/$PKGNAM-$VERSION/"
 cat "$CWD/slack-desc" > "$PKG/install/slack-desc"
 cd "$PKG"
 /sbin/makepkg -l n -c n "$OUTPUT/$PKGNAM-$VERSION-$ARCH-$BUILD.txz"

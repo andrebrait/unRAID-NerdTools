@@ -1,0 +1,11 @@
+pygobject3: pygobject3 (Python GObject Introspection bindings)
+pygobject3:
+pygobject3: Source-built bindings for the private NerdTools Python 3.
+pygobject3: Uses Unraid's native GLib/GIRepository and Cairo libraries.
+pygobject3: Includes Cairo integration and the upstream GTK/Gdk overrides.
+pygobject3: GUI namespace metadata is supplied by zenmap-typelibs.
+pygobject3:
+pygobject3: Homepage: https://pygobject.gnome.org/
+pygobject3:
+pygobject3:
+pygobject3:

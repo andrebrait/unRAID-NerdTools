@@ -1,0 +1,44 @@
+#!/bin/bash
+set -euo pipefail
+
+# Meson options are defined in the pinned PyCairo 1.29.2 source archive.
+cd "$(dirname "$0")"; CWD=$PWD
+PKGNAM=pycairo
+VERSION=1.29.2
+ARCH=${ARCH:-x86_64}
+BUILD=${BUILD:-1}
+TMP=${TMP:-/tmp}
+OUTPUT=${OUTPUT:-/out}
+PKG=$TMP/package-$PKGNAM
+PYTHON=/opt/nerdtools/bin/python3
+export PKG_CONFIG_PATH=/opt/nerdtools/lib64/pkgconfig:/opt/nerdtools/lib/pkgconfig:/opt/nerdtools/share/pkgconfig
+unset PYTHONHOME PYTHONPATH
+SITEPK=$($PYTHON -c 'import sysconfig; print(sysconfig.get_path("platlib"))')
+case "$SITEPK" in /opt/nerdtools/*) ;; *) echo "Python site-packages escaped private prefix" >&2; exit 1 ;; esac
+
+rm -rf "$PKG" "$TMP/$PKGNAM-$VERSION"
+mkdir -p "$TMP" "$PKG" "$OUTPUT"
+tar xf "$CWD/$PKGNAM-$VERSION.tar.gz" -C "$TMP"
+cd "$TMP/$PKGNAM-$VERSION"
+chown -R root:root .
+chmod -R a-st,u+rwX,go-w+rX .
+# Run Meson with its system Python, but compile/install for the private Python.
+/usr/bin/python3 /usr/bin/meson setup build \
+  --prefix=/opt/nerdtools --libdir=lib64 --buildtype=release \
+  --wrap-mode=nofallback \
+  -Dpython="$PYTHON" -Dpython.purelibdir="$SITEPK" -Dpython.platlibdir="$SITEPK" \
+  -Dtests=false -Dwheel=false -Dno-x11=false
+/usr/bin/python3 /usr/bin/meson compile -C build
+/usr/bin/python3 /usr/bin/meson install -C build --no-rebuild --destdir="$PKG"
+test -f "$PKG$SITEPK/cairo/__init__.py"
+test -f "$PKG$SITEPK/cairo/include/py3cairo.h"
+test -n "$(find "$PKG$SITEPK/cairo" -name '_cairo*.so' -print -quit)"
+find "$PKG$SITEPK/cairo" -type f -name '*.so' -exec strip --strip-unneeded {} +
+
+DOC=$PKG/opt/nerdtools/doc/$PKGNAM-$VERSION
+mkdir -p "$DOC" "$PKG/install"
+cp -a COPYING COPYING-LGPL-2.1 COPYING-MPL-1.1 README.rst NEWS docs examples "$DOC/"
+cp -a "$CWD/$PKGNAM.SlackBuild" "$DOC/"
+cat "$CWD/slack-desc" > "$PKG/install/slack-desc"
+cd "$PKG"
+/sbin/makepkg -l n -c n "$OUTPUT/$PKGNAM-$VERSION-$ARCH-$BUILD.txz"

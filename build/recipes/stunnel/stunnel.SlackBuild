@@ -97,14 +97,6 @@ CFLAGS="$SLKCFLAGS" \
 
 make $NUMJOBS || exit 1
 
-# This used to be installed in /opt/nerdtools/sbin, so it would probably be nice to
-# link from there:
-mkdir -p $PKG/opt/nerdtools/sbin
-( cd $PKG/opt/nerdtools/sbin
-  ln -sf ../bin/stunnel .
-  ln -sf ../bin/stunnel3 .
-)
-
 mkdir -p $PKG/opt/nerdtools/var/run/stunnel
 # This will produce a useless key.
 make install DESTDIR=$PKG || exit 1

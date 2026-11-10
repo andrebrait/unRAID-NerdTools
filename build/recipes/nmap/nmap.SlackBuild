@@ -27,6 +27,8 @@ cd $(dirname $0) ; CWD=$(pwd)
 export PKG_CONFIG_PATH=/opt/nerdtools/lib64/pkgconfig:/opt/nerdtools/lib/pkgconfig:/opt/nerdtools/share/pkgconfig
 export CPPFLAGS="-I/opt/nerdtools/include ${CPPFLAGS:-}"
 export LDFLAGS="-L/opt/nerdtools/lib64 -L/opt/nerdtools/lib ${LDFLAGS:-}"
+# Keep build frontends separate from the private Python runtime.
+export PYTHONPATH=/usr/lib64/python3.12/site-packages:/usr/lib/python3.12/site-packages
 mkdir -p "${OUTPUT:-/out}"
 
 
@@ -99,6 +101,7 @@ sed -e '/strlcat/d' -i libdnet-stripped/acconfig.h
 # --without-nmap-update is needed below to avoid depending on apr and subversion libraries.
 # It's not worth the feature IMHO.
 CFLAGS="$SLKCFLAGS" \
+PYTHON=/opt/nerdtools/bin/python3 \
 ./configure \
   --prefix=/opt/nerdtools \
   --libdir=/opt/nerdtools/lib${LIBDIRSUFFIX} \

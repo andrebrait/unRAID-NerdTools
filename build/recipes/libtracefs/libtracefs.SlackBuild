@@ -18,6 +18,8 @@ rm -rf "$PKG" "$TMP/$PKGNAM-$VERSION"
 mkdir -p "$TMP" "$PKG" "$OUTPUT"
 tar xf "$CWD/$PKGNAM-$VERSION.tar.lz" -C "$TMP"
 cd "$TMP/$PKGNAM-$VERSION"
+chown -R root:root .
+chmod -R a-st,u+rwX,go-w+rX .
 make ${NUMJOBS:--j$(nproc)} CFLAGS="$CFLAGS" prefix=/opt/nerdtools libdir_relative=lib64 \
   pkgconfig_dir=/opt/nerdtools/lib64/pkgconfig DESTDIR="$PKG" V=1 install
 rm "$PKG/opt/nerdtools/lib64/libtracefs.a"

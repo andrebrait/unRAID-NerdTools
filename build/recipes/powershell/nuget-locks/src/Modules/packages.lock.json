@@ -41,6 +41,7 @@
         "resolved": "2.4.5",
         "contentHash": "AD+lzY2NvQpuLUF9+/FXuI9sCuTzBX5OTSB09AmcMJ00nq1xKdcsH6ZKDRwwVclKhfOBvTpbgXLybA3e5tBx8w=="
       }
-    }
+    },
+    "net10.0/linux-x64": {}
   }
 }
