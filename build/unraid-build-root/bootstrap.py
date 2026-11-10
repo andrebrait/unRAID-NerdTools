@@ -203,7 +203,7 @@ def prepare_toolchain(root, cache, lock):
                 script = tar.extractfile("install/doinst.sh").read().decode()
             except KeyError:
                 script = ""
-        run(["tar", "--extract", "--file", archive, "--directory", root, "--skip-old-files", "--no-overwrite-dir", "--exclude=install"])
+        run(["tar", "--extract", "--file", archive, "--directory", root, "--skip-old-files", "--exclude=install"])
         restore_toolchain_links(script, root)
     for executable in ("usr/bin/gcc", "usr/bin/g++", "usr/bin/make", "usr/include/stdio.h"):
         if not (root / executable).exists():

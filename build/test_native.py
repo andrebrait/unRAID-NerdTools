@@ -4,7 +4,9 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
+import shutil
 import subprocess
 import tarfile
 import tempfile
@@ -25,6 +27,41 @@ class NativeBuildTests(unittest.TestCase):
             (cache / expected).write_bytes(b"modified")
             with self.assertRaisesRegex(ValueError, "SHA256"):
                 rootfs.fetch({"url": "https://example.com/source.tar.gz", "file": "source.tar.gz", "sha256": expected}, cache)
+
+    def test_toolchain_extraction_preserves_existing_files_and_directory_modes(self):
+        tar_bin = shutil.which("gtar") or shutil.which("tar")
+        self.assertIsNotNone(tar_bin)
+        self.assertIn("GNU tar", subprocess.run([tar_bin, "--version"], capture_output=True, text=True, check=True).stdout)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = root / "target"
+            cache = root / "cache"
+            tools = root / "tools"
+            for path in (target / "etc", target / "usr/bin", target / "usr/include", cache, tools):
+                path.mkdir(parents=True, exist_ok=True)
+            (target / "etc").chmod(0o755)
+            (target / "etc/config").write_text("existing")
+            for path in ("usr/bin/gcc", "usr/bin/g++", "usr/bin/make", "usr/include/stdio.h"):
+                (target / path).touch()
+            (tools / "tar").symlink_to(tar_bin)
+            archive = root / "toolchain.txz"
+            with tarfile.open(archive, "w:xz") as tar:
+                directory = tarfile.TarInfo("etc")
+                directory.type, directory.mode = tarfile.DIRTYPE, 0o777
+                tar.addfile(directory)
+                for name, data in (("etc/config", b"replacement"), ("etc/new", b"new")):
+                    entry = tarfile.TarInfo(name)
+                    entry.size = len(data)
+                    tar.addfile(entry, io.BytesIO(data))
+            pin = hashlib.sha256(archive.read_bytes()).hexdigest()
+            shutil.copyfile(archive, cache / pin)
+            lock = root / "toolchain.json"
+            lock.write_text(json.dumps([{"name": "tool", "url": "https://example.com/tool.txz", "file": "tool.txz", "sha256": pin}]))
+            with patch.dict(os.environ, {"PATH": str(tools) + os.pathsep + os.environ["PATH"]}):
+                rootfs.prepare_toolchain(target, cache, lock)
+            self.assertEqual((target / "etc/config").read_text(), "existing")
+            self.assertEqual((target / "etc/new").read_text(), "new")
+            self.assertEqual((target / "etc").stat().st_mode & 0o777, 0o755)
 
     def test_dependency_order_is_topological_and_rejects_cycles(self):
         packages = [{"name": "app", "dependencies": ["lib"], "build_dependencies": []}, {"name": "lib", "dependencies": [], "build_dependencies": []}]
