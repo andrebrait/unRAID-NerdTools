@@ -7,7 +7,7 @@ on:
       - build/**
       - .github/workflows/build-packages.yml
   push:
-    branches: [master, main, implement-maintenance]
+    branches: [master, main]
     paths:
       - build/**
       - .github/workflows/build-packages.yml
