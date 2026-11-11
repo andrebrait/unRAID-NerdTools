@@ -861,7 +861,7 @@
   },
   "pinentry/pinentry.SlackBuild": {
     "executable": true,
-    "sha256": "7692bb397bc8ab7c3ecac00dc52cead1a8e585d9693a61c35f2fb1521e275658",
+    "sha256": "c688420706ade98a2875b6aa8ff7b23fb2e34bd34a2083a7f1a8973a69bff973",
     "type": "file"
   },
   "pinentry/slack-desc": {
@@ -1005,7 +1005,7 @@
   },
   "powershell/powershell.SlackBuild": {
     "executable": true,
-    "sha256": "7bb539451e26ffa92bd7a28228270cc00b1538a88c15c71e366e5c61d2874cd7",
+    "sha256": "df8982eb476a5374c44452b1fa3e29df74d3710abad6c4f795b5abad9fdc9be4",
     "type": "file"
   },
   "powershell/slack-desc": {

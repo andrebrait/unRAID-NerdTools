@@ -114,6 +114,7 @@ CXXFLAGS="$SLKCFLAGS -std=c++17" \
   --disable-pinentry-gtk2 \
   --disable-pinentry-qt \
   --enable-pinentry-tty \
+  --disable-libsecret \
   --build=$ARCH-slackware-linux$ARCHQUADLET \
   --host=$ARCH-slackware-linux$ARCHQUADLET || exit 1
 

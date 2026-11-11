@@ -85,6 +85,8 @@ export NERDTOOLS_PS_OUTPUT="$PKG/opt/nerdtools/libexec/powershell"
 dotnet "$WORK/bootstrap/pwsh.dll" -NoLogo -NoProfile -NonInteractive -Command \
   '$ErrorActionPreference = "Stop"; Import-Module ./build.psm1 -ArgumentList $true; Start-PSBuild -Runtime linux-x64 -Configuration Release -ReleaseTag v7.6.9 -Output $env:NERDTOOLS_PS_OUTPUT'
 test -x "$PKG/opt/nerdtools/libexec/powershell/pwsh"
+# Optional LTTng trace provider; Unraid has no liblttng-ust, and .NET runs without it.
+rm -f "$PKG/opt/nerdtools/libexec/powershell/libcoreclrtraceptprovider.so"
 mkdir -p "$PKG/opt/nerdtools/bin"
 ln -s ../libexec/powershell/pwsh "$PKG/opt/nerdtools/bin/pwsh"
 DOC="$PKG/opt/nerdtools/doc/$PRGNAM-$VERSION"
