@@ -219,9 +219,15 @@ class NativeBuildTests(unittest.TestCase):
             asset.write_bytes(b"abc")
             record = native.asset_record({"name": "example", "version": "1.0", "dependencies": ["libexample"]}, asset)
             self.assertEqual(record, {"name": "nerdtools-example", "tool": "example", "version": "1.0", "file": asset.name, "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", "size": 3, "dependencies": ["nerdtools-libexample"]})
-            manifest = native.catalog([record])
+            manifest = native.catalog([record], "7.3.5")
             self.assertEqual(manifest["family"], "7.3")
             self.assertEqual(manifest["min_unraid"], "7.3.4")
+            # A later family starts at the first version that passed the gates, prereleases included.
+            later = native.catalog([record], "7.4.0-rc.2")
+            self.assertEqual((later["family"], later["min_unraid"]), ("7.4", "7.4.0-rc.2"))
+            versions = ["7.4.0", "7.4.0-rc.10", "7.3.10", "7.4.0-beta.2", "7.4.0-rc.2", "7.3.4"]
+            self.assertEqual(sorted(versions, key=native.version_key),
+                             ["7.3.4", "7.3.10", "7.4.0-beta.2", "7.4.0-rc.2", "7.4.0-rc.10", "7.4.0"])
             self.assertEqual(manifest["external_packages"][0]["name"], "rar")
             self.assertNotIn("file", manifest["external_packages"][0])
 

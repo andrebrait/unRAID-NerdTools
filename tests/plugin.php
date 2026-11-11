@@ -17,6 +17,11 @@ check($provided['provided_packages'][0]['name'] === 'liburing' && !isset($provid
 $providedCatalog['provided_packages'][0]['file'] = 'fake.txz';
 rejects(function() use ($providedCatalog,$asset) { nt_validate_catalog($providedCatalog,[$asset],'7.3.4'); });
 rejects(function() use ($catalog,$asset) { nt_validate_catalog($catalog,[$asset],'7.4.0'); });
+// A later family is served from the first verified prerelease onward, never earlier or across families.
+$next = array_merge($catalog, ['family'=>'7.4','min_unraid'=>'7.4.0-rc.2']);
+foreach (['7.4.0-rc.2','7.4.0-rc.3','7.4.0','7.4.1'] as $running) nt_validate_catalog($next,[$asset],$running);
+foreach (['7.4.0-rc.1','7.4.0-beta.5','7.3.4','7.5.0','7.4.0-foo'] as $running)
+    rejects(function() use ($next,$asset,$running) { nt_validate_catalog($next,[$asset],$running); });
 rejects(function() use ($catalog,$asset) { nt_validate_catalog($catalog,[$asset],'7.3.3'); });
 rejects(function() use ($catalog) { nt_validate_catalog($catalog,[],'7.3.4'); });
 $bad = $catalog; $bad['packages'][0]['file'] = '../tool.txz';

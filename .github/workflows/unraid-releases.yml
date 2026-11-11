@@ -92,7 +92,7 @@ jobs:
                     unraid_sha256: release.sha256,
                     unraid_url: release.url,
                     channel: release.channel,
-                    publish: 'false',
+                    publish: 'true',
                   },
                 });
               } catch (error) {
@@ -102,7 +102,7 @@ jobs:
               }
               check.status = 'dispatched';
               fs.writeFileSync('unraid-releases.json', JSON.stringify(report, null, 2) + '\n');
-              core.notice(`Dispatched compatibility build/tests for ${release.channel} ${release.version}; result is pending, not verified.`);
+              core.notice(`Dispatched build, compatibility tests and publication for ${release.channel} ${release.version}; result is pending, not verified.`);
             }
             await core.summary
               .addHeading('Unraid release discovery')

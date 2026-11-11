@@ -170,15 +170,15 @@ jobs:
         with:
           name: native-packages-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            dist/compatibility-7.3.json
-            dist/provenance-7.3.json
-            dist/kernel-smoke-7.3.log
+            dist/compatibility-*.json
+            dist/provenance-*.json
+            dist/kernel-smoke-*.log
           if-no-files-found: error
           retention-days: 90
       # Neither the proprietary Unraid ZIP nor any extracted rootfs is uploaded or cached.
 
   publish:
-    if: github.event_name == 'workflow_dispatch' && inputs.publish && inputs.channel == 'stable'
+    if: github.event_name == 'workflow_dispatch' && inputs.publish
     needs: build
     runs-on: ubuntu-24.04
     permissions:
@@ -190,19 +190,26 @@ jobs:
           name: native-packages-${{ github.run_id }}-${{ github.run_attempt }}
           path: dist
       - name: Require successful kernel, ABI and smoke acceptance evidence
+        id: evidence
+        env:
+          TARGET_VERSION: ${{ inputs.unraid_version }}
         run: |
           python3 - <<'PY'
-          import json
+          import json, os
           from pathlib import Path
           root = Path('dist')
-          report = json.loads((root / 'compatibility-7.3.json').read_text())
-          catalog = json.loads((root / 'catalog-7.3.json').read_text())
+          target = os.environ['TARGET_VERSION']
+          family = '.'.join(target.split('.')[:2])
+          report = json.loads((root / f'compatibility-{family}.json').read_text())
+          catalog = json.loads((root / f'catalog-{family}.json').read_text())
           assert report['status'] == 'passed' and report['publish_requested'] is True
-          assert report['channel'] == 'stable' and report['target_version'].startswith('7.3.')
+          assert report['target_version'] == target and catalog['family'] == family
           assert report['target_kernel'] and report['elf_files_checked'] > 0
           assert report['packages_checked'] == len(catalog['packages']) >= 73
           assert report['provided_tools_checked'] == len(catalog['provided_packages'])
           assert report['native_tools_checked'] + report['provided_tools_checked'] == 74
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'family={family}\n')
           PY
           (cd dist && sha256sum --check SHA256SUMS)
       - name: Publish immutable assets without changing the plugin's latest release
@@ -210,8 +217,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_SHA: ${{ github.sha }}
-          RELEASE_TAG: packages-7.3-${{ github.run_id }}-${{ github.run_attempt }}
+          RELEASE_TAG: packages-${{ steps.evidence.outputs.family }}-${{ github.run_id }}-${{ github.run_attempt }}
+          TARGET_VERSION: ${{ inputs.unraid_version }}
         run: |
           gh release create "$RELEASE_TAG" dist/* --target "$RELEASE_SHA" --latest=false \
-            --title "Native NerdTools 7.3 — $RELEASE_TAG" \
-            --notes 'Built from checked public recipes and SHA256-pinned inputs against Unraid 7.3.4. Corresponding source inputs and exact adapted scripts are retained in sources-7.3.tar.xz; see provenance, SHA256SUMS and the target-kernel acceptance report. RAR is external, never redistributed. Older releases and assets are retained.'
+            --title "Native NerdTools for Unraid $TARGET_VERSION — $RELEASE_TAG" \
+            --notes "Built from checked public recipes and SHA256-pinned inputs against the Unraid 7.3.4 baseline, then installed, audited and smoke-tested on Unraid $TARGET_VERSION. Corresponding source inputs and exact adapted scripts are retained in the sources archive; see provenance, SHA256SUMS and the target-kernel acceptance report. RAR is external, never redistributed. Older releases and assets are retained."

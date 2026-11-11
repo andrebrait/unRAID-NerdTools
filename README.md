@@ -2,7 +2,7 @@
 
 This fork maintains the NerdTools plugin originally developed by UnRAIDES. It installs native packages and does not require Docker at runtime.
 
-The supported baseline is Unraid 7.3.4 in the 7.3 family. Package catalogs and binaries are published as GitHub Release assets. Historical releases are retained for rollback.
+The supported baseline is Unraid 7.3.4. Later releases, including public betas and release candidates, are tested automatically as they appear and receive packages once they pass. Package catalogs and binaries are published as GitHub Release assets. Historical releases are retained for rollback.
 
 NerdTools checks for catalog updates daily by default. The interval is configurable, automatic checks can be disabled, and failed checks are retried hourly. Existing verified packages and the last successful catalog are retained if GitHub is unavailable. Checks do not install updates automatically.
 

@@ -8,9 +8,11 @@ const NT_BLUEZ_HID2HCI_SHA256 = '8d4ed90eae12d0c0cac3c65c1960fb90c3f3fde264696bb
 // Immutable Slackware source/ap/screen/screen.pam at 8dbbc18b2042228d0189b2ddf267c1028c860f61; requires pam_securetty and host system-auth.
 const NT_SCREEN_PAM_SHA256 = '4e631aaf91babb312ec39a09d6cfd6e0a57d8ac5a48eb58a9bade25af3a937aa';
 
+// Stable releases, betas and release candidates; a family is usable only once a catalog was published for it.
 function nt_supported($version) {
-    return is_string($version) && preg_match('/^7\.3\.\d+$/D', $version) && version_compare($version, NT_MIN_UNRAID, '>=');
+    return is_string($version) && preg_match('/^\d+\.\d+\.\d+(-(beta|rc)\.?\d+)?$/D', $version) && version_compare($version, NT_MIN_UNRAID, '>=');
 }
+function nt_family($version) { return implode('.', array_slice(explode('.', $version), 0, 2)); }
 function nt_atomic_write($path, $contents) {
     if (is_link($path) || is_link(dirname($path))) throw new RuntimeException('Refusing linked state path');
     $tmp = tempnam(dirname($path), '.nerdtools-');
@@ -49,7 +51,7 @@ function nt_resolve($selected, $packages) {
     return $result;
 }
 function nt_validate_catalog($catalog, $assets, $version) {
-    if (!nt_supported($version) || !is_array($catalog) || ($catalog['family'] ?? null) !== '7.3'
+    if (!nt_supported($version) || !is_array($catalog) || ($catalog['family'] ?? null) !== nt_family($version)
         || !nt_supported($catalog['min_unraid'] ?? null) || version_compare($version, $catalog['min_unraid'], '<')
         || !isset($catalog['packages']) || !is_array($catalog['packages']) || !array_is_list($catalog['packages'])) {
         throw new RuntimeException('Catalog is not compatible with this Unraid version');
@@ -204,7 +206,7 @@ class NerdTools {
         $this->path = $this->root.'/boot/config/plugins/NerdTools';
         $ini = @parse_ini_file($this->root.'/etc/unraid-version', false, INI_SCANNER_RAW);
         $this->version = $ini['version'] ?? '';
-        if (!nt_supported($this->version)) throw new RuntimeException('NerdTools requires stable Unraid 7.3.4+ in the 7.3 family; unknown versions are not supported');
+        if (!nt_supported($this->version)) throw new RuntimeException('NerdTools requires Unraid 7.3.4 or later; unknown versions are not supported');
         foreach ([$this->path, $this->path.'/packages'] as $directory) {
             if (is_link($directory) || (!is_dir($directory) && !mkdir($directory, 0755, true))) {
                 throw new RuntimeException('Cannot create safe NerdTools state directory');
@@ -261,7 +263,7 @@ class NerdTools {
                     if (!is_array($candidate) || !empty($candidate['draft']) || !empty($candidate['prerelease'])
                         || !is_string($candidate['tag_name'] ?? null)) continue;
                     foreach (($candidate['assets'] ?? []) as $asset) {
-                        if (($asset['name'] ?? '') !== 'catalog-7.3.json') continue;
+                        if (($asset['name'] ?? '') !== 'catalog-'.nt_family($this->version).'.json') continue;
                         $choices[] = $candidate['tag_name'];
                         if ($release || ($selector !== 'latest' && $candidate['tag_name'] !== $selector)) break;
                         if (!nt_asset_url($asset['browser_download_url'] ?? null)) throw new RuntimeException('Invalid catalog asset URL');

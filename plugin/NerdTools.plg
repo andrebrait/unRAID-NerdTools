@@ -16,7 +16,7 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" min="7.3.4">
 <CHANGES>
 ## NerdTools
-- Native Unraid 7.3.4+ support; unknown OS families are rejected.
+- Native Unraid 7.3.4+ support, including betas and release candidates once verified packages are published for them.
 - Package catalogs and verified binaries come from retained GitHub Releases.
 - SHA256 verification, atomic last-good cache, dependency-aware installation and owned-package removal.
 - Configurable catalog checks (daily by default), hourly failure retries and GitHub rate-limit backoff.
@@ -28,8 +28,8 @@
 <?php
 $version = @parse_ini_file('/etc/unraid-version', false, INI_SCANNER_RAW);
 $version = $version['version'] ?? '';
-if (!preg_match('/^7\.3\.\d+$/D', $version) || version_compare($version, '7.3.4', '<')) {
-    fwrite(STDERR, "NerdTools requires stable Unraid 7.3.4+ in the 7.3 family. Unknown versions are not supported.\n");
+if (!preg_match('/^\d+\.\d+\.\d+(-(beta|rc)\.?\d+)?$/D', $version) || version_compare($version, '7.3.4', '<')) {
+    fwrite(STDERR, "NerdTools requires Unraid 7.3.4 or later. Unknown versions are not supported.\n");
     exit(1);
 }
 ?>

@@ -408,7 +408,7 @@ def kernel_report(log, token, commands):
     return identities[0]
 
 
-def kernel_smoke(root, kernel, packages, work, output):
+def kernel_smoke(root, kernel, packages, work, log_path):
     token = secrets.token_hex(32)
     commands = [command for package in packages if package.get("catalog", True) for command in package["smoke"]]
     script = ["#!/bin/bash", "set -euo pipefail", "umask 077",
@@ -474,10 +474,10 @@ def kernel_smoke(root, kernel, packages, work, output):
         log = error.stdout or b""
         if isinstance(log, bytes):
             log = log.decode(errors="replace")
-        (output / "kernel-smoke-7.3.log").write_text(log)
+        log_path.write_text(log)
         print(log, flush=True)
         raise
-    (output / "kernel-smoke-7.3.log").write_text(result.stdout)
+    log_path.write_text(result.stdout)
     print(result.stdout, flush=True)
     if result.returncode:
         raise ValueError(f"Target QEMU boot failed with exit status {result.returncode}")
@@ -494,8 +494,22 @@ def asset_record(package, asset):
     return record
 
 
-def catalog(records):
-    return {"schema": 1, "min_unraid": BASELINE["version"], "family": BASELINE["family"],
+def family(version):
+    return ".".join(version.split(".")[:2])
+
+
+def version_key(version):
+    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:-(beta|rc)\.?(\d+))?", version)
+    if not match:
+        raise ValueError(f"Unsupported Unraid version format: {version}")
+    return (*map(int, match.group(1, 2, 3)), {"beta": 0, "rc": 1, None: 2}[match.group(4)], int(match.group(5) or 0))
+
+
+def catalog(records, target):
+    # One package set is built on the oldest baseline. A later family is offered from the first
+    # version, prereleases included, that actually passed the gates.
+    first = BASELINE["version"] if family(target) == BASELINE["family"] else target
+    return {"schema": 1, "min_unraid": first, "family": family(target),
             "packages": records, "external_packages": BASELINE["external_packages"],
             "provided_packages": BASELINE["provided_packages"]}
 
@@ -509,7 +523,7 @@ def package_commands(archive):
                       and checked_path(member.name).name.startswith("nerdtools-"))
 
 
-def source_bundle(packages, cache, output, work):
+def source_bundle(packages, cache, destination, work):
     with tempfile.TemporaryDirectory(prefix="corresponding-sources-", dir=work) as temporary:
         staging = Path(temporary)
         shutil.copytree(REPO / "build", staging / "build", symlinks=True,
@@ -526,7 +540,7 @@ def source_bundle(packages, cache, output, work):
             directory.mkdir(parents=True)
             for item in package["inputs"]:
                 shutil.copyfile(fetch(item, cache), directory / item["file"])
-        canonical_tar(staging, output / "sources-7.3.tar.xz")
+        canonical_tar(staging, destination)
 
 
 def seed_sources(packages, bundle, cache):
@@ -670,7 +684,7 @@ def build_one(args):
         for name in runtime:
             install_payload(built[name][1], target)
         audit_runtime(target)
-        kernel_smoke(target, kernel, list(runtime.values()), work, work)
+        kernel_smoke(target, kernel, list(runtime.values()), work, work / "kernel-smoke.log")
     print(f"Built and smoke-tested {args.package} with its runtime closure; no full-catalog compatibility or publication claim.")
 
 
@@ -690,8 +704,9 @@ def build(args):
     if os.geteuid() != 0 or sys.platform != "linux" or os.uname().machine != "x86_64":
         raise ValueError("Builds require a disposable Linux x86_64 CI runner, running as root")
     validate_target(args.unraid_version, args.unraid_url, args.unraid_sha256)
-    if args.publish and (args.channel != "stable" or not args.unraid_version.startswith(BASELINE["family"] + ".") or "-" in args.unraid_version):
-        raise ValueError("Only stable 7.3-family compatibility passes can publish catalog-7.3.json")
+    if args.publish and version_key(args.unraid_version) < version_key(BASELINE["version"]):
+        raise ValueError("Targets older than the build baseline cannot be published")
+    fam = family(args.unraid_version)
     packages = load_packages()
     blockers = publication_blockers(packages)
     if args.publish and blockers:
@@ -751,13 +766,13 @@ def build(args):
             if package.get("catalog", True):
                 install_payload(built[package["name"]][1], target)
         checked = audit_runtime(target)
-        actual_kernel = kernel_smoke(target, kernel, packages, work, output)
+        actual_kernel = kernel_smoke(target, kernel, packages, work, output / f"kernel-smoke-{fam}.log")
         if args.publish:
-            source_bundle(packages, cache, output, work)
+            source_bundle(packages, cache, output / f"sources-{fam}.tar.xz", work)
         provenance = {"repository": os.environ.get("GITHUB_REPOSITORY", "local"), "commit": os.environ.get("GITHUB_SHA", "local"),
                       "baseline": BASELINE, "packages": packages,
                       "toolchain": json.loads((REPO / "build/locks/toolchain.json").read_text())}
-        (output / "provenance-7.3.json").write_text(json.dumps(provenance, indent=2) + "\n")
+        (output / f"provenance-{fam}.json").write_text(json.dumps(provenance, indent=2) + "\n")
         report = {"status": "passed", "target_version": args.unraid_version, "target_sha256": args.unraid_sha256,
                   "channel": args.channel, "baseline": BASELINE["version"], "elf_files_checked": checked,
                   "packages_checked": len(records), "publish_requested": args.publish,
@@ -766,8 +781,8 @@ def build(args):
                   "target_kernel": actual_kernel,
                   "publication_blockers": blockers,
                   "scope": "Userspace ELF dependency/version audit and declared nonmutating smoke commands run as root, as on Unraid, booted under the exact target kernel in a VM without disks, NIC or host mounts. No physical hardware or daemon integration certification."}
-        (output / "compatibility-7.3.json").write_text(json.dumps(report, indent=2) + "\n")
-        (output / "catalog-7.3.json").write_text(json.dumps(catalog(records), indent=2) + "\n")
+        (output / f"compatibility-{fam}.json").write_text(json.dumps(report, indent=2) + "\n")
+        (output / f"catalog-{fam}.json").write_text(json.dumps(catalog(records, args.unraid_version), indent=2) + "\n")
         lines = [f"{digest(path)}  {path.name}" for path in sorted(output.iterdir()) if path.is_file()]
         (output / "SHA256SUMS").write_text("\n".join(lines) + "\n")
         asset_limits(output)
