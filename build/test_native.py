@@ -150,16 +150,6 @@ class NativeBuildTests(unittest.TestCase):
         with patch.dict(native.BUILDS, {"changed": 3}):
             self.assertEqual(native.artifact_name(packages[1]), "nerdtools-changed-1.0-x86_64-3_NT73.txz")
 
-    def test_changed_packages_wait_only_for_their_changed_dependencies(self):
-        pkg = lambda name, deps=(), build=(), catalog=True: {"name": name, "dependencies": list(deps), "build_dependencies": list(build), "catalog": catalog}
-        packages = [pkg("python3"), pkg("lua"), pkg("helper", ["python3"], catalog=False), pkg("vim", ["lua", "python3"]),
-                    pkg("tool", build=["helper"]), pkg("app", ["vim"]), pkg("bc")]
-        # python3 changed: vim and tool (through the build-only helper) wait for it; lua and bc do not.
-        self.assertEqual(native.build_waves(packages, ["python3", "vim", "tool", "app", "bc"]),
-                         [["bc", "python3"], ["tool", "vim"], ["app"], []])
-        # Only vim changed: its unchanged dependencies come from the previous release, so no waiting.
-        self.assertEqual(native.build_waves(packages, ["vim"]), [["vim"], [], [], []])
-
     def test_build_identity_follows_recipe_inputs_and_dependencies_but_not_smoke_commands(self):
         packages = native.load_packages()
         before = native.build_keys(packages)

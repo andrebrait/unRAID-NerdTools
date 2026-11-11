@@ -179,11 +179,14 @@ class WorkflowGenerationTests(unittest.TestCase):
             lock = repo / "build/locks/slackbuilds.json"
             lock.write_text(json.dumps([package("zeta"), package("alpha")]))
             (repo / "build/locks/slackware.json").write_text("[]")
+            folder = repo / ".github/workflows"
+            folder.mkdir(parents=True)
+            (folder / "build-packages.yml").write_text("jobs:\n" + workflows.BEGIN + workflows.END + "  build:\n")
             self.assertFalse(workflows.generate(repo, check=True))
             self.assertTrue(workflows.generate(repo))
-            folder = repo / ".github/workflows"
             self.assertEqual(sorted(path.name for path in folder.iterdir()),
-                             ["package-alpha.yml", "package-zeta.yml"])
+                             ["build-packages.yml", "package-alpha.yml", "package-zeta.yml"])
+            self.assertIn("  package-alpha:\n", (folder / "build-packages.yml").read_text())
             first = {path.name: path.read_bytes() for path in folder.iterdir()}
             lock.write_text(json.dumps([package("alpha"), package("zeta")], indent=2))
             self.assertTrue(workflows.generate(repo, check=True))
@@ -196,7 +199,15 @@ class WorkflowGenerationTests(unittest.TestCase):
             (folder / "package-build.yml").write_text("reusable job")
             workflows.generate(repo)
             self.assertEqual(sorted(path.name for path in folder.iterdir()),
-                             ["package-alpha.yml", "package-build.yml"])
+                             ["build-packages.yml", "package-alpha.yml", "package-build.yml"])
+
+    def test_catalog_jobs_wait_only_for_their_own_catalog_dependencies(self):
+        pkg = lambda name, deps=(), build=(), catalog=True: {"dependencies": list(deps), "build_dependencies": list(build), "catalog": catalog}
+        packages = {"python3": pkg("python3"), "lua": pkg("lua"), "helper": pkg("helper", ["python3"], catalog=False),
+                    "vim": pkg("vim", ["lua", "python3"]), "tool": pkg("tool", build=["helper"]), "app": pkg("app", ["vim"])}
+        # The build-only helper gets no job; its dependents wait for what it needs instead.
+        self.assertEqual(workflows.catalog_dependencies(packages),
+                         {"app": ["vim"], "lua": [], "python3": [], "tool": ["python3"], "vim": ["lua", "python3"]})
 
     def test_invalid_and_duplicate_package_names_cannot_generate_workflow_paths(self):
         for packages in ([package("../escape")], [package("app"), package("app")]):

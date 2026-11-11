@@ -82,10 +82,6 @@ jobs:
       tag: ${{ steps.packages.outputs.tag }}
       builds: ${{ steps.packages.outputs.builds }}
       reuse: ${{ steps.packages.outputs.reuse }}
-      wave-1: ${{ steps.packages.outputs.wave-1 }}
-      wave-2: ${{ steps.packages.outputs.wave-2 }}
-      wave-3: ${{ steps.packages.outputs.wave-3 }}
-      wave-4: ${{ steps.packages.outputs.wave-4 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -109,83 +105,1032 @@ jobs:
           fi
           plan=$(python3 build/native.py plan --previous previous)
           jq -r '"Compiling \(.build | length), carrying over \(.reuse | length)"' <<<"$plan"
-          { echo "tag=$tag"; echo "plan=$plan"; echo "names=$(jq -c .build <<<"$plan")"; echo "builds=$(jq -c .builds <<<"$plan")"; echo "reuse=$(jq -c .reuse <<<"$plan")"; for k in 1 2 3 4; do echo "wave-$k=$(jq -c ".waves[$((k-1))]" <<<"$plan")"; done; } >> "$GITHUB_OUTPUT"
+          { echo "tag=$tag"; echo "plan=$plan"; echo "names=$(jq -c .build <<<"$plan")"; echo "builds=$(jq -c .builds <<<"$plan")"; echo "reuse=$(jq -c .reuse <<<"$plan")"; } >> "$GITHUB_OUTPUT"
 
-  # Wave 1: changed packages whose changed dependencies were built in earlier waves of this run.
-  package-1:
-    needs: package-list
-    if: needs.package-list.outputs.wave-1 != '[]'
-    strategy:
-      fail-fast: false
-      max-parallel: 20
-      matrix:
-        package: ${{ fromJSON(needs.package-list.outputs.wave-1) }}
+  # BEGIN generated package jobs (scripts/package-change-workflows.py); do not edit.
+  package-alsa-lib:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"alsa-lib"') }}
     uses: ./.github/workflows/package-build.yml
     with:
-      package: ${{ matrix.package }}
+      package: "alsa-lib"
       retain-artifact: true
       same-run-dependencies: false
       builds: ${{ needs.package-list.outputs.builds }}
       reuse: ${{ needs.package-list.outputs.reuse }}
       reuse-tag: ${{ needs.package-list.outputs.tag }}
 
-  # Wave 2: changed packages whose changed dependencies were built in earlier waves of this run.
-  package-2:
-    needs: [package-list, package-1]
-    if: always() && needs.package-list.result == 'success' && (needs.package-1.result == 'success' || needs.package-1.result == 'skipped') && needs.package-list.outputs.wave-2 != '[]'
-    strategy:
-      fail-fast: false
-      max-parallel: 20
-      matrix:
-        package: ${{ fromJSON(needs.package-list.outputs.wave-2) }}
+  package-aria2:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"aria2"') }}
     uses: ./.github/workflows/package-build.yml
     with:
-      package: ${{ matrix.package }}
+      package: "aria2"
       retain-artifact: true
-      same-run-dependencies: true
+      same-run-dependencies: false
       builds: ${{ needs.package-list.outputs.builds }}
       reuse: ${{ needs.package-list.outputs.reuse }}
       reuse-tag: ${{ needs.package-list.outputs.tag }}
 
-  # Wave 3: changed packages whose changed dependencies were built in earlier waves of this run.
-  package-3:
-    needs: [package-list, package-2]
-    if: always() && needs.package-list.result == 'success' && (needs.package-2.result == 'success' || needs.package-2.result == 'skipped') && needs.package-list.outputs.wave-3 != '[]'
-    strategy:
-      fail-fast: false
-      max-parallel: 20
-      matrix:
-        package: ${{ fromJSON(needs.package-list.outputs.wave-3) }}
+  package-audit:
+    needs: [package-list, package-python3]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"audit"') }}
     uses: ./.github/workflows/package-build.yml
     with:
-      package: ${{ matrix.package }}
+      package: "audit"
       retain-artifact: true
-      same-run-dependencies: true
+      same-run-dependencies: ${{ contains(needs.package-list.outputs.names, '"python3"') }}
       builds: ${{ needs.package-list.outputs.builds }}
       reuse: ${{ needs.package-list.outputs.reuse }}
       reuse-tag: ${{ needs.package-list.outputs.tag }}
 
-  # Wave 4: changed packages whose changed dependencies were built in earlier waves of this run.
-  package-4:
-    needs: [package-list, package-3]
-    if: always() && needs.package-list.result == 'success' && (needs.package-3.result == 'success' || needs.package-3.result == 'skipped') && needs.package-list.outputs.wave-4 != '[]'
-    strategy:
-      fail-fast: false
-      max-parallel: 20
-      matrix:
-        package: ${{ fromJSON(needs.package-list.outputs.wave-4) }}
+  package-autossh:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"autossh"') }}
     uses: ./.github/workflows/package-build.yml
     with:
-      package: ${{ matrix.package }}
+      package: "autossh"
       retain-artifact: true
-      same-run-dependencies: true
+      same-run-dependencies: false
       builds: ${{ needs.package-list.outputs.builds }}
       reuse: ${{ needs.package-list.outputs.reuse }}
       reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-axel:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"axel"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "axel"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-bc:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"bc"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "bc"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-bluez:
+    needs: [package-list, package-alsa-lib, package-libical]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"bluez"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "bluez"
+      retain-artifact: true
+      same-run-dependencies: ${{ contains(needs.package-list.outputs.names, '"alsa-lib"') || contains(needs.package-list.outputs.names, '"libical"') }}
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-borgbackup:
+    needs: [package-list, package-llfuse, package-msgpack-python, package-python-packaging, package-python3]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"borgbackup"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "borgbackup"
+      retain-artifact: true
+      same-run-dependencies: ${{ contains(needs.package-list.outputs.names, '"llfuse"') || contains(needs.package-list.outputs.names, '"msgpack-python"') || contains(needs.package-list.outputs.names, '"python-packaging"') || contains(needs.package-list.outputs.names, '"python3"') }}
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-btop:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"btop"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "btop"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-bwm-ng:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"bwm-ng"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "bwm-ng"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-cksfv:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"cksfv"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "cksfv"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-ddrescue:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"ddrescue"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "ddrescue"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-exiftool:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"exiftool"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "exiftool"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-fdupes:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"fdupes"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "fdupes"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-fio:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"fio"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "fio"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-fish:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"fish"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "fish"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-fzf:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"fzf"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "fzf"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-gnupg2:
+    needs: [package-list, package-libassuan, package-libksba, package-npth, package-pinentry]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"gnupg2"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "gnupg2"
+      retain-artifact: true
+      same-run-dependencies: ${{ contains(needs.package-list.outputs.names, '"libassuan"') || contains(needs.package-list.outputs.names, '"libksba"') || contains(needs.package-list.outputs.names, '"npth"') || contains(needs.package-list.outputs.names, '"pinentry"') }}
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-gpgme:
+    needs: [package-list, package-gnupg2, package-libassuan]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"gpgme"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "gpgme"
+      retain-artifact: true
+      same-run-dependencies: ${{ contains(needs.package-list.outputs.names, '"gnupg2"') || contains(needs.package-list.outputs.names, '"libassuan"') }}
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-iftop:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"iftop"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "iftop"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-iotop:
+    needs: [package-list, package-python3]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"iotop"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "iotop"
+      retain-artifact: true
+      same-run-dependencies: ${{ contains(needs.package-list.outputs.names, '"python3"') }}
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-ipmitool:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"ipmitool"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "ipmitool"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-irssi:
+    needs: [package-list, package-utf8proc]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"irssi"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "irssi"
+      retain-artifact: true
+      same-run-dependencies: ${{ contains(needs.package-list.outputs.names, '"utf8proc"') }}
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-jdupes:
+    needs: [package-list, package-libjodycode]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"jdupes"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "jdupes"
+      retain-artifact: true
+      same-run-dependencies: ${{ contains(needs.package-list.outputs.names, '"libjodycode"') }}
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-lftp:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"lftp"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "lftp"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-libassuan:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"libassuan"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "libassuan"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-libical:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"libical"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "libical"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-libjodycode:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"libjodycode"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "libjodycode"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-libksba:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"libksba"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "libksba"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-libmediainfo:
+    needs: [package-list, package-libzen]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"libmediainfo"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "libmediainfo"
+      retain-artifact: true
+      same-run-dependencies: ${{ contains(needs.package-list.outputs.names, '"libzen"') }}
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-libnl:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"libnl"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "libnl"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-libsodium:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"libsodium"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "libsodium"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-libtraceevent:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"libtraceevent"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "libtraceevent"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-libtracefs:
+    needs: [package-list, package-libtraceevent]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"libtracefs"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "libtracefs"
+      retain-artifact: true
+      same-run-dependencies: ${{ contains(needs.package-list.outputs.names, '"libtraceevent"') }}
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-libyaml:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"libyaml"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "libyaml"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-libzen:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"libzen"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "libzen"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-llfuse:
+    needs: [package-list, package-python3]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"llfuse"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "llfuse"
+      retain-artifact: true
+      same-run-dependencies: ${{ contains(needs.package-list.outputs.names, '"python3"') }}
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-lua:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"lua"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "lua"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-mediainfo:
+    needs: [package-list, package-libmediainfo]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"mediainfo"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "mediainfo"
+      retain-artifact: true
+      same-run-dependencies: ${{ contains(needs.package-list.outputs.names, '"libmediainfo"') }}
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-mktorrent:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"mktorrent"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "mktorrent"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-mlocate:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"mlocate"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "mlocate"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-msgpack-python:
+    needs: [package-list, package-python3]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"msgpack-python"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "msgpack-python"
+      retain-artifact: true
+      same-run-dependencies: ${{ contains(needs.package-list.outputs.names, '"python3"') }}
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-ncdu:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"ncdu"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "ncdu"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-neofetch:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"neofetch"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "neofetch"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-netcat:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"netcat"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "netcat"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-nload:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"nload"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "nload"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-nmap:
+    needs: [package-list, package-lua, package-pygobject3, package-python3, package-zenmap-typelibs]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"nmap"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "nmap"
+      retain-artifact: true
+      same-run-dependencies: ${{ contains(needs.package-list.outputs.names, '"lua"') || contains(needs.package-list.outputs.names, '"pygobject3"') || contains(needs.package-list.outputs.names, '"python3"') || contains(needs.package-list.outputs.names, '"zenmap-typelibs"') }}
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-nodejs:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"nodejs"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "nodejs"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-npth:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"npth"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "npth"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-p7zip:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"p7zip"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "p7zip"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-par2cmdline:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"par2cmdline"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "par2cmdline"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-pigz:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"pigz"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "pigz"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-pinentry:
+    needs: [package-list, package-libassuan]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"pinentry"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "pinentry"
+      retain-artifact: true
+      same-run-dependencies: ${{ contains(needs.package-list.outputs.names, '"libassuan"') }}
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-plocate:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"plocate"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "plocate"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-powershell:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"powershell"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "powershell"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-powertop:
+    needs: [package-list, package-libtraceevent, package-libtracefs]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"powertop"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "powertop"
+      retain-artifact: true
+      same-run-dependencies: ${{ contains(needs.package-list.outputs.names, '"libtraceevent"') || contains(needs.package-list.outputs.names, '"libtracefs"') }}
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-pycairo:
+    needs: [package-list, package-python3]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"pycairo"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "pycairo"
+      retain-artifact: true
+      same-run-dependencies: ${{ contains(needs.package-list.outputs.names, '"python3"') }}
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-pygobject3:
+    needs: [package-list, package-pycairo, package-python3]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"pygobject3"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "pygobject3"
+      retain-artifact: true
+      same-run-dependencies: ${{ contains(needs.package-list.outputs.names, '"pycairo"') || contains(needs.package-list.outputs.names, '"python3"') }}
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-python-packaging:
+    needs: [package-list, package-python3]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"python-packaging"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "python-packaging"
+      retain-artifact: true
+      same-run-dependencies: ${{ contains(needs.package-list.outputs.names, '"python3"') }}
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-python-pip:
+    needs: [package-list, package-python-packaging, package-python-setuptools, package-python3]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"python-pip"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "python-pip"
+      retain-artifact: true
+      same-run-dependencies: ${{ contains(needs.package-list.outputs.names, '"python-packaging"') || contains(needs.package-list.outputs.names, '"python-setuptools"') || contains(needs.package-list.outputs.names, '"python3"') }}
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-python-setuptools:
+    needs: [package-list, package-python3]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"python-setuptools"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "python-setuptools"
+      retain-artifact: true
+      same-run-dependencies: ${{ contains(needs.package-list.outputs.names, '"python3"') }}
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-python2:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"python2"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "python2"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-python3:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"python3"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "python3"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-rar2fs:
+    needs: [package-list, package-unrar]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"rar2fs"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "rar2fs"
+      retain-artifact: true
+      same-run-dependencies: ${{ contains(needs.package-list.outputs.names, '"unrar"') }}
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-rclone:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"rclone"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "rclone"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-restic:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"restic"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "restic"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-rsnapshot:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"rsnapshot"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "rsnapshot"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-ruby:
+    needs: [package-list, package-libyaml]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"ruby"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "ruby"
+      retain-artifact: true
+      same-run-dependencies: ${{ contains(needs.package-list.outputs.names, '"libyaml"') }}
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-screen:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"screen"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "screen"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-socat:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"socat"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "socat"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-sshfs:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"sshfs"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "sshfs"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-sshpass:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"sshpass"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "sshpass"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-stress:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"stress"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "stress"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-stunnel:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"stunnel"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "stunnel"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-tcl:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"tcl"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "tcl"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-tcllib:
+    needs: [package-list, package-tcl]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"tcllib"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "tcllib"
+      retain-artifact: true
+      same-run-dependencies: ${{ contains(needs.package-list.outputs.names, '"tcl"') }}
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-tcpdump:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"tcpdump"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "tcpdump"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-tmux:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"tmux"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "tmux"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-unrar:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"unrar"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "unrar"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-utf8proc:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"utf8proc"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "utf8proc"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-vim:
+    needs: [package-list, package-lua, package-python3, package-ruby, package-tcl]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"vim"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "vim"
+      retain-artifact: true
+      same-run-dependencies: ${{ contains(needs.package-list.outputs.names, '"lua"') || contains(needs.package-list.outputs.names, '"python3"') || contains(needs.package-list.outputs.names, '"ruby"') || contains(needs.package-list.outputs.names, '"tcl"') }}
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-wget2:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"wget2"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "wget2"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-zenmap-typelibs:
+    needs: [package-list, package-python-setuptools, package-python3]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"zenmap-typelibs"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "zenmap-typelibs"
+      retain-artifact: true
+      same-run-dependencies: ${{ contains(needs.package-list.outputs.names, '"python-setuptools"') || contains(needs.package-list.outputs.names, '"python3"') }}
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  package-zsh:
+    needs: [package-list]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"zsh"') }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: "zsh"
+      retain-artifact: true
+      same-run-dependencies: false
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  # Fails when any package job failed or was cancelled; skipped jobs are carried over.
+  packages:
+    needs: [package-list, package-alsa-lib, package-aria2, package-audit, package-autossh, package-axel, package-bc, package-bluez, package-borgbackup, package-btop, package-bwm-ng, package-cksfv, package-ddrescue, package-exiftool, package-fdupes, package-fio, package-fish, package-fzf, package-gnupg2, package-gpgme, package-iftop, package-iotop, package-ipmitool, package-irssi, package-jdupes, package-lftp, package-libassuan, package-libical, package-libjodycode, package-libksba, package-libmediainfo, package-libnl, package-libsodium, package-libtraceevent, package-libtracefs, package-libyaml, package-libzen, package-llfuse, package-lua, package-mediainfo, package-mktorrent, package-mlocate, package-msgpack-python, package-ncdu, package-neofetch, package-netcat, package-nload, package-nmap, package-nodejs, package-npth, package-p7zip, package-par2cmdline, package-pigz, package-pinentry, package-plocate, package-powershell, package-powertop, package-pycairo, package-pygobject3, package-python-packaging, package-python-pip, package-python-setuptools, package-python2, package-python3, package-rar2fs, package-rclone, package-restic, package-rsnapshot, package-ruby, package-screen, package-socat, package-sshfs, package-sshpass, package-stress, package-stunnel, package-tcl, package-tcllib, package-tcpdump, package-tmux, package-unrar, package-utf8proc, package-vim, package-wget2, package-zenmap-typelibs, package-zsh]
+    if: ${{ !cancelled() && needs.package-list.result == 'success' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require every planned package job to succeed
+        env:
+          RESULTS: ${{ toJSON(needs.*.result) }}
+        run: echo "$RESULTS"; ! grep -qE 'failure|cancelled' <<<"$RESULTS"
+  # END generated package jobs
 
   build:
-    if: always() && github.event_name == 'workflow_dispatch' && needs.package-list.result == 'success' && (needs.package-1.result == 'success' || needs.package-1.result == 'skipped') && (needs.package-2.result == 'success' || needs.package-2.result == 'skipped') && (needs.package-3.result == 'success' || needs.package-3.result == 'skipped') && (needs.package-4.result == 'success' || needs.package-4.result == 'skipped')
-    needs: [package-list, package-1, package-2, package-3, package-4]
+    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && needs.packages.result == 'success' }}
+    needs: [package-list, packages]
     runs-on: ubuntu-24.04
     # Debian builder image with all tools (build/runner/Dockerfile), pinned by digest. Privileged for
     # Bubblewrap user namespaces, mknod and /dev/kvm. Update the digest after builder-image.yml republishes it.

@@ -120,7 +120,7 @@ jobs:
               with open(path, 'rb') as stream:
                   assert hashlib.file_digest(stream, 'sha256').hexdigest() == item['sha256'], item['file']
           PY
-      - name: Take changed dependencies from earlier waves of this run
+      - name: Take changed dependencies built earlier in this run
         if: inputs.same-run-dependencies
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:

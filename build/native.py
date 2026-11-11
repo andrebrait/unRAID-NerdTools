@@ -752,33 +752,7 @@ def carry_plan(packages, previous_keys, previous_catalog):
         else:
             plan["builds"][name] = int(previous.group(2)) + 1 if same_version else 1
             plan["build"].append(name)
-    plan["waves"] = build_waves(packages, plan["build"])
     return plan
-
-
-WAVES = 4  # one workflow job per wave in build-packages.yml
-
-
-def build_waves(packages, building):
-    """Order changed packages so each one's changed dependencies are built in an earlier wave and
-    downloaded from this run; unchanged dependencies come from the previous release instead."""
-    by_name = {p["name"]: p for p in packages}
-    building = set(building)
-    wave = {}
-    def visit(name):
-        if name not in wave:
-            package = by_name[name]
-            deps = package["dependencies"] + package["build_dependencies"]
-            # Build-only helpers are compiled inside their dependents' jobs, so look through them.
-            wave[name] = max([visit(d) + (d in building) for d in deps] or [0])
-        return wave[name]
-    waves = [[] for _ in range(WAVES)]
-    for name in sorted(building):
-        index = visit(name)
-        if index >= WAVES:
-            raise ValueError(f"{name} needs build wave {index + 1}; add a wave job and raise WAVES")
-        waves[index].append(name)
-    return waves
 
 
 def checked_artifacts(packages, directory):
