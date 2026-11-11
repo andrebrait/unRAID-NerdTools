@@ -530,8 +530,9 @@
     "build_dependencies": [],
     "smoke": [
       [
-        "/opt/nerdtools/bin/neofetch",
-        "--version"
+        "/bin/sh",
+        "-c",
+        "/opt/nerdtools/bin/neofetch --version | /usr/bin/grep -q '^Neofetch '"
       ]
     ]
   },

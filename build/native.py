@@ -416,6 +416,9 @@ def kernel_smoke(root, kernel, packages, work, output):
               "failed() { echo NERDTOOLS_SMOKE_FAILED; /sbin/reboot -f; while :; do sleep 1; done; }",
               "trap failed EXIT", "/sbin/mount -t proc proc /proc", "/sbin/mount -t sysfs sys /sys",
               "/sbin/mount -t devtmpfs dev /dev", "exec </dev/console >/dev/console 2>&1",
+              # A booted Unraid provides these; .NET's named synchronization objects need /dev/shm.
+              "mkdir -p /dev/shm /dev/pts", "/sbin/mount -t tmpfs -o mode=1777 shm /dev/shm",
+              "/sbin/mount -t devpts devpts /dev/pts",
               "kernel=$(/usr/bin/uname -r)", ": > /root/nerdtools-completion"]
     child = ["/usr/bin/setpriv", "--reuid=65534", "--regid=65534", "--clear-groups", "--no-new-privs",
              "--bounding-set=-all", "--inh-caps=-all", "--ambient-caps=-all", "/usr/bin/env", "-i"]
@@ -655,7 +658,22 @@ def build_one(args):
             target_output = output if package["name"] == args.package else dependencies
             artifact = build_package(package, development, cache, built, target_output, work)
             built[package["name"]] = (package, artifact)
-    print(f"Built {args.package} and its dependency closure; no full-catalog compatibility or publication claim.")
+        # Verify this package alone, with only its runtime closure installed, so package jobs fail independently.
+        runtime, pending = {}, [args.package]
+        while pending:
+            name = pending.pop()
+            if name not in runtime:
+                runtime[name] = built[name][0]
+                pending.extend(runtime[name]["dependencies"])
+        target = work / "target"
+        target.mkdir()
+        kernel = work / "target-bzimage"
+        prepare_image(BASELINE["image"], BASELINE["version"], cache, target, kernel=kernel)
+        for name in runtime:
+            install_payload(built[name][1], target)
+        audit_runtime(target)
+        kernel_smoke(target, kernel, list(runtime.values()), work, work)
+    print(f"Built and smoke-tested {args.package} with its runtime closure; no full-catalog compatibility or publication claim.")
 
 
 def checked_artifacts(packages, directory):

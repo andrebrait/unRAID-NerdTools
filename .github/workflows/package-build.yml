@@ -63,7 +63,7 @@ jobs:
           toolchain-lock: build/locks/toolchain.json
       - name: Install validation tools and configure mapped sandbox identities
         run: |
-          sudo apt-get install --no-install-recommends --yes binutils bubblewrap uidmap
+          sudo apt-get install --no-install-recommends --yes binutils qemu-system-x86 bubblewrap uidmap
           sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 root
       - name: Require the mapped sandbox to exclude host paths and privileged mounts
         env:
