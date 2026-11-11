@@ -410,8 +410,7 @@ def kernel_report(log, token, commands):
 
 def kernel_smoke(root, kernel, packages, work, output):
     token = secrets.token_hex(32)
-    commands = [["/bin/sh", "-c", '! test -r /nerdtools-init && ! test -w /root/nerdtools-completion && ! test -r /proc/1/environ && test "$(/usr/bin/id -u)" = 65534 && /usr/bin/grep -Eq "^NoNewPrivs:[[:space:]]+1$" /proc/self/status && /usr/bin/grep -Eq "^CapBnd:[[:space:]]+0+$" /proc/self/status']]
-    commands.extend(command for package in packages if package.get("catalog", True) for command in package["smoke"])
+    commands = [command for package in packages if package.get("catalog", True) for command in package["smoke"]]
     script = ["#!/bin/bash", "set -euo pipefail", "umask 077",
               "failed() { echo NERDTOOLS_SMOKE_FAILED; /sbin/reboot -f; while :; do sleep 1; done; }",
               "trap failed EXIT", "/sbin/mount -t proc proc /proc", "/sbin/mount -t sysfs sys /sys",
@@ -420,8 +419,8 @@ def kernel_smoke(root, kernel, packages, work, output):
               "mkdir -p /dev/shm /dev/pts", "/sbin/mount -t tmpfs -o mode=1777 shm /dev/shm",
               "/sbin/mount -t devpts devpts /dev/pts",
               "kernel=$(/usr/bin/uname -r)", ": > /root/nerdtools-completion"]
-    child = ["/usr/bin/setpriv", "--reuid=65534", "--regid=65534", "--clear-groups", "--no-new-privs",
-             "--bounding-set=-all", "--inh-caps=-all", "--ambient-caps=-all", "/usr/bin/env", "-i"]
+    # Unraid runs everything as root, so the tools are exercised as root; the VM has no disks, NIC or host mounts.
+    child = ["/usr/bin/env", "-i"]
     child_env = {**ENV, "HOME": "/tmp/nerdtools-smoke", "DOTNET_CLI_HOME": "/tmp/nerdtools-smoke/dotnet"}
     child.extend(f"{key}={value}" for key, value in child_env.items())
     for index, command in enumerate(commands):
@@ -439,7 +438,6 @@ def kernel_smoke(root, kernel, packages, work, output):
         raise ValueError("Smoke home cannot be a symlink")
     home.mkdir(mode=0o700, exist_ok=True)
     home.chmod(0o700)
-    os.chown(home, 65534, 65534)
     private = root / "root"
     if private.is_symlink():
         raise ValueError("Protected harness state cannot be a symlink")
@@ -767,7 +765,7 @@ def build(args):
                   "provided_tools_checked": len(BASELINE["provided_packages"]),
                   "target_kernel": actual_kernel,
                   "publication_blockers": blockers,
-                  "scope": "Userspace ELF dependency/version audit and declared nonmutating, unprivileged no-new-privs smoke commands booted under the exact target kernel; protected PID1 completion evidence. No privileged operations, physical hardware or daemon integration certification."}
+                  "scope": "Userspace ELF dependency/version audit and declared nonmutating smoke commands run as root, as on Unraid, booted under the exact target kernel in a VM without disks, NIC or host mounts. No physical hardware or daemon integration certification."}
         (output / "compatibility-7.3.json").write_text(json.dumps(report, indent=2) + "\n")
         (output / "catalog-7.3.json").write_text(json.dumps(catalog(records), indent=2) + "\n")
         lines = [f"{digest(path)}  {path.name}" for path in sorted(output.iterdir()) if path.is_file()]

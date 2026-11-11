@@ -50,8 +50,8 @@
     ],
     "smoke": [
       [
-        "/opt/nerdtools/sbin/ausearch",
-        "--version"
+        "/opt/nerdtools/sbin/auditctl",
+        "-v"
       ]
     ]
   },
