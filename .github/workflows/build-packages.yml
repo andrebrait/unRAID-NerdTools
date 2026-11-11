@@ -40,6 +40,11 @@ on:
         type: boolean
         default: false
 
+# Container jobs default to sh (dash in the Debian image); steps are written for bash.
+defaults:
+  run:
+    shell: bash
+
 permissions:
   contents: read
 
