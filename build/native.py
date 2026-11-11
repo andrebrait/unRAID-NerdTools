@@ -674,14 +674,25 @@ def build_one(args):
         dependencies.mkdir()
         if args.source_bundle:
             seed_sources(packages, args.source_bundle, cache)
+        # An unchanged dependency is taken from the previous release (checksum verified by the workflow)
+        # instead of being compiled again; the package itself is always compiled.
+        reuse = getattr(args, "reuse", None)
+        reused = {p["name"]: reuse / artifact_name(p) for p in packages if reuse and p["name"] != args.package
+                  and (reuse / artifact_name(p)).is_file() and not (reuse / artifact_name(p)).is_symlink()}
         for package in packages:
-            for item in package["inputs"]:
-                fetch(item, cache)
+            if package["name"] not in reused:
+                for item in package["inputs"]:
+                    fetch(item, cache)
         built = {}
         for package in packages:
-            target_output = output if package["name"] == args.package else dependencies
-            artifact = build_package(package, development, cache, built, target_output, work)
+            if package["name"] in reused:
+                artifact = dependencies / reused[package["name"]].name
+                shutil.copyfile(reused[package["name"]], artifact)
+            else:
+                target_output = output if package["name"] == args.package else dependencies
+                artifact = build_package(package, development, cache, built, target_output, work)
             built[package["name"]] = (package, artifact)
+        print(f"Compiled {len(packages) - len(reused)} package(s); reused {len(reused)} unchanged dependencies.", flush=True)
         # Verify this package alone, with only its runtime closure installed, so package jobs fail independently.
         runtime, pending = {}, [args.package]
         while pending:
@@ -867,6 +878,7 @@ def main():
     parser.add_argument("--development-root", type=Path)
     parser.add_argument("--source-bundle", type=Path)
     parser.add_argument("--package-artifacts", type=Path, help="Complete same-run normalized package artifacts (full-catalog build only)")
+    parser.add_argument("--reuse", type=Path, help="Verified unchanged dependency packages from the previous release (build-one only)")
     parser.add_argument("--work", type=Path, default=Path(os.environ.get("RUNNER_TEMP", tempfile.gettempdir())))
     args = parser.parse_args()
     if args.package and args.command != "build-one":

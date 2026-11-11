@@ -76,6 +76,7 @@ jobs:
       plan: ${{ steps.packages.outputs.plan }}
       tag: ${{ steps.packages.outputs.tag }}
       builds: ${{ steps.packages.outputs.builds }}
+      reuse: ${{ steps.packages.outputs.reuse }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -99,7 +100,7 @@ jobs:
           fi
           plan=$(python3 build/native.py plan --previous previous)
           jq -r '"Compiling \(.build | length), carrying over \(.reuse | length)"' <<<"$plan"
-          { echo "tag=$tag"; echo "plan=$plan"; echo "names=$(jq -c .build <<<"$plan")"; echo "builds=$(jq -c .builds <<<"$plan")"; } >> "$GITHUB_OUTPUT"
+          { echo "tag=$tag"; echo "plan=$plan"; echo "names=$(jq -c .build <<<"$plan")"; echo "builds=$(jq -c .builds <<<"$plan")"; echo "reuse=$(jq -c .reuse <<<"$plan")"; } >> "$GITHUB_OUTPUT"
 
   package:
     needs: package-list
@@ -114,6 +115,8 @@ jobs:
       package: ${{ matrix.package }}
       retain-artifact: true
       builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
 
 
   build:
