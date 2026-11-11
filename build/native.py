@@ -21,7 +21,8 @@ from sandbox import map_id, mapped_root, run_sandbox
 from package_policy import check_destination
 
 
-REPO = Path(__file__).resolve().parent.parent
+# NERDTOOLS_REPO lets `keys` compute identities for an older checkout with this code (see `plan`).
+REPO = Path(os.environ.get("NERDTOOLS_REPO") or Path(__file__).resolve().parent.parent)
 BASELINE = json.loads((REPO / "build/baseline.json").read_text())
 PRIVATE = PurePosixPath("opt/nerdtools")
 SHA256 = re.compile(r"[a-f0-9]{64}\Z")
@@ -699,11 +700,15 @@ def build_one(args):
     print(f"Built and smoke-tested {args.package} with its runtime closure; no full-catalog compatibility or publication claim.")
 
 
+# Raise to deliberately recompile every package, e.g. after a builder change that alters package contents.
+# Ordinary edits to the build scripts do not rebuild anything (like a Debian binNMU, a rebuild is a decision).
+REBUILD_GENERATION = 1
+
+
 def build_keys(packages):
-    """Identity of everything that can change a package's bytes; equal keys allow carrying a binary over."""
-    shared = hashlib.sha256()
-    for path in ("build/baseline.json", "build/locks/toolchain.json", "build/native.py", "build/sandbox.py",
-                 "build/package_policy.py", "build/unraid-build-root/bootstrap.py"):
+    """Identity of the inputs that make a package's bytes; equal keys allow carrying a binary over."""
+    shared = hashlib.sha256(str(REBUILD_GENERATION).encode())
+    for path in ("build/baseline.json", "build/locks/toolchain.json", "build/unraid-build-root/bootstrap.py"):
         shared.update(digest(REPO / path).encode())
     inventory = recipe_inventory(REPO / "build/recipes")
     keys = {}
@@ -849,7 +854,7 @@ def build(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("build", "build-one", "validate", "pin-recipes", "sandbox-check", "plan"))
+    parser.add_argument("command", choices=("build", "build-one", "validate", "pin-recipes", "sandbox-check", "plan", "keys"))
     parser.add_argument("--previous", type=Path, help="Directory holding a published release's build-keys.json and catalog (plan only)")
     parser.add_argument("--package", help="Package to build with its transitive dependencies (build-one only)")
     parser.add_argument("--unraid-version", default=BASELINE["version"])
@@ -876,6 +881,9 @@ def main():
         return
     if args.command == "sandbox-check":
         sandbox_check(args)
+        return
+    if args.command == "keys":
+        print(json.dumps(build_keys(load_packages()), indent=2, sort_keys=True))
         return
     if args.command == "plan":
         keys, catalogs = args.previous / "build-keys.json", sorted(args.previous.glob("catalog-*.json"))

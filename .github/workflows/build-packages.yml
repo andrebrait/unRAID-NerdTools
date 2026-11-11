@@ -77,6 +77,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
       - name: Compile only packages whose build identity differs from the newest published release
         id: packages
         env:
@@ -85,7 +86,14 @@ jobs:
         run: |
           mkdir previous
           tag=$(gh api "repos/$GH_REPO/releases?per_page=100" --jq '[.[] | select(.draft | not) | select(any(.assets[]; .name == "build-keys.json"))][0].tag_name // empty')
-          if [[ -n "$tag" ]]; then gh release download "$tag" --dir previous --pattern build-keys.json --pattern 'catalog-*.json'; fi
+          if [[ -n "$tag" ]]; then
+            gh release download "$tag" --dir previous --pattern build-keys.json --pattern 'catalog-*.json' --pattern 'provenance-*.json'
+            # Identities of the previous release recomputed with this code, so changing how keys are
+            # computed never rebuilds packages whose own inputs did not change.
+            commit=$(jq -r .commit previous/provenance-*.json)
+            git worktree add --detach "$RUNNER_TEMP/previous-tree" "$commit"
+            NERDTOOLS_REPO="$RUNNER_TEMP/previous-tree" python3 build/native.py keys > previous/build-keys.json
+          fi
           plan=$(python3 build/native.py plan --previous previous)
           jq -r '"Compiling \(.build | length), carrying over \(.reuse | length)"' <<<"$plan"
           { echo "tag=$tag"; echo "plan=$plan"; echo "names=$(jq -c .build <<<"$plan")"; echo "builds=$(jq -c .builds <<<"$plan")"; } >> "$GITHUB_OUTPUT"
