@@ -459,10 +459,11 @@ def kernel_smoke(root, kernel, packages, work, output):
         if archive.wait() != 0:
             raise RuntimeError("Test initramfs creation failed")
     kvm = os.access("/dev/kvm", os.R_OK | os.W_OK)
+    # The whole target root, including Unraid's /usr layer, is the initramfs: ramfs lifts tmpfs's half-of-RAM cap.
     command = ["qemu-system-x86_64", "-machine", "q35", "-accel", "kvm" if kvm else "tcg,thread=multi",
-               "-cpu", "host" if kvm else "max", "-smp", "2", "-m", "4096",
+               "-cpu", "host" if kvm else "max", "-smp", "2", "-m", "12288",
                "-kernel", kernel, "-initrd", initramfs,
-               "-append", "console=ttyS0 rdinit=/nerdtools-init panic=1",
+               "-append", "console=ttyS0 rdinit=/nerdtools-init rootfstype=ramfs panic=1",
                "-display", "none", "-serial", "stdio", "-monitor", "none", "-nic", "none", "-no-reboot"]
     try:
         result = run(command, check=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=1800)
