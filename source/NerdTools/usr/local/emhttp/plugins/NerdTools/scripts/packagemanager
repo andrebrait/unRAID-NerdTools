@@ -28,6 +28,8 @@ try {
         try { $manager->refresh(); }
         catch (Throwable $error) { nt_log('Catalog check failed; retaining last-good cache: '.$error->getMessage(), $quiet); }
     } else {
+        // Shown at once: downloads and checksum checks can take a while before anything is installed.
+        nt_log('Checking selected packages. Downloads and verification may take a few minutes...', $quiet);
         $manager->apply(isset($args['d']) || isset($args['download']), isset($args['u']) || isset($args['uninstall']));
         nt_log('All selected packages processed.', $quiet);
     }

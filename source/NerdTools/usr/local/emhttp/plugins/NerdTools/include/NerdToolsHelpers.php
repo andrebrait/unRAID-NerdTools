@@ -480,6 +480,7 @@ class NerdTools {
         $file = $this->path.'/packages/'.$package['file'];
         if (nt_verified($file, $package)) return $file;
         if (is_link($file)) throw new RuntimeException('Refusing linked package cache');
+        nt_log('Downloading '.$package['tool'].' ('.format_size($package['size']).')...');
         $tmp = tempnam($this->path.'/packages', '.download-');
         if ($tmp === false) throw new RuntimeException('Cannot create download file');
         try {
