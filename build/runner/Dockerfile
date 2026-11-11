@@ -10,4 +10,6 @@ RUN apt-get -o Acquire::Retries=5 update \
       binutils bubblewrap ca-certificates cpio git python3 qemu-system-x86 \
       squashfs-tools sudo uidmap xz-utils zstd \
  && rm -rf /var/lib/apt/lists/* \
- && usermod --add-subuids 100000-165535 --add-subgids 100000-165535 root
+ && usermod --add-subuids 100000-165535 --add-subgids 100000-165535 root \
+ # The runner mounts the checkout owned by another UID; this image only ever builds that checkout.
+ && git config --system --add safe.directory '*'
