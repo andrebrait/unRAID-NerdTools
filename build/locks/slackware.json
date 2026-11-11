@@ -138,7 +138,7 @@
     },
     "inputs": [
       {
-        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/ap/bc/bc-1.08.2.tar.lz",
+        "url": "https://slackware.uk/slackware/slackware64-current/source/ap/bc/bc-1.08.2.tar.lz",
         "file": "bc-1.08.2.tar.lz",
         "sha256": "79e31e022a84b31dd809815063d4b8ea590b409637a52c50ec9f42c2bf332711"
       }
@@ -200,7 +200,7 @@
     },
     "inputs": [
       {
-        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/ap/ddrescue/ddrescue-1.30.tar.lz",
+        "url": "https://slackware.uk/slackware/slackware64-current/source/ap/ddrescue/ddrescue-1.30.tar.lz",
         "file": "ddrescue-1.30.tar.lz",
         "sha256": "2264622d309d6c87a1cfc19148292b8859a688e9bc02d4702f5cd4f288745542"
       }
@@ -325,7 +325,7 @@
     },
     "inputs": [
       {
-        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/n/irssi/irssi-1.4.5.tar.xz",
+        "url": "https://slackware.uk/slackware/slackware64-current/source/n/irssi/irssi-1.4.5.tar.xz",
         "file": "irssi-1.4.5.tar.xz",
         "sha256": "72a951cb0ad622785a8962801f005a3a412736c7e7e3ce152f176287c52fe062"
       }
@@ -355,7 +355,7 @@
     },
     "inputs": [
       {
-        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/n/lftp/lftp-4.9.3.tar.lz",
+        "url": "https://slackware.uk/slackware/slackware64-current/source/n/lftp/lftp-4.9.3.tar.lz",
         "file": "lftp-4.9.3.tar.lz",
         "sha256": "7eb8e99012660923d1a98ead4203e5a49c140ddc73071907b9038df31af827f6"
       }
@@ -408,7 +408,7 @@
     },
     "inputs": [
       {
-        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/l/libnl/libnl-1.1.4.tar.lz",
+        "url": "https://slackware.uk/slackware/slackware64-current/source/l/libnl/libnl-1.1.4.tar.lz",
         "file": "libnl-1.1.4.tar.lz",
         "sha256": "1e8fab82344e98aabb5bc8dd7b20afa86d375593d528b213609af4433e6fb3cc"
       }
@@ -435,7 +435,7 @@
     },
     "inputs": [
       {
-        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/l/libsodium/libsodium-1.0.22.tar.lz",
+        "url": "https://slackware.uk/slackware/slackware64-current/source/l/libsodium/libsodium-1.0.22.tar.lz",
         "file": "libsodium-1.0.22.tar.lz",
         "sha256": "eb5f1f74cfd7eef6db978c7bac614e802006f804e154167056105825285d453f"
       }
@@ -462,7 +462,7 @@
     },
     "inputs": [
       {
-        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/l/liburing/liburing-2.15.tar.lz",
+        "url": "https://slackware.uk/slackware/slackware64-current/source/l/liburing/liburing-2.15.tar.lz",
         "file": "liburing-2.15.tar.lz",
         "sha256": "06ad4ad873c4136e9592c0f929cf28f7b54ca0a416c9f2ef05f43b5cc2e72018"
       }
@@ -491,7 +491,7 @@
     },
     "inputs": [
       {
-        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/a/mlocate/mlocate-0.26.tar.xz",
+        "url": "https://slackware.uk/slackware/slackware64-current/source/a/mlocate/mlocate-0.26.tar.xz",
         "file": "mlocate-0.26.tar.xz",
         "sha256": "3063df79fe198fb9618e180c54baf3105b33d88fe602ff2d8570aaf944f1263e"
       }
@@ -547,7 +547,7 @@
     },
     "inputs": [
       {
-        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/n/nmap/nmap-7.993.tar.lz",
+        "url": "https://slackware.uk/slackware/slackware64-current/source/n/nmap/nmap-7.993.tar.lz",
         "file": "nmap-7.993.tar.lz",
         "sha256": "bf0fc5fe91d06b7ded9e3990910e83acfd01cd5aea6935073a405d19b94b6609"
       }
@@ -583,7 +583,7 @@
     },
     "inputs": [
       {
-        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/l/nodejs/node-v24.22.2.tar.xz",
+        "url": "https://slackware.uk/slackware/slackware64-current/source/l/nodejs/node-v24.22.2.tar.xz",
         "file": "node-v24.22.2.tar.xz",
         "sha256": "8fe2ec1723bb9f8d0b683907c82708debbeda64af21cb2aa214c4241eed0a061"
       }
@@ -613,7 +613,7 @@
     },
     "inputs": [
       {
-        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/n/npth/npth-1.8.tar.lz",
+        "url": "https://slackware.uk/slackware/slackware64-current/source/n/npth/npth-1.8.tar.lz",
         "file": "npth-1.8.tar.lz",
         "sha256": "5a09777cb889161d3e58a318a2eb44778cd8939d1e964ff28dcc606a1396f541"
       }
@@ -666,7 +666,7 @@
     },
     "inputs": [
       {
-        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/l/python-packaging/packaging-26.3.tar.lz",
+        "url": "https://slackware.uk/slackware/slackware64-current/source/l/python-packaging/packaging-26.3.tar.lz",
         "file": "packaging-26.3.tar.lz",
         "sha256": "7935805565953997d40d3e2cd86ea0d48d1bdd02b35e1828bb847c43c4bda06a"
       }
@@ -697,7 +697,7 @@
     },
     "inputs": [
       {
-        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/d/python-pip/pip-26.3.tar.lz",
+        "url": "https://slackware.uk/slackware/slackware64-current/source/d/python-pip/pip-26.3.tar.lz",
         "file": "pip-26.3.tar.lz",
         "sha256": "091815499ec03b5f170db7c2baf1903b64aeed70a6959b9f51e1608f500795e6"
       }
@@ -762,22 +762,22 @@
     },
     "inputs": [
       {
-        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/d/python2/Python-2.7.18.tar.xz",
+        "url": "https://slackware.uk/slackware/slackware64-current/source/d/python2/Python-2.7.18.tar.xz",
         "file": "Python-2.7.18.tar.xz",
         "sha256": "b62c0e7937551d0cc02b8fd5cb0f544f9405bafc9a54d3808ed4594812edef43"
       },
       {
-        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/d/python2/pip-20.3.tar.lz",
+        "url": "https://slackware.uk/slackware/slackware64-current/source/d/python2/pip-20.3.tar.lz",
         "file": "pip-20.3.tar.lz",
         "sha256": "2b0987b73ccc674ac0125cb3f0b3727418eb496998c6ffee4a487353302bdf67"
       },
       {
-        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/d/python2/python-2.7.18-docs-text.tar.bz2",
+        "url": "https://slackware.uk/slackware/slackware64-current/source/d/python2/python-2.7.18-docs-text.tar.bz2",
         "file": "python-2.7.18-docs-text.tar.bz2",
         "sha256": "c86f5b5a2bd8f90158523efd350198d6cde7353965ef5a6ca5e54e5174af47f2"
       },
       {
-        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/d/python2/setuptools-44.1.1.tar.lz",
+        "url": "https://slackware.uk/slackware/slackware64-current/source/d/python2/setuptools-44.1.1.tar.lz",
         "file": "setuptools-44.1.1.tar.lz",
         "sha256": "f4208059675deb0c8086595c4256304c2e78c5f31a341961e120b87d7f9ac7c9"
       }
@@ -834,7 +834,7 @@
     },
     "inputs": [
       {
-        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/d/ruby/ruby-4.0.9.tar.lz",
+        "url": "https://slackware.uk/slackware/slackware64-current/source/d/ruby/ruby-4.0.9.tar.lz",
         "file": "ruby-4.0.9.tar.lz",
         "sha256": "af0287c6e754ff9d15c4200a715e733653d76d178827a296448b23656f7b5afb"
       }
@@ -866,7 +866,7 @@
     },
     "inputs": [
       {
-        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/ap/screen/screen-5.0.2.tar.lz",
+        "url": "https://slackware.uk/slackware/slackware64-current/source/ap/screen/screen-5.0.2.tar.lz",
         "file": "screen-5.0.2.tar.lz",
         "sha256": "750e3d9d9b7b3a9bf354459419dde5333f60888dcca51ec766b478cc108977a2"
       }
@@ -892,7 +892,7 @@
     },
     "inputs": [
       {
-        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/n/socat/socat-1.8.1.3.tar.lz",
+        "url": "https://slackware.uk/slackware/slackware64-current/source/n/socat/socat-1.8.1.3.tar.lz",
         "file": "socat-1.8.1.3.tar.lz",
         "sha256": "0d597e4a785ae34b23f06170fef273ba279d390f394e700a42c0262764b2d993"
       }
@@ -918,7 +918,7 @@
     },
     "inputs": [
       {
-        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/n/sshfs/sshfs-3.7.6.tar.xz",
+        "url": "https://slackware.uk/slackware/slackware64-current/source/n/sshfs/sshfs-3.7.6.tar.xz",
         "file": "sshfs-3.7.6.tar.xz",
         "sha256": "6a1bcb31450a077e9cb1b7ff158c71de34db697c3c0da6cb362502131e495893"
       }
@@ -944,7 +944,7 @@
     },
     "inputs": [
       {
-        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/n/stunnel/stunnel-5.82.tar.lz",
+        "url": "https://slackware.uk/slackware/slackware64-current/source/n/stunnel/stunnel-5.82.tar.lz",
         "file": "stunnel-5.82.tar.lz",
         "sha256": "e4415fa95682a6edbe173fb1e5a77053e978084e6934ea2272b9567281bc6298"
       }
@@ -970,7 +970,7 @@
     },
     "inputs": [
       {
-        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/tcl/tcl/tcl8.6.18-src.tar.lz",
+        "url": "https://slackware.uk/slackware/slackware64-current/source/tcl/tcl/tcl8.6.18-src.tar.lz",
         "file": "tcl8.6.18-src.tar.lz",
         "sha256": "b462fb9a1f0d62bcfd4ae8f7951d1abeba7c95c91827c40401491bb2a99c0e6e"
       }
@@ -997,7 +997,7 @@
     },
     "inputs": [
       {
-        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/n/tcpdump/tcpdump-4.99.7.tar.xz",
+        "url": "https://slackware.uk/slackware/slackware64-current/source/n/tcpdump/tcpdump-4.99.7.tar.xz",
         "file": "tcpdump-4.99.7.tar.xz",
         "sha256": "39675dfa06fb0e99be8da5d4a1784acbaab58ae0870231d956ff7870cb99eec1"
       }
@@ -1023,7 +1023,7 @@
     },
     "inputs": [
       {
-        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/ap/tmux/tmux-3.8.tar.lz",
+        "url": "https://slackware.uk/slackware/slackware64-current/source/ap/tmux/tmux-3.8.tar.lz",
         "file": "tmux-3.8.tar.lz",
         "sha256": "3bf528d1c5de3a032ad72203c1ff1028094d81d6f797282655b8d5728fe71c1a"
       }
@@ -1076,7 +1076,7 @@
     },
     "inputs": [
       {
-        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/ap/vim/vim-9.2.1252.tar.lz",
+        "url": "https://slackware.uk/slackware/slackware64-current/source/ap/vim/vim-9.2.1252.tar.lz",
         "file": "vim-9.2.1252.tar.lz",
         "sha256": "85c4ccd21d467b5527d0fcf773b0efa7f48b9847428ae46f34fd1ad4ec531034"
       }
@@ -1112,7 +1112,7 @@
     },
     "inputs": [
       {
-        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/n/wget2/wget2-2.3.0.tar.lz",
+        "url": "https://slackware.uk/slackware/slackware64-current/source/n/wget2/wget2-2.3.0.tar.lz",
         "file": "wget2-2.3.0.tar.lz",
         "sha256": "becf0a06fcfb7760be88db4b29048b31cb7c789e33dc571475071144b0f2caf4"
       }
@@ -1138,12 +1138,12 @@
     },
     "inputs": [
       {
-        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/ap/zsh/zsh-5.9.2-doc.tar.xz",
+        "url": "https://slackware.uk/slackware/slackware64-current/source/ap/zsh/zsh-5.9.2-doc.tar.xz",
         "file": "zsh-5.9.2-doc.tar.xz",
         "sha256": "020ee644be1749507b282e619cdcd95c56ff36144e79b7a3c245458aacd9458f"
       },
       {
-        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/ap/zsh/zsh-5.9.2.tar.xz",
+        "url": "https://slackware.uk/slackware/slackware64-current/source/ap/zsh/zsh-5.9.2.tar.xz",
         "file": "zsh-5.9.2.tar.xz",
         "sha256": "36fa734374b44783582cec09bcd67822e2f992c779ec1624ab5596df078d2f81"
       }
@@ -1228,17 +1228,17 @@
     },
     "inputs": [
       {
-        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/l/alsa-lib/alsa-lib-1.2.16.1.tar.lz",
+        "url": "https://slackware.uk/slackware/slackware64-current/source/l/alsa-lib/alsa-lib-1.2.16.1.tar.lz",
         "file": "alsa-lib-1.2.16.1.tar.lz",
         "sha256": "53d4a3c8b5aea9810040577736c14930381e0c8bcc386db5174bd32124e5dd2b"
       },
       {
-        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/l/alsa-lib/alsa-topology-conf-1.2.5.1.tar.lz",
+        "url": "https://slackware.uk/slackware/slackware64-current/source/l/alsa-lib/alsa-topology-conf-1.2.5.1.tar.lz",
         "file": "alsa-topology-conf-1.2.5.1.tar.lz",
         "sha256": "650250e788d122b30dca7a8591c4c1d57e4bf2d31986b7a84aaf2ed587cd7484"
       },
       {
-        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/l/alsa-lib/alsa-ucm-conf-1.2.16.1.tar.lz",
+        "url": "https://slackware.uk/slackware/slackware64-current/source/l/alsa-lib/alsa-ucm-conf-1.2.16.1.tar.lz",
         "file": "alsa-ucm-conf-1.2.16.1.tar.lz",
         "sha256": "908d0b24511eb29ee26bf09761c9b3a274ca044d2e9296e07430f561e286512c"
       }
@@ -1266,7 +1266,7 @@
     },
     "inputs": [
       {
-        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/l/libical/libical-3.0.20.tar.lz",
+        "url": "https://slackware.uk/slackware/slackware64-current/source/l/libical/libical-3.0.20.tar.lz",
         "file": "libical-3.0.20.tar.lz",
         "sha256": "2388f3ea8dee2fd49abdd59b02154f3556924dacf90e4f0d3e3fe748659a9245"
       }
@@ -1294,7 +1294,7 @@
     },
     "inputs": [
       {
-        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/l/libyaml/libyaml-0.2.5.tar.lz",
+        "url": "https://slackware.uk/slackware/slackware64-current/source/l/libyaml/libyaml-0.2.5.tar.lz",
         "file": "libyaml-0.2.5.tar.lz",
         "sha256": "6a01301259c74a2abcf1b71fac0db128f2bb2422631539285647da95bf1c930c"
       }
@@ -1322,7 +1322,7 @@
     },
     "inputs": [
       {
-        "url": "https://mirrors.slackware.com/slackware/slackware64-current/source/d/lua/lua-5.4.9.tar.lz",
+        "url": "https://slackware.uk/slackware/slackware64-current/source/d/lua/lua-5.4.9.tar.lz",
         "file": "lua-5.4.9.tar.lz",
         "sha256": "8af95e14c4f1d36cf9e6cc1b2e5fee81d13e239d6fb0c589fa92edd21ba90335"
       }
