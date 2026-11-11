@@ -72,6 +72,7 @@ jobs:
       names: ${{ steps.packages.outputs.names }}
       plan: ${{ steps.packages.outputs.plan }}
       tag: ${{ steps.packages.outputs.tag }}
+      builds: ${{ steps.packages.outputs.builds }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -87,7 +88,7 @@ jobs:
           if [[ -n "$tag" ]]; then gh release download "$tag" --dir previous --pattern build-keys.json --pattern 'catalog-*.json'; fi
           plan=$(python3 build/native.py plan --previous previous)
           jq -r '"Compiling \(.build | length), carrying over \(.reuse | length)"' <<<"$plan"
-          { echo "tag=$tag"; echo "plan=$plan"; echo "names=$(jq -c .build <<<"$plan")"; } >> "$GITHUB_OUTPUT"
+          { echo "tag=$tag"; echo "plan=$plan"; echo "names=$(jq -c .build <<<"$plan")"; echo "builds=$(jq -c .builds <<<"$plan")"; } >> "$GITHUB_OUTPUT"
 
   package:
     needs: package-list
@@ -101,6 +102,7 @@ jobs:
     with:
       package: ${{ matrix.package }}
       retain-artifact: true
+      builds: ${{ needs.package-list.outputs.builds }}
 
 
   build:
@@ -168,6 +170,8 @@ jobs:
           TARGET_URL: ${{ inputs.unraid_url }}
           TARGET_CHANNEL: ${{ inputs.channel }}
           PUBLISH: ${{ inputs.publish }}
+          NERDTOOLS_BUILDS: ${{ needs.package-list.outputs.builds }}
+          NERDTOOLS_PREVIOUS_RELEASE: ${{ needs.package-list.outputs.tag }}
           BASELINE_ROOT: ${{ steps.roots.outputs.baseline-root }}
           DEVELOPMENT_ROOT: ${{ steps.roots.outputs.development-root }}
         run: |
@@ -175,7 +179,7 @@ jobs:
           if [[ "$PUBLISH" == true ]]; then args+=(--publish); fi
           SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
           export SOURCE_DATE_EPOCH
-          sudo --preserve-env=GITHUB_REPOSITORY,GITHUB_SHA,RUNNER_TEMP,SOURCE_DATE_EPOCH python3 build/native.py build \
+          sudo --preserve-env=GITHUB_REPOSITORY,GITHUB_SHA,RUNNER_TEMP,SOURCE_DATE_EPOCH,NERDTOOLS_BUILDS,NERDTOOLS_PREVIOUS_RELEASE python3 build/native.py build \
             --work /tmp \
             --baseline-root "$BASELINE_ROOT" --development-root "$DEVELOPMENT_ROOT" \
             --unraid-version "$TARGET_VERSION" --unraid-sha256 "$TARGET_SHA256" \

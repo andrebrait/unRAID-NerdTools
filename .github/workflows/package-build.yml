@@ -12,6 +12,11 @@ on:
         required: false
         default: false
         type: boolean
+      builds:
+        description: JSON map of package name to Slackware BUILD number chosen by the catalog plan
+        required: false
+        default: '{}'
+        type: string
 
 permissions:
   contents: read
@@ -30,6 +35,7 @@ jobs:
         id: changes
         env:
           PACKAGE: ${{ inputs.package }}
+          NERDTOOLS_BUILDS: ${{ inputs.builds }}
         run: python3 scripts/package-change.py --package "$PACKAGE"
 
   build:
@@ -77,7 +83,7 @@ jobs:
         run: |
           SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
           export SOURCE_DATE_EPOCH
-          sudo --preserve-env=GITHUB_REPOSITORY,GITHUB_SHA,RUNNER_TEMP,SOURCE_DATE_EPOCH python3 build/native.py build-one \
+          sudo --preserve-env=GITHUB_REPOSITORY,GITHUB_SHA,RUNNER_TEMP,SOURCE_DATE_EPOCH,NERDTOOLS_BUILDS python3 build/native.py build-one \
             --package "$PACKAGE" --work /tmp \
             --baseline-root "$BASELINE_ROOT" --development-root "$DEVELOPMENT_ROOT"
       - name: Retain this package for the same-run catalog gate

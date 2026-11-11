@@ -52,7 +52,8 @@ Recipe working directory: `/work/recipe`. Its input archives are copied alongsid
 
 - `ARCH=x86_64`, `PKGTYPE=txz`, `BUILD=1`, `TAG=_NT73`
 - `TMP=/tmp/nerdtools-build`, `OUTPUT=/out`
-- `SOURCE_DATE_EPOCH` is the commit time of the commit being built (set by the workflows; the `baseline.json` date when run locally), `LC_ALL=C`, `TZ=UTC`. Tools that print a build date therefore show when that package was last compiled. A carried-over package keeps the date of the commit that compiled it; rebuild at that commit to reproduce it.
+- `SOURCE_DATE_EPOCH` is the commit time of the commit being built (set by the workflows; the `baseline.json` date when run locally), `LC_ALL=C`, `TZ=UTC`. Tools that print a build date therefore show when that package was last compiled. A carried-over package keeps the date of the commit that compiled it.
+- Package files use Slackware's BUILD field, e.g. `nerdtools-vim-9.2.1252-x86_64-2_NT73.txz`. The catalog plan keeps a carried-over package's number, gives a recompiled package of the same upstream version the previous number plus one, and restarts at 1 for a new upstream version. A different binary therefore always has a different package name, and the plugin offers it as an update. The plan's numbers and date are recorded in `provenance-<family>.json` with the commit, so a package can be rebuilt with the same name, date and contents.
 - fixed generic x86-64 C/C++ flags, not `-march=native`
 - private library rpath and pkg-config paths under `/opt/nerdtools`
 

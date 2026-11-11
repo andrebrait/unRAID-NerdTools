@@ -33,6 +33,16 @@ INTEGRATION_DIGESTS = {
 # Build date shown by tools (e.g. "compiled ..."): the commit being built, set by CI, so a release says
 # when it was built while staying repeatable from that commit. The baseline date is the local fallback.
 EPOCH = os.environ.get("SOURCE_DATE_EPOCH") or str(BASELINE["source_date_epoch"])
+# Slackware BUILD number per package, chosen by `plan` and passed in by CI: a rebuild of the same upstream
+# version gets the next number, so a different binary always has a different package name.
+BUILDS = json.loads(os.environ.get("NERDTOOLS_BUILDS") or "{}")
+
+
+def artifact_name(package):
+    build = int(BUILDS.get(package["name"], 1))
+    return f"nerdtools-{package['name']}-{package['version'].replace('-', '_')}-x86_64-{build}_NT73.txz"
+
+
 ENV = {
     "PATH": "/opt/nerdtools/bin:/opt/nerdtools/sbin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
     "HOME": "/root", "LC_ALL": "C", "TZ": "UTC", "ARCH": "x86_64", "PKGTYPE": "txz",
@@ -291,8 +301,7 @@ def normalize_package(package, original, output, staging):
     if configs:
         install.mkdir(exist_ok=True)
         (install / "doinst.sh").write_text(config_hook(configs))
-    version = package["version"].replace("-", "_")
-    destination = output / f"nerdtools-{package['name']}-{version}-x86_64-1_NT73.txz"
+    destination = output / artifact_name(package)
     canonical_tar(staging, destination, preserve_groups=True)
     return destination
 
@@ -708,29 +717,30 @@ def build_keys(packages):
 
 
 def carry_plan(packages, previous_keys, previous_catalog):
-    """Split catalog packages into those to compile and those reusable from a published release."""
+    """Split catalog packages into those to compile and those reusable from a published release,
+    and choose each package's BUILD number."""
     keys = build_keys(packages)
     published = {record["tool"]: record for record in previous_catalog.get("packages", [])}
-    plan = {"build": [], "reuse": []}
+    plan = {"build": [], "reuse": [], "builds": {}}
     for package in packages:
         if not package.get("catalog", True):
             continue  # build-only helpers are compiled inside each dependent's own job
         name = package["name"]
-        record = published.get(name)
-        expected = f"nerdtools-{name}-{package['version'].replace('-', '_')}-x86_64-1_NT73.txz"
-        if (record and previous_keys.get(name) == keys[name] and record.get("file") == expected
+        record = published.get(name) or {}
+        previous = re.fullmatch(rf"nerdtools-{re.escape(name)}-(.+)-x86_64-([1-9][0-9]*)_NT73\.txz", str(record.get("file", "")))
+        same_version = previous and previous.group(1) == package["version"].replace("-", "_")
+        if (same_version and previous_keys.get(name) == keys[name]
                 and SHA256.fullmatch(str(record.get("sha256", "")))):
-            plan["reuse"].append({"name": name, "file": expected, "sha256": record["sha256"]})
+            plan["builds"][name] = int(previous.group(2))
+            plan["reuse"].append({"name": name, "file": record["file"], "sha256": record["sha256"]})
         else:
+            plan["builds"][name] = int(previous.group(2)) + 1 if same_version else 1
             plan["build"].append(name)
     return plan
 
 
 def checked_artifacts(packages, directory):
-    expected = {
-        f"nerdtools-{package['name']}-{package['version'].replace('-', '_')}-x86_64-1_NT73.txz": package
-        for package in packages
-    }
+    expected = {artifact_name(package): package for package in packages}
     entries = list(directory.iterdir())
     required = {name for name, package in expected.items() if package.get("catalog", True)}
     names = {entry.name for entry in entries}
@@ -813,7 +823,11 @@ def build(args):
         actual_kernel = kernel_smoke(target, kernel, packages, work, output / f"kernel-smoke-{fam}.log")
         if args.publish:
             source_bundle(packages, cache, output / f"sources-{fam}.tar.xz", work)
+        # Enough to reproduce: packages compiled here use this commit's date and BUILD numbers;
+        # carried-over packages are byte-identical to, and documented by, the previous release.
         provenance = {"repository": os.environ.get("GITHUB_REPOSITORY", "local"), "commit": os.environ.get("GITHUB_SHA", "local"),
+                      "source_date_epoch": int(EPOCH), "builds": {p["name"]: int(BUILDS.get(p["name"], 1)) for p in packages},
+                      "carried_over_from": os.environ.get("NERDTOOLS_PREVIOUS_RELEASE") or None,
                       "baseline": BASELINE, "packages": packages,
                       "toolchain": json.loads((REPO / "build/locks/toolchain.json").read_text())}
         (output / f"provenance-{fam}.json").write_text(json.dumps(provenance, indent=2) + "\n")

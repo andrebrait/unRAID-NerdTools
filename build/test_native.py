@@ -138,12 +138,17 @@ class NativeBuildTests(unittest.TestCase):
         packages = [{"name": name, "version": "1.0"} for name in ("same", "changed", "new", "renamed")]
         packages.append({"name": "helper", "version": "1.0", "catalog": False})
         record = lambda name, file=None: {"tool": name, "file": file or f"nerdtools-{name}-1.0-x86_64-1_NT73.txz", "sha256": "a" * 64}
-        previous = {"packages": [record("same"), record("changed"), record("renamed", "nerdtools-renamed-0.9-x86_64-1_NT73.txz")]}
+        previous = {"packages": [record("same", "nerdtools-same-1.0-x86_64-3_NT73.txz"), record("changed", "nerdtools-changed-1.0-x86_64-2_NT73.txz"),
+                                 record("renamed", "nerdtools-renamed-0.9-x86_64-4_NT73.txz")]}
         with patch.object(native, "build_keys", return_value={p["name"]: "now" for p in packages}):
             plan = native.carry_plan(packages, {"same": "now", "changed": "before", "renamed": "now", "new": "now"}, previous)
             self.assertEqual(plan["build"], ["changed", "new", "renamed"])
-            self.assertEqual(plan["reuse"], [{"name": "same", "file": "nerdtools-same-1.0-x86_64-1_NT73.txz", "sha256": "a" * 64}])
+            self.assertEqual(plan["reuse"], [{"name": "same", "file": "nerdtools-same-1.0-x86_64-3_NT73.txz", "sha256": "a" * 64}])
+            # Carried over keeps its number; a rebuild of the same version gets the next; a new version restarts at 1.
+            self.assertEqual(plan["builds"], {"same": 3, "changed": 3, "new": 1, "renamed": 1})
             self.assertEqual(native.carry_plan(packages, {}, {})["reuse"], [])
+        with patch.dict(native.BUILDS, {"changed": 3}):
+            self.assertEqual(native.artifact_name(packages[1]), "nerdtools-changed-1.0-x86_64-3_NT73.txz")
 
     def test_build_identity_follows_recipe_inputs_and_dependencies_but_not_smoke_commands(self):
         packages = native.load_packages()
