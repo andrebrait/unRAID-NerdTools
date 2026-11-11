@@ -34,8 +34,11 @@ runs:
       shell: bash
       run: |
         [[ "$RUNNER_OS" == Linux && "$RUNNER_ARCH" == X64 ]]
-        sudo apt-get update
-        sudo apt-get -o Acquire::Retries=5 install --no-install-recommends --yes cpio zstd xz-utils squashfs-tools
+        # Already present in the NerdTools builder image; other callers get them installed.
+        if ! for tool in cpio zstd xz unsquashfs; do command -v "$tool" >/dev/null || exit 1; done; then
+          sudo apt-get -o Acquire::Retries=5 update
+          sudo apt-get -o Acquire::Retries=5 install --no-install-recommends --yes cpio zstd xz-utils squashfs-tools
+        fi
     - name: Verify inputs and prepare private roots
       id: bootstrap
       shell: bash
