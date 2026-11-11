@@ -27,6 +27,11 @@ on:
         required: false
         default: ''
         type: string
+      same-run-dependencies:
+        description: Take changed dependencies from packages built earlier in this workflow run
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -110,6 +115,13 @@ jobs:
               with open(path, 'rb') as stream:
                   assert hashlib.file_digest(stream, 'sha256').hexdigest() == item['sha256'], item['file']
           PY
+      - name: Take changed dependencies from earlier waves of this run
+        if: inputs.same-run-dependencies
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: native-package-*
+          merge-multiple: true
+          path: reuse
       - name: Build and validate this package and its transitive dependencies without publishing
         env:
           PACKAGE: ${{ inputs.package }}

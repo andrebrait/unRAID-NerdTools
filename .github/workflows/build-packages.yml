@@ -77,6 +77,10 @@ jobs:
       tag: ${{ steps.packages.outputs.tag }}
       builds: ${{ steps.packages.outputs.builds }}
       reuse: ${{ steps.packages.outputs.reuse }}
+      wave-1: ${{ steps.packages.outputs.wave-1 }}
+      wave-2: ${{ steps.packages.outputs.wave-2 }}
+      wave-3: ${{ steps.packages.outputs.wave-3 }}
+      wave-4: ${{ steps.packages.outputs.wave-4 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -100,28 +104,83 @@ jobs:
           fi
           plan=$(python3 build/native.py plan --previous previous)
           jq -r '"Compiling \(.build | length), carrying over \(.reuse | length)"' <<<"$plan"
-          { echo "tag=$tag"; echo "plan=$plan"; echo "names=$(jq -c .build <<<"$plan")"; echo "builds=$(jq -c .builds <<<"$plan")"; echo "reuse=$(jq -c .reuse <<<"$plan")"; } >> "$GITHUB_OUTPUT"
+          { echo "tag=$tag"; echo "plan=$plan"; echo "names=$(jq -c .build <<<"$plan")"; echo "builds=$(jq -c .builds <<<"$plan")"; echo "reuse=$(jq -c .reuse <<<"$plan")"; for k in 1 2 3 4; do echo "wave-$k=$(jq -c ".waves[$((k-1))]" <<<"$plan")"; done; } >> "$GITHUB_OUTPUT"
 
-  package:
+  # Wave 1: changed packages whose changed dependencies were built in earlier waves of this run.
+  package-1:
     needs: package-list
-    if: needs.package-list.outputs.names != '[]'
+    if: needs.package-list.outputs.wave-1 != '[]'
     strategy:
       fail-fast: false
       max-parallel: 20
       matrix:
-        package: ${{ fromJSON(needs.package-list.outputs.names) }}
+        package: ${{ fromJSON(needs.package-list.outputs.wave-1) }}
     uses: ./.github/workflows/package-build.yml
     with:
       package: ${{ matrix.package }}
       retain-artifact: true
+      same-run-dependencies: false
       builds: ${{ needs.package-list.outputs.builds }}
       reuse: ${{ needs.package-list.outputs.reuse }}
       reuse-tag: ${{ needs.package-list.outputs.tag }}
 
+  # Wave 2: changed packages whose changed dependencies were built in earlier waves of this run.
+  package-2:
+    needs: [package-list, package-1]
+    if: always() && needs.package-list.result == 'success' && (needs.package-1.result == 'success' || needs.package-1.result == 'skipped') && needs.package-list.outputs.wave-2 != '[]'
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        package: ${{ fromJSON(needs.package-list.outputs.wave-2) }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: ${{ matrix.package }}
+      retain-artifact: true
+      same-run-dependencies: true
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  # Wave 3: changed packages whose changed dependencies were built in earlier waves of this run.
+  package-3:
+    needs: [package-list, package-2]
+    if: always() && needs.package-list.result == 'success' && (needs.package-2.result == 'success' || needs.package-2.result == 'skipped') && needs.package-list.outputs.wave-3 != '[]'
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        package: ${{ fromJSON(needs.package-list.outputs.wave-3) }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: ${{ matrix.package }}
+      retain-artifact: true
+      same-run-dependencies: true
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
+
+  # Wave 4: changed packages whose changed dependencies were built in earlier waves of this run.
+  package-4:
+    needs: [package-list, package-3]
+    if: always() && needs.package-list.result == 'success' && (needs.package-3.result == 'success' || needs.package-3.result == 'skipped') && needs.package-list.outputs.wave-4 != '[]'
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        package: ${{ fromJSON(needs.package-list.outputs.wave-4) }}
+    uses: ./.github/workflows/package-build.yml
+    with:
+      package: ${{ matrix.package }}
+      retain-artifact: true
+      same-run-dependencies: true
+      builds: ${{ needs.package-list.outputs.builds }}
+      reuse: ${{ needs.package-list.outputs.reuse }}
+      reuse-tag: ${{ needs.package-list.outputs.tag }}
 
   build:
-    if: always() && github.event_name == 'workflow_dispatch' && needs.package-list.result == 'success' && (needs.package.result == 'success' || needs.package.result == 'skipped')
-    needs: [package-list, package]
+    if: always() && github.event_name == 'workflow_dispatch' && needs.package-list.result == 'success' && (needs.package-1.result == 'success' || needs.package-1.result == 'skipped') && (needs.package-2.result == 'success' || needs.package-2.result == 'skipped') && (needs.package-3.result == 'success' || needs.package-3.result == 'skipped') && (needs.package-4.result == 'success' || needs.package-4.result == 'skipped')
+    needs: [package-list, package-1, package-2, package-3, package-4]
     runs-on: ubuntu-24.04
     # Debian builder image with all tools (build/runner/Dockerfile), pinned by digest. Privileged for
     # Bubblewrap user namespaces, mknod and /dev/kvm. Update the digest after builder-image.yml republishes it.
