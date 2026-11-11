@@ -58,7 +58,7 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && inputs.publish && github.ref != format('refs/heads/{0}', github.event.repository.default_branch)
         run: echo "Publication requires the default branch" >&2; exit 1
       - name: Install SquashFS test tools
-        run: sudo apt-get update && sudo apt-get install --no-install-recommends --yes squashfs-tools
+        run: sudo apt-get update && sudo apt-get -o Acquire::Retries=5 install --no-install-recommends --yes squashfs-tools
       - name: Test the trust boundaries and catalog contract
         run: python3 -m unittest discover -s build -p 'test_*.py'
       - name: Validate checked recipes, pins, dependency closure, and complete catalog
@@ -165,7 +165,7 @@ jobs:
           toolchain-lock: build/locks/toolchain.json
       - name: Install VM tools and configure subordinate sandbox identities
         run: |
-          sudo apt-get install --no-install-recommends --yes binutils qemu-system-x86 bubblewrap uidmap
+          sudo apt-get -o Acquire::Retries=5 install --no-install-recommends --yes binutils qemu-system-x86 bubblewrap uidmap
           sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 root
       - name: Require the mapped sandbox to exclude host paths and privileged mounts
         env:

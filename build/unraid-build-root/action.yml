@@ -35,7 +35,7 @@ runs:
       run: |
         [[ "$RUNNER_OS" == Linux && "$RUNNER_ARCH" == X64 ]]
         sudo apt-get update
-        sudo apt-get install --no-install-recommends --yes cpio zstd xz-utils squashfs-tools
+        sudo apt-get -o Acquire::Retries=5 install --no-install-recommends --yes cpio zstd xz-utils squashfs-tools
     - name: Verify inputs and prepare private roots
       id: bootstrap
       shell: bash
