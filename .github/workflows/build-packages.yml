@@ -173,7 +173,9 @@ jobs:
         run: |
           args=(--package-artifacts "$GITHUB_WORKSPACE/package-artifacts")
           if [[ "$PUBLISH" == true ]]; then args+=(--publish); fi
-          sudo --preserve-env=GITHUB_REPOSITORY,GITHUB_SHA,RUNNER_TEMP python3 build/native.py build \
+          SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
+          export SOURCE_DATE_EPOCH
+          sudo --preserve-env=GITHUB_REPOSITORY,GITHUB_SHA,RUNNER_TEMP,SOURCE_DATE_EPOCH python3 build/native.py build \
             --work /tmp \
             --baseline-root "$BASELINE_ROOT" --development-root "$DEVELOPMENT_ROOT" \
             --unraid-version "$TARGET_VERSION" --unraid-sha256 "$TARGET_SHA256" \

@@ -52,7 +52,7 @@ Recipe working directory: `/work/recipe`. Its input archives are copied alongsid
 
 - `ARCH=x86_64`, `PKGTYPE=txz`, `BUILD=1`, `TAG=_NT73`
 - `TMP=/tmp/nerdtools-build`, `OUTPUT=/out`
-- `SOURCE_DATE_EPOCH` from `baseline.json`, `LC_ALL=C`, `TZ=UTC`
+- `SOURCE_DATE_EPOCH` is the commit time of the commit being built (set by the workflows; the `baseline.json` date when run locally), `LC_ALL=C`, `TZ=UTC`. Tools that print a build date therefore show when that package was last compiled. A carried-over package keeps the date of the commit that compiled it; rebuild at that commit to reproduce it.
 - fixed generic x86-64 C/C++ flags, not `-march=native`
 - private library rpath and pkg-config paths under `/opt/nerdtools`
 

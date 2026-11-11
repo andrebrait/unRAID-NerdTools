@@ -30,11 +30,14 @@ INTEGRATION_DIGESTS = {
     "etc/udev/rules.d/97-hid2hci.rules": "8d4ed90eae12d0c0cac3c65c1960fb90c3f3fde264696bbe30f590a8cd4aa2ed",
     "etc/pam.d/screen.new": "4e631aaf91babb312ec39a09d6cfd6e0a57d8ac5a48eb58a9bade25af3a937aa",
 }
+# Build date shown by tools (e.g. "compiled ..."): the commit being built, set by CI, so a release says
+# when it was built while staying repeatable from that commit. The baseline date is the local fallback.
+EPOCH = os.environ.get("SOURCE_DATE_EPOCH") or str(BASELINE["source_date_epoch"])
 ENV = {
     "PATH": "/opt/nerdtools/bin:/opt/nerdtools/sbin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
     "HOME": "/root", "LC_ALL": "C", "TZ": "UTC", "ARCH": "x86_64", "PKGTYPE": "txz",
     "BUILD": "1", "TAG": "_NT73", "TMP": "/tmp/nerdtools-build", "OUTPUT": "/out",
-    "SOURCE_DATE_EPOCH": str(BASELINE["source_date_epoch"]),
+    "SOURCE_DATE_EPOCH": EPOCH,
     "CFLAGS": "-O2 -fPIC -march=x86-64 -mtune=generic",
     "CXXFLAGS": "-O2 -fPIC -march=x86-64 -mtune=generic",
     "LDFLAGS": "-Wl,-rpath,/opt/nerdtools/lib64 -Wl,-rpath,/opt/nerdtools/lib",
@@ -238,7 +241,7 @@ def inspect_package(archive, tool):
 
 def canonical_tar(directory, destination, preserve_groups=False):
     groups = [] if preserve_groups else ["--group=0"]
-    run(["tar", "--sort=name", "--format=gnu", f"--mtime=@{BASELINE['source_date_epoch']}", "--owner=0", *groups, "--numeric-owner", "--create", "--file", destination, "--use-compress-program=xz -T1 -9", "--directory", directory, "."])
+    run(["tar", "--sort=name", "--format=gnu", f"--mtime=@{EPOCH}", "--owner=0", *groups, "--numeric-owner", "--create", "--file", destination, "--use-compress-program=xz -T1 -9", "--directory", directory, "."])
 
 
 def config_hook(paths):
