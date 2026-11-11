@@ -139,17 +139,20 @@ jobs:
           path: package-artifacts
       - name: Carry over unchanged packages from the previous release, verifying each checksum
         env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
+          REPOSITORY: ${{ github.repository }}
           PLAN: ${{ needs.package-list.outputs.plan }}
           TAG: ${{ needs.package-list.outputs.tag }}
         run: |
           mkdir -p package-artifacts
           python3 - <<'PY'
-          import hashlib, json, os, subprocess
+          import hashlib, json, os, shutil, urllib.request
+          # Public release assets; the builder image has no gh CLI and needs no token for these.
+          base = f"https://github.com/{os.environ['REPOSITORY']}/releases/download/{os.environ['TAG']}/"
           for item in json.loads(os.environ['PLAN'])['reuse']:
-              subprocess.run(['gh', 'release', 'download', os.environ['TAG'], '--dir', 'package-artifacts', '--pattern', item['file']], check=True)
-              with open('package-artifacts/' + item['file'], 'rb') as stream:
+              path = 'package-artifacts/' + item['file']
+              with urllib.request.urlopen(base + item['file'], timeout=300) as response, open(path, 'wb') as stream:
+                  shutil.copyfileobj(response, stream)
+              with open(path, 'rb') as stream:
                   assert hashlib.file_digest(stream, 'sha256').hexdigest() == item['sha256'], item['file']
           PY
       - name: Read the canonical baseline pins
