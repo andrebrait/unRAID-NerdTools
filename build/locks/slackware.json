@@ -1069,7 +1069,7 @@
     "name": "vim",
     "version": "9.2.1252",
     "recipe": "build/recipes/vim/vim.SlackBuild",
-    "recipe_sha256": "8db63359c915b6e8de48148505ef17b409345db35d20297f96edc9c29a67161b",
+    "recipe_sha256": "7039a5eb3834b2a84e3d6da2f33a98768478fba56c0df3848db413cbfa69bce4",
     "provenance": {
       "kind": "source",
       "url": "https://git.slackware.nl/current/plain/source/ap/vim/vim.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",

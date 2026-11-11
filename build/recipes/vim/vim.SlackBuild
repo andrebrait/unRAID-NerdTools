@@ -107,7 +107,7 @@ CFLAGS="$SLKCFLAGS" \
   --with-features=huge \
   --with-wayland=no \
   --with-x=no \
-  --with-compiledby="<volkerdi@slackware.com>" \
+  --with-compiledby="NerdTools <https://github.com/andrebrait/unRAID-NerdTools>" \
   --build=$ARCH-slackware-linux || exit 1
 }
 
