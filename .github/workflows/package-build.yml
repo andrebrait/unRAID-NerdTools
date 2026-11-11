@@ -45,7 +45,7 @@ jobs:
     # Debian builder image with all tools (build/runner/Dockerfile), pinned by digest. Privileged for
     # Bubblewrap user namespaces, mknod and /dev/kvm. Update the digest after builder-image.yml republishes it.
     container:
-      image: ghcr.io/andrebrait/unraid-nerdtools-builder@sha256:48a5c51c733bb8ab7ac52234182ec00b009aba6842ba0ac1321f622ca97f8f6a
+      image: ghcr.io/andrebrait/unraid-nerdtools-builder@sha256:20d97a9fcf230d08cc68ff1ef9aeff1ded90dca60102d2ffdda6df72be5aff25
       options: --privileged
     timeout-minutes: 360
     steps:
