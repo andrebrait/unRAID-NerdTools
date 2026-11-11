@@ -553,8 +553,8 @@
         "sha256": "bf0fc5fe91d06b7ded9e3990910e83acfd01cd5aea6935073a405d19b94b6609"
       }
     ],
-    "dependencies": ["python3", "pygobject3", "zenmap-typelibs"],
-    "build_dependencies": ["python3"],
+    "dependencies": ["lua", "python3", "pygobject3", "zenmap-typelibs"],
+    "build_dependencies": ["lua", "python3"],
     "smoke": [
       [
         "/opt/nerdtools/bin/nmap",

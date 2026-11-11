@@ -395,8 +395,6 @@ def audit_runtime(root):
                 relative = "/" + str(path.relative_to(root))
                 run_sandbox(root, ["/lib64/ld-linux-x86-64.so.2", "--list", relative], ENV, timeout=60, read_only=True)
             checked += 1
-    if not checked:
-        raise ValueError("No native ELF files were produced")
     return checked
 
 
@@ -431,7 +429,8 @@ def kernel_smoke(root, kernel, packages, work, log_path):
                       + " || printf '%s\\n' " + shlex.quote("NERDTOOLS_COMMAND_FAILED " + shlex.join(command)))
     script.extend(["completed=0", 'while IFS= read -r status; do [ "$status" = "$completed:0" ]; completed=$((completed + 1)); done < /root/nerdtools-completion',
                    f'[ "$completed" = "{len(commands)}" ]',
-                   "printf 'NERDTOOLS_SMOKE_PASSED:%s:%s:%s\\n' " + shlex.quote(token) + ' "$completed" "$kernel"',
+                   # Tools may end output without a newline or with terminal escapes; start the marker on its own line.
+                   "printf '\\nNERDTOOLS_SMOKE_PASSED:%s:%s:%s\\n' " + shlex.quote(token) + ' "$completed" "$kernel"',
                    "trap - EXIT", "/sbin/reboot -f", "while :; do sleep 1; done"])
     home = root / "tmp/nerdtools-smoke"
     if home.is_symlink():
@@ -806,6 +805,8 @@ def build(args):
             if package.get("catalog", True):
                 install_payload(built[package["name"]][1], target)
         checked = audit_runtime(target)
+        if not checked:
+            raise ValueError("No native ELF files were produced")
         actual_kernel = kernel_smoke(target, kernel, packages, work, output / f"kernel-smoke-{fam}.log")
         if args.publish:
             source_bundle(packages, cache, output / f"sources-{fam}.tar.xz", work)
