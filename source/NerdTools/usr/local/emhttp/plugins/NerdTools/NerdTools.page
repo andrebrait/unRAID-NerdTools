@@ -46,7 +46,6 @@ $nt_vars = @parse_ini_file('/var/local/emhttp/var.ini', false, INI_SCANNER_RAW);
 <section id="provided_packages" hidden><h3>Built into Unraid</h3><p>These capabilities are supplied by Unraid and cannot be installed, replaced or removed through NerdTools.</p><ul></ul></section>
 <input id="btnRefresh" value="Force Updates" type="button" title="Check GitHub Releases now; existing cache is retained on failure">
 <input class="reset" type="button" title="Reset applied filters" value="Reset Filters">
-<input id="btnSave" type="button" value="Save Settings">
 <input id="btnApply" type="button" value="Apply" disabled>
 <input type="button" value="Done" onclick="done()">
 </form>

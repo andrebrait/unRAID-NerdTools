@@ -3,11 +3,10 @@ require_once __DIR__.'/NerdToolsHelpers.php';
 header('Content-Type: application/json');
 header('Cache-Control: no-store');
 try {
-    $vars = @parse_ini_file('/var/local/emhttp/var.ini', false, INI_SCANNER_RAW);
-    $token = $_POST['csrf_token'] ?? null;
-    if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || !is_string($token) || empty($vars['csrf_token'])
-        || !hash_equals($vars['csrf_token'], $token)) {
-        http_response_code(403);
+    // Unraid's PHP auto_prepend (webGui/include/local_prepend.php) verifies the CSRF token of every
+    // POST and then removes it from $_POST, so it must not be checked again here.
+    if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+        http_response_code(405);
         throw new RuntimeException('Invalid request; reload the page');
     }
     $manager = new NerdTools();

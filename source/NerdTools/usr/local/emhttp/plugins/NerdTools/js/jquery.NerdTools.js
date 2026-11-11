@@ -15,7 +15,6 @@ $(function() {
     });
     $('#package_form').on('submit', function(event) { event.preventDefault(); Apply(); });
     $('#btnApply').on('click', Apply);
-    $('#btnSave').on('click', function() { saveSettings(false); });
     $('#btnRefresh').on('click', function() { packageQuery(true); });
     $('#btnRelease').on('click', function() {
         $('#btnRelease').prop('disabled', true);
@@ -134,15 +133,13 @@ function checkDepends() {
     });
     syncPreferences();
 }
-function saveSettings(install) {
-    if (!nerdLoaded) { packageError('Load the catalog before saving settings.'); return; }
+function Apply() {
+    if (!nerdLoaded) { packageError('Load the catalog before applying changes.'); return; }
     checkDepends();
-    $('#btnApply, #btnSave').prop('disabled', true);
+    $('#btnApply').prop('disabled', true);
     $.post('/plugins/NerdTools/include/Settings.php', $('#package_form').serialize()).done(function() {
         packageError('');
-        if (install) openBox('/plugins/NerdTools/scripts/packagemanager&arg1=--download&arg2=--uninstall', 'Package Manager', 600, 900, true);
-        else packageQuery(false);
+        openBox('/plugins/NerdTools/scripts/packagemanager&arg1=--download&arg2=--uninstall', 'Package Manager', 600, 900, true);
     }).fail(function(xhr) { packageError(requestError(xhr)); })
-      .always(function() { $('#btnApply, #btnSave').prop('disabled', false); });
+      .always(function() { $('#btnApply').prop('disabled', false); });
 }
-function Apply() { saveSettings(true); }

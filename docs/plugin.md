@@ -6,7 +6,7 @@ Install the rendered `NerdTools.plg` from this fork's GitHub Releases. The check
 
 ## Package settings
 
-Open **Utilities → NerdTools**. Search, sort and filter the package table, turn packages on or off, and select **Apply**. Dependencies are selected automatically and enforced again by the package manager. **Save Settings** saves selections and the check interval without changing installed packages. System packages or packages managed by another installer are protected, not adopted.
+Open **Utilities → NerdTools**. Search, sort and filter the package table, turn packages on or off, and select **Apply**. Apply saves your selections and the check interval, then installs and removes packages to match. Dependencies are selected automatically and enforced again by the package manager. System packages or packages managed by another installer are protected, not adopted.
 
 Native package identities are `nerdtools-<tool>` so pkgtools cannot replace an Unraid package with the same tool name. The GUI continues to show original tool names. Existing selections are preserved when their settings keys migrate; installed ownership changes only after successful explicit verified Apply. Archives install qualified `nerdtools-<command>` launchers. NerdTools also creates an owned bare-command symlink when no host command exists in the service PATH or standard command directories; host commands are never shadowed. Only unchanged owned symlinks are removed, and foreign replacements are retained. Use the qualified command when a host command conflicts.
 
