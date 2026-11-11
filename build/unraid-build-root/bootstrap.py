@@ -87,19 +87,26 @@ def fetch(item, cache):
     validate_input(item)
     cache.mkdir(parents=True, exist_ok=True)
     path = cache / item["sha256"]
-    if not path.exists():
+    # Large downloads are occasionally truncated; retry, but only ever accept the pinned bytes.
+    for attempt in range(3):
+        if path.exists():
+            break
         opener = urllib.request.build_opener(HTTPSRedirect())
         request = urllib.request.Request(item["url"], headers={"User-Agent": "NerdTools-reproducible-build"})
-        with opener.open(request, timeout=120) as response, tempfile.NamedTemporaryFile(dir=cache, delete=False) as stream:
-            temporary = Path(stream.name)
-            try:
-                shutil.copyfileobj(response, stream)
-                stream.flush()
-                if digest(temporary) != item["sha256"]:
-                    raise ValueError(f"SHA256 mismatch: {item['url']}")
-                temporary.replace(path)
-            finally:
-                temporary.unlink(missing_ok=True)
+        try:
+            with opener.open(request, timeout=120) as response, tempfile.NamedTemporaryFile(dir=cache, delete=False) as stream:
+                temporary = Path(stream.name)
+                try:
+                    shutil.copyfileobj(response, stream)
+                    stream.flush()
+                    if digest(temporary) != item["sha256"]:
+                        raise ValueError(f"SHA256 mismatch: {item['url']}")
+                    temporary.replace(path)
+                finally:
+                    temporary.unlink(missing_ok=True)
+        except (ValueError, OSError):
+            if attempt == 2:
+                raise
     if digest(path) != item["sha256"]:
         raise ValueError(f"SHA256 mismatch in cached input: {item['file']}")
     return path
