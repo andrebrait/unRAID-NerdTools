@@ -25,6 +25,16 @@ $(function() {
           .fail(function(xhr) { packageError(requestError(xhr)); })
           .always(function() { $('#btnRelease').prop('disabled', false); });
     });
+    function saveToken(value) {
+        $('#btnToken, #btnTokenRemove').prop('disabled', true);
+        $.post('/plugins/NerdTools/include/Settings.php', {action: 'token', github_token: value,
+            csrf_token: $('#package_form input[name="csrf_token"]').val()})
+          .done(function() { packageError(''); $('#github_token').val(''); packageQuery(false); })
+          .fail(function(xhr) { packageError(requestError(xhr)); })
+          .always(function() { $('#btnToken, #btnTokenRemove').prop('disabled', false); });
+    }
+    $('#btnToken').on('click', function() { saveToken($('#github_token').val()); });
+    $('#btnTokenRemove').on('click', function() { saveToken(''); });
     packageQuery(false);
 });
 function packageError(message) {
@@ -81,6 +91,7 @@ function packageQuery(force) {
         var releases = $('#package_release').empty().append($('<option>').val('latest').text('Latest compatible release'));
         $.each(data.releases || [], function(_, tag) { releases.append($('<option>').val(tag).text(tag)); });
         releases.val(data.selector || 'latest');
+        $('#github_token').attr('placeholder', data.token_set ? 'Saved (hidden)' : 'Not set');
         var state = data.state || {};
         var statusText = data.release ? 'Package release: ' + data.release + '. ' : '';
         statusText += state.last_success ? 'Last successful check: ' + new Date(state.last_success * 1000).toLocaleString() + '. ' : 'No successful catalog check yet. ';

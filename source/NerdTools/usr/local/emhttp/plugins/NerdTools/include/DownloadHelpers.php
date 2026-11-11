@@ -3,7 +3,7 @@ class NerdToolsHttpError extends RuntimeException {
     public $reset;
     public function __construct($message, $reset = 0) { parent::__construct($message); $this->reset = $reset; }
 }
-function nt_http($url, $file = null) {
+function nt_http($url, $file = null, $token = '') {
     $allowed = strpos($url, 'https://api.github.com/repos/andrebrait/unRAID-NerdTools/releases?') === 0
         || strpos($url, 'https://github.com/andrebrait/unRAID-NerdTools/releases/download/') === 0;
     if (!$allowed) throw new RuntimeException('Refusing untrusted download URL');
@@ -17,7 +17,9 @@ function nt_http($url, $file = null) {
         CURLOPT_CONNECTTIMEOUT=>15, CURLOPT_TIMEOUT=>$file === null ? 90 : 1800,
         CURLOPT_SSL_VERIFYPEER=>true, CURLOPT_SSL_VERIFYHOST=>2,
         CURLOPT_USERAGENT=>'NerdTools/7.3 (andrebrait/unRAID-NerdTools)',
-        CURLOPT_HTTPHEADER=>['Accept: application/vnd.github+json', 'X-GitHub-Api-Version: 2022-11-28'],
+        // The token goes only to the API host; asset downloads never carry it (curl also drops it on redirects).
+        CURLOPT_HTTPHEADER=>array_merge(['Accept: application/vnd.github+json', 'X-GitHub-Api-Version: 2022-11-28'],
+            $token !== '' && strpos($url, 'https://api.github.com/') === 0 ? ['Authorization: Bearer '.$token] : []),
         CURLOPT_HEADERFUNCTION=>function($curl, $line) use (&$headers) {
             if (strpos($line, 'HTTP/') === 0) $headers = [];
             $parts = explode(':', $line, 2);

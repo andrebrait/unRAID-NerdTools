@@ -27,6 +27,10 @@ $nt_vars = @parse_ini_file('/var/local/emhttp/var.ini', false, INI_SCANNER_RAW);
 <select id="package_release"><option value="latest">Latest compatible release</option></select>
 <input id="btnRelease" type="button" value="Use Release">
 <p>Choose a retained release to roll back, then select Apply. Selecting a specific release pins it until you choose Latest compatible release again. Incompatible releases are refused without changing your current cache.</p>
+<label for="github_token">GitHub token (optional)</label>
+<input type="password" id="github_token" autocomplete="off" placeholder="Not set">
+<input id="btnToken" type="button" value="Save Token"> <input id="btnTokenRemove" type="button" value="Remove Token">
+<p>Only needed if checks fail with a GitHub rate-limit error, for example when many devices share one internet connection. Create a fine-grained personal access token with "Public repositories" read-only access and no other permissions. It is stored on the USB flash drive, so anyone who can read the flash share can read it.</p>
 <p id="catalog_status" role="status" aria-live="polite"></p>
 <p id="package_error" role="alert" hidden></p>
 <div class="wrapper">

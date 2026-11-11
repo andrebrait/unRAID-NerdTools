@@ -221,7 +221,20 @@ class NerdTools {
         return $lock;
     }
     private function fetch($url, $file = null) {
-        return $this->transport ? call_user_func($this->transport, $url, $file) : nt_http($url, $file);
+        return $this->transport ? call_user_func($this->transport, $url, $file) : nt_http($url, $file, $this->token());
+    }
+    // Optional GitHub token, only to lift the anonymous API rate limit; never shown back in the GUI.
+    public function token() {
+        $file = $this->path.'/github-token';
+        return is_file($file) && !is_link($file) ? trim((string)file_get_contents($file)) : '';
+    }
+    public function saveToken($token) {
+        $file = $this->path.'/github-token';
+        if ($token === '') { if (is_file($file) && !is_link($file)) unlink($file); return; }
+        if (!is_string($token) || !preg_match('/^(github_pat_[A-Za-z0-9_]{20,255}|gh[pousr]_[A-Za-z0-9]{20,255})$/D', $token)) {
+            throw new RuntimeException('That does not look like a GitHub token');
+        }
+        nt_atomic_write($file, $token."\n");
     }
     public function config() {
         $file = $this->path.'/NerdTools.cfg';

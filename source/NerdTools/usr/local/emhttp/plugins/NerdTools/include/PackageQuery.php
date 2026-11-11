@@ -36,7 +36,7 @@ try {
     echo json_encode(['packages'=>$packages, 'external_packages'=>$catalog['external_packages'] ?? [],
         'provided_packages'=>$catalog['provided_packages'] ?? [], 'release'=>$catalog['release'] ?? '',
         'selector'=>$catalog['selector'] ?? 'latest', 'releases'=>$catalog['releases'] ?? [],
-        'state'=>$manager->state(), 'hours'=>$manager->interval()], JSON_THROW_ON_ERROR);
+        'state'=>$manager->state(), 'hours'=>$manager->interval(), 'token_set'=>$manager->token() !== ''], JSON_THROW_ON_ERROR);
 } catch (Throwable $error) {
     http_response_code(400);
     echo json_encode(['error'=>$error->getMessage()]);

@@ -232,6 +232,13 @@ $manager->apply(false,true,true); $manager->schedule(true);
 expect(!is_file($manager->path.'/NerdTools.cron') && is_file($manager->path.'/NerdTools.cfg'), 'Removal preserves configuration');
 expect(is_file($manager->path.'/packages/tool-2.0-x86_64-1.txz'), 'Plugin removal preserves verified cache');
 expect(is_file($root.'/boot/extra/tool-other-unrelated.txz'), 'Removal never deletes unrelated extras');
+// The optional GitHub token: only plausible tokens are stored, and an empty value removes it.
+refused(function() use ($manager) { $manager->saveToken("ghp_x\nAuthorization: evil"); }, 'GitHub token');
+expect($manager->token() === '', 'Rejected token is not stored');
+$manager->saveToken('github_pat_'.str_repeat('A', 40));
+expect($manager->token() === 'github_pat_'.str_repeat('A', 40), 'Fine-grained token is stored');
+$manager->saveToken('');
+expect($manager->token() === '' && !is_file($manager->path.'/github-token'), 'Empty value removes the token');
 // Safe test cleanup is restricted to this random temporary root.
 $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root,FilesystemIterator::SKIP_DOTS),RecursiveIteratorIterator::CHILD_FIRST);
 foreach ($iterator as $entry) { if ($entry->isDir()) rmdir($entry->getPathname()); else unlink($entry->getPathname()); }

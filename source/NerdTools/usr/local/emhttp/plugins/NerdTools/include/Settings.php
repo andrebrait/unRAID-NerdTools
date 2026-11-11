@@ -16,6 +16,8 @@ try {
         if (!$manager->refresh(true, $selector)) throw new RuntimeException('GitHub rate limit is still active; retry after the displayed reset time');
     } elseif (($_POST['action'] ?? '') === 'save') {
         $manager->save($_POST['packages'] ?? [], $_POST['update_check_hours'] ?? '24');
+    } elseif (($_POST['action'] ?? '') === 'token') {
+        $manager->saveToken(trim((string)($_POST['github_token'] ?? '')));
     } else throw new RuntimeException('Unknown action');
     echo json_encode(['ok'=>true], JSON_THROW_ON_ERROR);
 } catch (Throwable $error) {
