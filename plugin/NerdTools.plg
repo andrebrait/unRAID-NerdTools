@@ -13,7 +13,7 @@
 <!ENTITY plgNAME   "&name;-&version;-x86_64-1">
 <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
 ]>
-<PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" min="7.3.4">
+<PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" support="https://github.com/&github;/issues" min="7.3.4">
 <CHANGES>
 ###@VERSION@
 - Native Unraid 7.3.4+ support, including betas and release candidates once verified packages are published for them.
