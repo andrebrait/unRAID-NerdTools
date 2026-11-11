@@ -60,6 +60,7 @@ jobs:
           BASELINE_ROOT: ${{ steps.roots.outputs.baseline-root }}
           DEVELOPMENT_ROOT: ${{ steps.roots.outputs.development-root }}
         run: |
+          set -o pipefail
           sudo --preserve-env=GITHUB_REPOSITORY,GITHUB_SHA,RUNNER_TEMP python3 build/native.py build \
             --work /tmp --package-artifacts "$GITHUB_WORKSPACE/package-artifacts" \
             --baseline-root "$BASELINE_ROOT" --development-root "$DEVELOPMENT_ROOT" \

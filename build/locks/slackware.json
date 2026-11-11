@@ -184,7 +184,7 @@
       ],
       [
         "/opt/nerdtools/libexec/bluetooth/obexd",
-        "--version"
+        "--help"
       ]
     ]
   },

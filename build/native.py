@@ -423,8 +423,10 @@ def kernel_smoke(root, kernel, packages, work, output):
     child.extend(f"{key}={value}" for key, value in child_env.items())
     for index, command in enumerate(commands):
         script.append("printf '%s\\n' " + shlex.quote("Testing " + shlex.join(command)))
-        script.append(shlex.join([*child, "/usr/bin/timeout", "120", *command]))
-        script.append("printf '%s\\n' " + shlex.quote(str(index) + ":0") + " >> /root/nerdtools-completion")
+        # Keep going so one boot reports every failing command; a missing completion record still fails the gate.
+        script.append(shlex.join([*child, "/usr/bin/timeout", "120", *command])
+                      + " && printf '%s\\n' " + shlex.quote(str(index) + ":0") + " >> /root/nerdtools-completion"
+                      + " || printf '%s\\n' " + shlex.quote("NERDTOOLS_COMMAND_FAILED " + shlex.join(command)))
     script.extend(["completed=0", 'while IFS= read -r status; do [ "$status" = "$completed:0" ]; completed=$((completed + 1)); done < /root/nerdtools-completion',
                    f'[ "$completed" = "{len(commands)}" ]',
                    "printf 'NERDTOOLS_SMOKE_PASSED:%s:%s:%s\\n' " + shlex.quote(token) + ' "$completed" "$kernel"',
