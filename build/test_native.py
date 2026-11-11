@@ -117,20 +117,46 @@ class NativeBuildTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Go toolchain"):
                 native.go_root(root)
 
-    def test_aggregate_requires_exact_complete_package_set(self):
+    def test_aggregate_requires_every_catalog_package_and_nothing_unknown(self):
         packages = [{"name": "app", "version": "1.0"}, {"name": "dep", "version": "2.0", "catalog": False}]
         with tempfile.TemporaryDirectory() as tmp:
             directory = Path(tmp)
             app = directory / "nerdtools-app-1.0-x86_64-1_NT73.txz"
             dep = directory / "nerdtools-dep-2.0-x86_64-1_NT73.txz"
-            app.write_bytes(b"app")
+            dep.write_bytes(b"dep")
             with self.assertRaisesRegex(ValueError, "package artifact set"):
                 native.checked_artifacts(packages, directory)
-            dep.write_bytes(b"dep")
+            app.write_bytes(b"app")
             self.assertEqual(native.checked_artifacts(packages, directory), {"app": app, "dep": dep})
+            dep.unlink()  # build-only helpers are optional
+            self.assertEqual(native.checked_artifacts(packages, directory), {"app": app})
             (directory / "unexpected").write_text("bad")
             with self.assertRaisesRegex(ValueError, "package artifact set"):
                 native.checked_artifacts(packages, directory)
+
+    def test_only_packages_with_an_identical_build_identity_are_carried_over(self):
+        packages = [{"name": name, "version": "1.0"} for name in ("same", "changed", "new", "renamed")]
+        packages.append({"name": "helper", "version": "1.0", "catalog": False})
+        record = lambda name, file=None: {"tool": name, "file": file or f"nerdtools-{name}-1.0-x86_64-1_NT73.txz", "sha256": "a" * 64}
+        previous = {"packages": [record("same"), record("changed"), record("renamed", "nerdtools-renamed-0.9-x86_64-1_NT73.txz")]}
+        with patch.object(native, "build_keys", return_value={p["name"]: "now" for p in packages}):
+            plan = native.carry_plan(packages, {"same": "now", "changed": "before", "renamed": "now", "new": "now"}, previous)
+            self.assertEqual(plan["build"], ["changed", "new", "renamed"])
+            self.assertEqual(plan["reuse"], [{"name": "same", "file": "nerdtools-same-1.0-x86_64-1_NT73.txz", "sha256": "a" * 64}])
+            self.assertEqual(native.carry_plan(packages, {}, {})["reuse"], [])
+
+    def test_build_identity_follows_recipe_inputs_and_dependencies_but_not_smoke_commands(self):
+        packages = native.load_packages()
+        before = native.build_keys(packages)
+        changed = [dict(p) for p in packages]
+        target = next(p for p in changed if p["name"] == "libassuan")
+        target["smoke"] = [["/bin/true"]]
+        self.assertEqual(native.build_keys(changed), before)
+        target["version"] += ".1"
+        after = native.build_keys(changed)
+        differing = {name for name in before if before[name] != after[name]}
+        self.assertIn("gnupg2", differing)  # dependents rebuild with their dependency
+        self.assertNotIn("bc", differing)
 
     def test_build_one_refuses_publication_and_requires_package_and_prepared_roots(self):
         args = native.argparse.Namespace(package="app", publish=True, baseline_root=Path("/baseline"),

@@ -70,22 +70,28 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       names: ${{ steps.packages.outputs.names }}
+      plan: ${{ steps.packages.outputs.plan }}
+      tag: ${{ steps.packages.outputs.tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - id: packages
+      - name: Compile only packages whose build identity differs from the newest published release
+        id: packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
-          python3 - <<'PY'
-          import json, os, sys
-          sys.path.insert(0, 'build')
-          import native
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
-              output.write('names=' + json.dumps([p['name'] for p in native.load_packages()]) + '\n')
-          PY
+          mkdir previous
+          tag=$(gh api "repos/$GH_REPO/releases?per_page=100" --jq '[.[] | select(.draft | not) | select(any(.assets[]; .name == "build-keys.json"))][0].tag_name // empty')
+          if [[ -n "$tag" ]]; then gh release download "$tag" --dir previous --pattern build-keys.json --pattern 'catalog-*.json'; fi
+          plan=$(python3 build/native.py plan --previous previous)
+          jq -r '"Compiling \(.build | length), carrying over \(.reuse | length)"' <<<"$plan"
+          { echo "tag=$tag"; echo "plan=$plan"; echo "names=$(jq -c .build <<<"$plan")"; } >> "$GITHUB_OUTPUT"
 
   package:
     needs: package-list
+    if: needs.package-list.outputs.names != '[]'
     strategy:
       fail-fast: false
       max-parallel: 20
@@ -98,8 +104,8 @@ jobs:
 
 
   build:
-    if: github.event_name == 'workflow_dispatch'
-    needs: package
+    if: always() && github.event_name == 'workflow_dispatch' && needs.package-list.result == 'success' && (needs.package.result == 'success' || needs.package.result == 'skipped')
+    needs: [package-list, package]
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     steps:
@@ -107,11 +113,27 @@ jobs:
         with:
           persist-credentials: false
       - name: Download only packages built in this workflow run
+        if: needs.package-list.outputs.names != '[]'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: native-package-*
           merge-multiple: true
           path: package-artifacts
+      - name: Carry over unchanged packages from the previous release, verifying each checksum
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PLAN: ${{ needs.package-list.outputs.plan }}
+          TAG: ${{ needs.package-list.outputs.tag }}
+        run: |
+          mkdir -p package-artifacts
+          python3 - <<'PY'
+          import hashlib, json, os, subprocess
+          for item in json.loads(os.environ['PLAN'])['reuse']:
+              subprocess.run(['gh', 'release', 'download', os.environ['TAG'], '--dir', 'package-artifacts', '--pattern', item['file']], check=True)
+              with open('package-artifacts/' + item['file'], 'rb') as stream:
+                  assert hashlib.file_digest(stream, 'sha256').hexdigest() == item['sha256'], item['file']
+          PY
       - name: Read the canonical baseline pins
         id: baseline
         run: |
@@ -178,7 +200,7 @@ jobs:
       # Neither the proprietary Unraid ZIP nor any extracted rootfs is uploaded or cached.
 
   publish:
-    if: github.event_name == 'workflow_dispatch' && inputs.publish
+    if: always() && needs.build.result == 'success' && github.event_name == 'workflow_dispatch' && inputs.publish
     needs: build
     runs-on: ubuntu-24.04
     permissions:

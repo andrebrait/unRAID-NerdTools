@@ -688,16 +688,54 @@ def build_one(args):
     print(f"Built and smoke-tested {args.package} with its runtime closure; no full-catalog compatibility or publication claim.")
 
 
+def build_keys(packages):
+    """Identity of everything that can change a package's bytes; equal keys allow carrying a binary over."""
+    shared = hashlib.sha256()
+    for path in ("build/baseline.json", "build/locks/toolchain.json", "build/native.py", "build/sandbox.py",
+                 "build/package_policy.py", "build/unraid-build-root/bootstrap.py"):
+        shared.update(digest(REPO / path).encode())
+    inventory = recipe_inventory(REPO / "build/recipes")
+    keys = {}
+    for package in build_order(packages):
+        directory = Path(package["recipe"]).parent.name + "/"
+        identity = [shared.hexdigest(), {key: value for key, value in package.items() if key != "smoke"},
+                    {name: entry for name, entry in inventory.items() if name.startswith(directory)},
+                    sorted(keys[name] for name in package["dependencies"] + package["build_dependencies"])]
+        keys[package["name"]] = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
+    return keys
+
+
+def carry_plan(packages, previous_keys, previous_catalog):
+    """Split catalog packages into those to compile and those reusable from a published release."""
+    keys = build_keys(packages)
+    published = {record["tool"]: record for record in previous_catalog.get("packages", [])}
+    plan = {"build": [], "reuse": []}
+    for package in packages:
+        if not package.get("catalog", True):
+            continue  # build-only helpers are compiled inside each dependent's own job
+        name = package["name"]
+        record = published.get(name)
+        expected = f"nerdtools-{name}-{package['version'].replace('-', '_')}-x86_64-1_NT73.txz"
+        if (record and previous_keys.get(name) == keys[name] and record.get("file") == expected
+                and SHA256.fullmatch(str(record.get("sha256", "")))):
+            plan["reuse"].append({"name": name, "file": expected, "sha256": record["sha256"]})
+        else:
+            plan["build"].append(name)
+    return plan
+
+
 def checked_artifacts(packages, directory):
     expected = {
-        f"nerdtools-{package['name']}-{package['version'].replace('-', '_')}-x86_64-1_NT73.txz": package["name"]
+        f"nerdtools-{package['name']}-{package['version'].replace('-', '_')}-x86_64-1_NT73.txz": package
         for package in packages
     }
     entries = list(directory.iterdir())
-    if (len(expected) != len(packages) or {entry.name for entry in entries} != set(expected)
+    required = {name for name, package in expected.items() if package.get("catalog", True)}
+    names = {entry.name for entry in entries}
+    if (len(expected) != len(packages) or not required <= names <= set(expected)
             or any(entry.is_symlink() or not entry.is_file() for entry in entries)):
         raise ValueError("Incomplete or unexpected package artifact set")
-    return {expected[entry.name]: entry for entry in entries}
+    return {expected[entry.name]["name"]: entry for entry in entries}
 
 
 def build(args):
@@ -745,6 +783,8 @@ def build(args):
         build_only.mkdir()
         artifacts = checked_artifacts(packages, args.package_artifacts) if args.package_artifacts else None
         for package in packages:
+            if artifacts is not None and package["name"] not in artifacts:
+                continue  # build-only helper, not needed once its dependents are built
             target_output = output if package.get("catalog", True) else build_only
             if artifacts is None:
                 artifact = build_package(package, development, cache, built, target_output, work)
@@ -783,6 +823,7 @@ def build(args):
                   "scope": "Userspace ELF dependency/version audit and declared nonmutating smoke commands run as root, as on Unraid, booted under the exact target kernel in a VM without disks, NIC or host mounts. No physical hardware or daemon integration certification."}
         (output / f"compatibility-{fam}.json").write_text(json.dumps(report, indent=2) + "\n")
         (output / f"catalog-{fam}.json").write_text(json.dumps(catalog(records, args.unraid_version), indent=2) + "\n")
+        (output / "build-keys.json").write_text(json.dumps(build_keys(packages), indent=2, sort_keys=True) + "\n")
         lines = [f"{digest(path)}  {path.name}" for path in sorted(output.iterdir()) if path.is_file()]
         (output / "SHA256SUMS").write_text("\n".join(lines) + "\n")
         asset_limits(output)
@@ -790,7 +831,8 @@ def build(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("build", "build-one", "validate", "pin-recipes", "sandbox-check"))
+    parser.add_argument("command", choices=("build", "build-one", "validate", "pin-recipes", "sandbox-check", "plan"))
+    parser.add_argument("--previous", type=Path, help="Directory holding a published release's build-keys.json and catalog (plan only)")
     parser.add_argument("--package", help="Package to build with its transitive dependencies (build-one only)")
     parser.add_argument("--unraid-version", default=BASELINE["version"])
     parser.add_argument("--unraid-url", default=BASELINE["image"]["url"])
@@ -816,6 +858,12 @@ def main():
         return
     if args.command == "sandbox-check":
         sandbox_check(args)
+        return
+    if args.command == "plan":
+        keys, catalogs = args.previous / "build-keys.json", sorted(args.previous.glob("catalog-*.json"))
+        usable = keys.is_file() and len(catalogs) == 1
+        print(json.dumps(carry_plan(load_packages(), json.loads(keys.read_text()) if usable else {},
+                                    json.loads(catalogs[0].read_text()) if usable else {})))
         return
     if args.command == "validate":
         load_packages()
