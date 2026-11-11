@@ -15,7 +15,7 @@
 ]>
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" min="7.3.4">
 <CHANGES>
-## NerdTools
+###@VERSION@
 - Native Unraid 7.3.4+ support, including betas and release candidates once verified packages are published for them.
 - Package catalogs and verified binaries come from retained GitHub Releases.
 - SHA256 verification, atomic last-good cache, dependency-aware installation and owned-package removal.

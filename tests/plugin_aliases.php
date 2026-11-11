@@ -111,6 +111,10 @@ unlink($root.'/usr/local/bin/tool'); symlink('foreign-target',$root.'/usr/local/
 verify_alias(is_link($root.'/usr/local/bin/tool') && readlink($root.'/usr/local/bin/tool') === 'foreign-target','Foreign symlink replacement is preserved');
 unlink($root.'/usr/local/bin/tool'); file_put_contents($root.'/usr/local/bin/tool','foreign replacement');
 $manager->save(['nerdtools-tool'=>'no','nerdtools-dep'=>'no'],24);
+// A bare command word in another plugin's text (editor syntax tables, prose) is not a dependency.
+file_put_contents($root.'/boot/config/plugins/Other.plg','<PLUGIN name="Other"/>');
+mkdir($root.'/usr/local/emhttp/plugins/Other',0755,true);
+file_put_contents($root.'/usr/local/emhttp/plugins/Other/syntax.js',"regex: /\\b(?:do|end|tool|dep)\\b/ // a tool, or dep\n");
 $manager->apply(true,true);
 verify_alias(file_get_contents($root.'/usr/local/bin/tool') === 'foreign replacement','Uninstall never deletes foreign alias replacement');
 verify_alias(!is_link($root.'/usr/local/bin/dep') && !is_file($root.'/usr/local/bin/nerdtools-dep'),'Uninstall removes only unchanged owned aliases and qualified payload');

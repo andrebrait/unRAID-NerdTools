@@ -64,4 +64,4 @@ jobs:
           tags="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name')"
           latest="$(printf '%s\n' "$tags" | python3 -c 'import re,sys; version=lambda s: tuple(map(int, s.removeprefix("plugin-").split("."))); current=version(sys.argv[1]); tags=[s.strip() for s in sys.stdin if re.fullmatch(r"plugin-[0-9]+[.][0-9]+[.][0-9]+(?:[.][0-9]+)?", s.strip())]; print(str(all(current >= version(tag) for tag in tags)).lower())' "$TAG")"
           gh release create "$TAG" dist/NerdTools.plg dist/NerdTools-*.txz \
-            --verify-tag "--latest=$latest" --generate-notes
+            --verify-tag "--latest=$latest" --notes-from-tag

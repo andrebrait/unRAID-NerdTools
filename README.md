@@ -8,5 +8,5 @@ NerdTools checks for catalog updates daily by default. The interval is configura
 
 RAR is proprietary trial software and is offered through its original upstream download, not repackaged in this repository. Review its license before installing it.
 
-The build recipes, pinned inputs, and GitHub Actions workflows are maintained in this repository. See [build instructions](build/README.md). Builds use an isolated Unraid-derived environment; hardware-specific behavior requires validation on the target hardware.
+Plugin behavior, safety rules and rollback are described in the [plugin guide](docs/plugin.md). The build recipes, pinned inputs, and GitHub Actions workflows are maintained in this repository. See [build instructions](build/README.md). Builds use an isolated Unraid-derived environment; hardware-specific behavior requires validation on the target hardware.
 

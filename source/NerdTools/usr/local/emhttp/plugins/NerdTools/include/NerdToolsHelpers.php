@@ -543,15 +543,14 @@ class NerdTools {
                 if (strpos($text, "\0") === false) $sources[] = $text;
             }
         }
-        $owned = $this->owned(); $aliases = nt_json($this->path.'/command-aliases.json');
+        $owned = $this->owned();
         foreach ($names as $name) {
+            // Only unambiguous references count. A bare command word such as "bc" also appears in
+            // unrelated text (editor syntax files, prose), which made removal impossible.
             $terms = [$name];
             foreach (($owned[$name]['commands'] ?? [nt_tool_name($name)]) as $command) {
                 $terms[] = 'nerdtools-'.$command;
                 $terms[] = 'opt/nerdtools/bin/'.$command; $terms[] = 'opt/nerdtools/sbin/'.$command;
-                $file = $this->root.'/usr/local/bin/'.$command;
-                $ourAlias = isset($aliases[$command]) && is_link($file) && readlink($file) === ($aliases[$command]['target'] ?? null);
-                if (!$this->hostCommandExists($command, $ourAlias ? $file : null)) $terms[] = $command;
             }
             foreach ($sources as $source) foreach (array_unique($terms) as $term) {
                 if (preg_match('~(?<![A-Za-z0-9_+.-])'.preg_quote($term, '~').'(?=$|[^A-Za-z0-9_+.-]|-[0-9])~', $source)) {
