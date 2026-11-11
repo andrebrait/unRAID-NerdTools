@@ -1,0 +1,50 @@
+name: Watch upstream recipe versions
+
+on:
+  schedule:
+    - cron: '43 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: upstream-versions
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Test the version comparison
+        run: python3 -m unittest discover -s tests -p 'test_upstream_versions.py'
+      - name: Compare locked recipes with Slackware-current and SlackBuilds.org
+        run: python3 scripts/check-upstream-versions.py > upstream.json
+      - name: Open one issue per newer upstream version
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const fs = require('node:fs');
+            const report = JSON.parse(fs.readFileSync('upstream.json', 'utf8'));
+            const open = await github.paginate(github.rest.issues.listForRepo, {
+              ...context.repo, state: 'all', labels: 'upstream-update', per_page: 100,
+            });
+            const known = new Set(open.map(issue => issue.title));
+            for (const item of report) {
+              const title = `Upstream update: ${item.name} ${item.ours} -> ${item.upstream}`;
+              if (known.has(title)) continue;
+              await github.rest.issues.create({
+                ...context.repo, title, labels: ['upstream-update'],
+                body: `${item.source} now ships **${item.name} ${item.upstream}**; our recipe is locked at **${item.ours}**.\n\n` +
+                      `Source list: ${item.url}\n\nUpdate the recipe and its pinned inputs, then let the package workflows build and test it. ` +
+                      `Close this issue if we intentionally stay on ${item.ours}.`,
+              });
+              core.notice(`Opened: ${title}`);
+            }
+            core.summary.addHeading('Upstream recipe versions')
+              .addRaw(report.length ? `${report.length} recipe(s) behind upstream.` : 'All recipes are at or ahead of upstream.')
+              .write();
