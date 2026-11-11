@@ -53,9 +53,10 @@ def select_packages(before, after, old_inventory, inventory, paths):
             changed.add(path.removeprefix("build/recipes/").split("/", 1)[0])
         elif path in (*LOCKS, INVENTORY):
             continue
-        elif (path.startswith("build/") or path.startswith("scripts/package-change")
-              or path == "tests/test_package_change.py"
-              or path == ".github/workflows/package-build.yml"):
+        elif (path in ("build/baseline.json", "build/locks/toolchain.json", ".github/workflows/package-build.yml")
+              or path.startswith("build/unraid-build-root/")):
+            # Only what changes every package's compiler, root or job environment rebuilds all of them,
+            # matching native.py's build identity; other build-script edits rebuild nothing.
             return sorted(after)
         elif path.startswith(".github/workflows/package-") and path.endswith(".yml"):
             changed.add(path.removeprefix(".github/workflows/package-").removesuffix(".yml"))

@@ -71,14 +71,16 @@ class ImpactTests(unittest.TestCase):
                          ["app", "compiler", "library"])
 
     def test_shared_infrastructure_changes_rebuild_every_package(self):
-        for path in ("build/baseline.json", "build/locks/toolchain.json", "build/native.py",
-                     "build/unraid-build-root/bootstrap.py", ".github/workflows/package-build.yml",
-                     "scripts/package-change.py", "scripts/package-change-workflows.py"):
+        for path in ("build/baseline.json", "build/locks/toolchain.json",
+                     "build/unraid-build-root/bootstrap.py", ".github/workflows/package-build.yml"):
             with self.subTest(path=path):
                 self.assertEqual(self.select([path]), ["app", "compiler", "library", "unrelated"])
 
     def test_unrelated_files_do_not_build_packages(self):
-        self.assertEqual(self.select(["README.md", "plugin/NerdTools.plg"]), [])
+        for path in ("README.md", "plugin/NerdTools.plg", "build/native.py", "build/README.md",
+                     "build/runner/Dockerfile", "scripts/package-change.py"):
+            with self.subTest(path=path):
+                self.assertEqual(self.select([path]), [])
 
     def test_changed_wrapper_selects_its_package(self):
         self.assertEqual(self.select([".github/workflows/package-unrelated.yml"]), ["unrelated"])
