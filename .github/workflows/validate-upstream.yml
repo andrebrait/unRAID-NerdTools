@@ -1,0 +1,32 @@
+name: Validate upstream automation
+
+on:
+  pull_request:
+    paths:
+      - scripts/upstream-*.py
+      - scripts/check-upstream-versions.py
+      - tests/test_upstream*.py
+      - .github/workflows/upstream-*.yml
+      - .github/workflows/validate-upstream.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/upstream-*.py
+      - scripts/check-upstream-versions.py
+      - tests/test_upstream*.py
+      - .github/workflows/upstream-*.yml
+      - .github/workflows/validate-upstream.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Test provider and PR trust boundaries without credentials
+        run: python3 -m unittest discover -s tests -p 'test_upstream*.py'
