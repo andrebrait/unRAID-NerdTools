@@ -19,7 +19,11 @@ jobs:
       github.event.sender.login != 'github-actions[bot]' &&
       (github.event.sender.type == 'Bot' ||
       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association || github.event.review.author_association)) &&
-      (github.event_name != 'issue_comment' || github.event.issue.pull_request)
+      (github.event_name != 'issue_comment' || github.event.issue.pull_request) &&
+      (github.event_name == 'issue_comment' ||
+      (github.event.pull_request.head.ref == 'automation/upstream-recipes' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.base.ref == 'main'))
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -32,4 +36,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          UPSTREAM_REVIEW_BOTS: ${{ vars.UPSTREAM_REVIEW_BOTS }}
         run: python3 scripts/upstream-updates.py feedback

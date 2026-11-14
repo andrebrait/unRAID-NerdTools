@@ -333,44 +333,59 @@ def _request(parts, addresses, deadline):
     raise ToolError(f"could not fetch: {type(failure).__name__}")
 
 
-def _body(response, mode, deadline, offset=0):
+def _body(response, mode, deadline, offset=0, *, max_bytes=None, on_bytes=None):
     limit = FETCH_TEXT if mode == "text" else FETCH_HASH
+    if mode != "text" and max_bytes is not None:
+        limit = min(limit, max_bytes)
     length = response.getheader("Content-Length")
-    if mode == "sha256" and length and length.isdigit() and int(length) > limit:
+    declared = int(length) if length and length.isdigit() else None
+    if mode == "sha256" and declared is not None and declared > limit:
         raise ToolError("download is too large")
     encoding = response.getheader("Content-Encoding")
     if encoding and encoding.lower() != "identity":
         raise ToolError("compressed transfer encodings are not supported")
-    skip = offset
-    while skip:
+
+    def read(size):
         if time.monotonic() > deadline:
             raise ToolError("download timed out")
-        chunk = response.read(min(65536, skip))
+        chunk = response.read(size)
+        if chunk and on_bytes:
+            on_bytes(len(chunk))  # counted as read, so a transfer that fails later still spends it
+        return chunk
+
+    skip = offset
+    while skip:
+        chunk = read(min(65536, skip))
         if not chunk:
             break
         skip -= len(chunk)
-    digest, chunks, total = hashlib.sha256(), [], 0
-    while total <= limit:
-        if time.monotonic() > deadline:
-            raise ToolError("download timed out")
-        chunk = response.read(min(65536, limit + 1 - total))
+    if mode == "text":
+        chunks, total = [], 0
+        while total <= limit:
+            chunk = read(min(65536, limit + 1 - total))
+            if not chunk:
+                break
+            total += len(chunk)
+            chunks.append(chunk)
+        return {"truncated": total > limit, "text": b"".join(chunks)[:limit].decode("utf-8", "replace"),
+                "next_offset": offset + limit if total > limit else None}
+    # Never read past limit: an extra byte would spend budget the caller does not have.
+    digest, total = hashlib.sha256(), 0
+    while total < limit:
+        chunk = read(min(65536, limit - total))
         if not chunk:
             break
         total += len(chunk)
-        if mode == "text":
-            chunks.append(chunk)
-        elif total > limit:
-            raise ToolError("download is too large")
-        else:
-            digest.update(chunk)
-    if mode == "sha256":
-        return {"sha256": digest.hexdigest(), "bytes": total}
-    return {"truncated": total > limit, "text": b"".join(chunks)[:limit].decode("utf-8", "replace"),
-            "next_offset": offset + limit if total > limit else None}
+        digest.update(chunk)
+    if declared is not None and total != declared:
+        raise ToolError("download is incomplete")
+    if declared is None and total == limit:
+        raise ToolError("download reached its size limit before its end was verified")
+    return {"sha256": digest.hexdigest(), "bytes": total}
 
 
-def fetch(url, mode, offset=0):
-    """GET over validated, pinned public addresses; every redirect hop is validated and resolved again."""
+def fetch(url, mode, offset=0, *, max_bytes=None, on_bytes=None):
+    """GET over validated, pinned public addresses; every redirect hop is validated and resolved again. max_bytes caps the body; on_bytes sees each chunk as it is read, even from a transfer that later fails."""
     deadline = time.monotonic() + FETCH_SECONDS
     if offset > FETCH_TEXT * 16 or (offset and mode != "text"):
         raise ToolError("invalid text offset")
@@ -386,7 +401,7 @@ def fetch(url, mode, offset=0):
                 continue
             if response.status != 200:
                 raise ToolError(f"HTTP {response.status}")
-            return {"url": url, **_body(response, mode, deadline, offset)}
+            return {"url": url, **_body(response, mode, deadline, offset, max_bytes=max_bytes, on_bytes=on_bytes)}
         finally:
             connection.close()
     raise ToolError("too many redirects")
@@ -817,12 +832,15 @@ class Session:
         if url not in self.hash_cache:
             if len(self.hash_cache) >= 4096 or time.monotonic() > self.deadline:
                 raise ToolError("input download budget exhausted")
-            result = fetch(url, "sha256")
-            self.downloaded += result["bytes"]
-            if self.downloaded > 2 * 2**30:
+            remaining = 2 * 2**30 - self.downloaded
+            if remaining <= 0:
                 raise ToolError("input download byte budget exhausted")
+            result = fetch(url, "sha256", max_bytes=remaining, on_bytes=self._account)
             self.hash_cache[url] = result
         return self.hash_cache[url]
+
+    def _account(self, size):
+        self.downloaded += size
 
     def tool_fetch_url(self, a):
         if a["mode"] == "sha256":
@@ -901,15 +919,24 @@ _OPENER = urllib.request.build_opener(_NoRedirect)
 
 
 def post(url, headers, payload, deadline=None):
-    """POST JSON. Only availability failures raise Transient; everything else is AgentError."""
+    """POST JSON. Provider availability failures, its own timeout included, raise Transient; the session deadline raises AgentError."""
     request = urllib.request.Request(url, json.dumps(payload).encode(), {**headers, "Content-Type": "application/json"}, method="POST")
-    deadline = min(time.monotonic() + PROVIDER_TIMEOUT, deadline if deadline is not None else float("inf"))
+    session_deadline = float("inf") if deadline is None else deadline
+    provider_deadline = time.monotonic() + PROVIDER_TIMEOUT
+
+    def expired():
+        now = time.monotonic()
+        if now > session_deadline:
+            raise AgentError("session deadline exhausted")
+        if now > provider_deadline:
+            raise Transient("provider timeout")
+
+    expired()
     try:
-        with _OPENER.open(request, timeout=max(1, deadline - time.monotonic())) as response:
+        with _OPENER.open(request, timeout=max(1, min(provider_deadline, session_deadline) - time.monotonic())) as response:
             chunks, size = [], 0
             while size <= MAX_RESPONSE:
-                if time.monotonic() > deadline:
-                    raise AgentError("provider request deadline exhausted")
+                expired()
                 chunk = response.read1(min(65536, MAX_RESPONSE + 1 - size))
                 if not chunk:
                     break
@@ -921,6 +948,8 @@ def post(url, headers, payload, deadline=None):
             raise Transient(f"HTTP {exc.code}") from None
         raise AgentError(f"provider rejected the request: HTTP {exc.code}") from None
     except (OSError, http.client.HTTPException) as exc:
+        if time.monotonic() > session_deadline:
+            raise AgentError("session deadline exhausted") from None
         raise Transient(type(exc).__name__) from None
     if len(body) > MAX_RESPONSE:
         raise AgentError("provider response is too large")
