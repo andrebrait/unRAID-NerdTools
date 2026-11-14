@@ -8,6 +8,7 @@ on:
 permissions:
   contents: read
   actions: write
+  pull-requests: read
 
 concurrency:
   group: unraid-release-discovery
@@ -28,6 +29,11 @@ jobs:
           python-version: '3.12'
       - name: Check release parser
         run: python3 -m unittest discover -s tests -p test_unraid_releases.py
+      - name: Require approval for every merged automation batch in this source revision
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: python3 scripts/upstream-updates.py authorize
       - name: Discover releases and correlate authoritative archive checksums
         run: python3 scripts/check-unraid-releases.py --output unraid-releases.json
       - name: Compare published releases and compatibility runs, then dispatch
@@ -61,8 +67,8 @@ jobs:
             const pending = [];
             report.checks = [];
             for (const release of report.matrix.include) {
-              const title = `Unraid compatibility ${release.version} ${release.sha256}`;
-              const matching = runs.filter(run => run.display_title === title);
+              const title = `Unraid compatibility ${release.version} ${release.sha256} publish=true`;
+              const matching = runs.filter(run => run.display_title === title && run.head_sha === context.sha);
               const successful = matching.find(run => run.conclusion === 'success');
               const active = matching.find(run => run.status !== 'completed');
               const previous = successful || active;

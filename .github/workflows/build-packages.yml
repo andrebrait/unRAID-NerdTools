@@ -1,5 +1,5 @@
 name: Build native packages
-run-name: Unraid compatibility ${{ inputs.unraid_version }} ${{ inputs.unraid_sha256 }}
+run-name: Unraid compatibility ${{ inputs.unraid_version }} ${{ inputs.unraid_sha256 }} publish=${{ inputs.publish || false }}
 
 on:
   pull_request:
