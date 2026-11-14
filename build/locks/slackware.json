@@ -584,7 +584,7 @@
     },
     "inputs": [
       {
-        "url": "https://slackware.uk/slackware/slackware64-current/source/l/nodejs/node-v24.22.2.tar.xz",
+        "url": "https://nodejs.org/dist/v24.22.2/node-v24.22.2.tar.xz",
         "file": "node-v24.22.2.tar.xz",
         "sha256": "8fe2ec1723bb9f8d0b683907c82708debbeda64af21cb2aa214c4241eed0a061"
       }
@@ -919,7 +919,7 @@
     },
     "inputs": [
       {
-        "url": "https://slackware.uk/slackware/slackware64-current/source/n/sshfs/sshfs-3.7.6.tar.xz",
+        "url": "https://github.com/libfuse/sshfs/releases/download/sshfs-3.7.6/sshfs-3.7.6.tar.xz",
         "file": "sshfs-3.7.6.tar.xz",
         "sha256": "6a1bcb31450a077e9cb1b7ff158c71de34db697c3c0da6cb362502131e495893"
       }
@@ -1077,9 +1077,9 @@
     },
     "inputs": [
       {
-        "url": "https://slackware.uk/slackware/slackware64-current/source/ap/vim/vim-9.2.1252.tar.lz",
-        "file": "vim-9.2.1252.tar.lz",
-        "sha256": "85c4ccd21d467b5527d0fcf773b0efa7f48b9847428ae46f34fd1ad4ec531034"
+        "url": "https://github.com/vim/vim/archive/refs/tags/v9.2.1252.tar.gz",
+        "file": "vim-9.2.1252.tar.gz",
+        "sha256": "9e62bb4226caedf676eb70b3ba4d32b671135096c57a8ebbd63ffd423ebc5e01"
       }
     ],
     "dependencies": [
