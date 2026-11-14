@@ -1,0 +1,31 @@
+name: Release merged upstream recipes
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  actions: write
+  pull-requests: read
+  contents: read
+
+jobs:
+  release:
+    if: >-
+      github.event.pull_request.merged &&
+      github.event.pull_request.head.ref == 'automation/upstream-recipes' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      # Trusted default-branch code only; no provider secrets and no environment, because pull_request refs never match the main-only environment rule.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Dispatch release discovery after verified approval
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: python3 scripts/upstream-updates.py release
