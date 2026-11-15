@@ -27,6 +27,10 @@ concurrency:
 
 jobs:
   prepare:
+    concurrency:
+      group: upstream-recipe-issue-writes
+      queue: max
+      cancel-in-progress: false
     if: >-
       github.event_name != 'workflow_run' || (
       github.event.workflow_run.event == 'workflow_dispatch' &&
@@ -242,6 +246,10 @@ jobs:
           if-no-files-found: error
 
   finish:
+    concurrency:
+      group: upstream-recipe-issue-writes
+      queue: max
+      cancel-in-progress: false
     needs: [prepare, codex, classify, claude]
     if: ${{ !cancelled() && needs.prepare.outputs.needed == 'true' }}
     runs-on: ubuntu-24.04

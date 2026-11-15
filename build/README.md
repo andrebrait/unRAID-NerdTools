@@ -127,6 +127,8 @@ Failure issues are the canonical notification state; asynchronous failure commen
 
 Notifications for the same workflow and source revision are serialized with GitHub's `queue: max` concurrency mode. Up to 100 pending notifications are retained; GitHub cancels additional runs if that platform queue fills. Success checkpoints still distinguish exact targets and attempts, so delayed delivery does not imply a current failure.
 
+Preparation, publication and maintainer retry jobs share the `upstream-recipe-issue-writes` concurrency group. Only these issue-writing jobs wait for one another; provider execution does not hold that lock. A retry during provider execution invalidates the saved plan, while a retry during publication runs after the writer finishes. This prevents a publication failure from overwriting the retry between its issue read and write.
+
 Under **Settings → Actions → General**, enable **Allow GitHub Actions to create and approve pull requests**; the controller uses creation only. Protect `main` with required CI and human approval, dismiss stale approvals and give automation no bypass.
 
 For a read-only end-to-end evaluation, manually dispatch with `evaluation=true` and a package such as `sshfs`. The controller produces a validated patch instead of opening a PR, and a separate credential-free native job builds and tests it. The environment still restricts which branches may run; any temporary evaluation-branch exception must be removed afterward. No evaluation publishes a package.
