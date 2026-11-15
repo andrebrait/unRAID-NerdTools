@@ -31,7 +31,7 @@ case "${1:-}" in
     sudo chown -R "$actor:$actor" "$root/work" "$root/output"
     sudo chmod 755 /home/nerdtools-agent
     sudo install -d -o "$actor" -g "$actor" -m 755 /home/nerdtools-agent/.codex
-    printf 'approval_policy = "never"\n[sandbox_workspace_write]\nnetwork_access = true\n' | sudo tee /home/nerdtools-agent/.codex/config.toml >/dev/null
+    printf 'approval_policy = "never"\n[sandbox_workspace_write]\nnetwork_access = true\n[shell_environment_policy.set]\nPYTHONDONTWRITEBYTECODE = "1"\n' | sudo tee /home/nerdtools-agent/.codex/config.toml >/dev/null
     # The action's runner-owned proxy writes this before the agent starts.
     sudo install -o "$(id -un)" -g "$(id -gn)" -m 644 /dev/null "/home/nerdtools-agent/.codex/${GITHUB_RUN_ID:?}.json"
     ;;
@@ -99,7 +99,7 @@ command = ['/usr/bin/sudo', '-n', '-u', 'nerdtools-agent', '--', '/usr/bin/env',
            'HOME=/home/nerdtools-agent', 'USER=nerdtools-agent', 'LOGNAME=nerdtools-agent',
            'PATH=' + sys.argv[1] + ':/usr/local/bin:/usr/bin:/bin',
            'ANTHROPIC_API_KEY=local-proxy-placeholder', 'ANTHROPIC_BASE_URL=http://127.0.0.1:4318',
-           'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1',
+           'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1', 'PYTHONDONTWRITEBYTECODE=1',
            '/opt/nerdtools-claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude']
 path.write_text('#!/bin/sh\nexec ' + shlex.join(command) + ' "$@"\n')
 path.chmod(0o555)
