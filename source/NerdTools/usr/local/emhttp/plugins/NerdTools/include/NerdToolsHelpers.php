@@ -725,38 +725,81 @@ class NerdTools {
         if (is_link($file) || is_link(dirname($file))) throw new RuntimeException('Refusing linked owned archive');
         if (is_file($file) && !unlink($file)) throw new RuntimeException('Cannot delete owned package archive');
     }
-    public function apply($download, $uninstall, $removeAll = false) {
+    public function plan($actions, $hours) {
+        if (!is_scalar($hours) || !ctype_digit((string)$hours)) throw new RuntimeException('Invalid package plan');
+        $catalog = $this->catalog();
+        if (!$catalog) throw new RuntimeException('No valid catalog cached; check for updates first');
+        return nt_plan($catalog['packages'] ?? [], $this->legacyOwned(), $this->installed(), $this->config(),
+            $actions, (int)$hours);
+    }
+    public function confirmPlan($id, $actions, $hours) {
+        if (!is_string($id) || !preg_match('/^[a-f0-9]{64}$/D', $id)) throw new RuntimeException('Invalid package plan');
+        $plan = $this->plan($actions, $hours);
+        if (!hash_equals($plan['id'], $id)) throw new RuntimeException('Package plan is stale; review changes again');
+        nt_atomic_write($this->path.'/pending-plan.json', json_encode([
+            'id'=>$id, 'actions'=>$plan['actions'], 'hours'=>$plan['hours'],
+        ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
+        return $id;
+    }
+    public function applyPlan($id, $download) {
+        if (!is_string($id) || !preg_match('/^[a-f0-9]{64}$/D', $id)) throw new RuntimeException('Invalid package plan');
+        $file = $this->path.'/pending-plan.json';
+        $pending = nt_json($file, null);
+        if (!is_array($pending) || ($pending['id'] ?? null) !== $id || !isset($pending['actions'],$pending['hours'])) {
+            throw new RuntimeException('No confirmed package plan');
+        }
+        if (!unlink($file)) throw new RuntimeException('Cannot consume confirmed package plan');
+        $plan = $this->plan($pending['actions'], $pending['hours']);
+        if (!hash_equals($plan['id'], $id)) throw new RuntimeException('Package plan is stale; review changes again');
+        $this->save($plan['preferences'], $plan['hours']);
+        $install = []; $remove = [];
+        foreach ($plan['changes'] as $change) {
+            if ($change['package'] === null) continue;
+            if ($change['change'] === 'remove') $remove[] = $change['package'];
+            else $install[] = $change['package'];
+        }
+        $this->executeChanges($download, $install, $remove);
+    }
+    private function removalOrder($owned, $remove) {
+        $order = []; $visiting = [];
+        $visit = function($name) use (&$visit, &$order, &$visiting, $owned, $remove) {
+            if (isset($visiting[$name])) return;
+            $visiting[$name] = true;
+            foreach (($owned[$name]['dependencies'] ?? []) as $dependency) {
+                if (in_array($dependency, $remove, true)) $visit($dependency);
+            }
+            $order[] = $name;
+        };
+        foreach ($remove as $name) $visit($name);
+        return array_reverse($order);
+    }
+    private function executeChanges($download, $install, $remove, $removeAll = false) {
         $catalog = $removeAll ? [] : $this->catalog();
         $packages = $catalog['packages'] ?? [];
         if (!$removeAll && !$catalog) throw new RuntimeException('No valid catalog cached; check for updates first');
-        $config = $this->config();
-        $selected = [];
-        foreach ($packages as $name => $package) if (nt_preference($config, $name) === 'yes') $selected[] = $name;
-        $required = $removeAll ? [] : nt_resolve($selected, $packages);
         $owned = $this->legacyOwned(); $migrations = [];
-        foreach ($required as $name) {
+        foreach (array_unique(array_merge($install, $remove)) as $name) {
+            if (!isset($packages[$name])) continue;
             $tool = $packages[$name]['tool'];
             if (!isset($owned[$name]) && $tool !== $name && isset($owned[$tool])) $migrations[$name] = $tool;
         }
         // upgradepkg old%new matches every installed record with old's package basename.
-        foreach ($migrations as $oldName) {
-            $oldRecord = $owned[$oldName]['record']; $oldBase = nt_package_name($oldRecord);
+        foreach ($install as $name) {
+            if (!isset($migrations[$name])) continue;
+            $oldName = $migrations[$name]; $oldRecord = $owned[$oldName]['record']; $oldBase = nt_package_name($oldRecord);
             foreach ($this->installed() as $installed) {
                 if ($installed !== $oldRecord && nt_package_name($installed) === $oldBase) {
                     throw new RuntimeException('Refusing legacy migration with another installed record sharing basename: '.$oldBase);
                 }
             }
         }
-        // An unavailable selected package must never silently lose its dependencies.
-        if (!$removeAll) foreach ($owned as $name => $entry) {
-            if (!isset($packages[$name]) && !in_array($name, $migrations, true) && nt_preference($config, $name) === 'yes') throw new RuntimeException('Selected package is absent from catalog: '.$name);
-        }
         $downloads = [];
-        foreach ($required as $name) {
+        foreach ($install as $name) {
+            if (!isset($packages[$name])) throw new RuntimeException('Planned package is absent from catalog: '.$name);
             $package = $packages[$name];
-            $record = nt_record($package['file']);
             foreach ($this->installed() as $installed) {
-                if (nt_package_name($installed) === $name && $installed !== ($owned[$name]['record'] ?? null)) {
+                $ownedName = $migrations[$name] ?? $name;
+                if (nt_package_name($installed) === $name && $installed !== ($owned[$ownedName]['record'] ?? null)) {
                     throw new RuntimeException('Refusing to replace a system or externally managed package: '.$name);
                 }
             }
@@ -765,17 +808,18 @@ class NerdTools {
             if (!nt_verified($file, $package)) throw new RuntimeException('Verified package is not available: '.$name);
             $downloads[$name] = $file;
         }
-        // Download and verify the complete dependency closure before changing installed packages.
+        // Download and verify the complete planned set before changing installed packages.
         $claims = ['files'=>[], 'directories'=>[]];
-        foreach ($required as $name) {
-            $entry = $owned[$name] ?? (isset($migrations[$name]) ? $owned[$migrations[$name]] : null);
+        foreach ($install as $name) {
+            $ownedName = $migrations[$name] ?? $name; $entry = $owned[$ownedName] ?? null;
             $oldRecord = $entry && in_array($entry['record'], $this->installed(), true) ? $entry['record'] : null;
             $this->safeArchive($downloads[$name], $oldRecord, $claims);
         }
-        foreach ($required as $name) {
+        foreach ($install as $name) {
             $package = $packages[$name]; $record = nt_record($package['file']);
-            $old = $owned[$name] ?? (isset($migrations[$name]) ? $owned[$migrations[$name]] : null);
-            if ($old && $old['record'] === $record && ($old['sha256'] ?? '') === $package['sha256'] && in_array($record, $this->installed(), true)) continue;
+            $ownedName = $migrations[$name] ?? $name; $old = $owned[$ownedName] ?? null;
+            if ($old && $old['record'] === $record && ($old['sha256'] ?? '') === $package['sha256']
+                && in_array($record, $this->installed(), true)) continue;
             $oldInstalled = $old && in_array($old['record'], $this->installed(), true);
             nt_log('Installing '.$name);
             $argument = $oldInstalled ? $old['record'].'%'.$downloads[$name] : $downloads[$name];
@@ -783,32 +827,48 @@ class NerdTools {
             if (!in_array($record, $this->installed(), true)) throw new RuntimeException('Package installation did not create expected record: '.$name);
             $owned[$name] = ['file'=>$package['file'], 'record'=>$record, 'dependencies'=>$package['dependencies'],
                 'sha256'=>$package['sha256'], 'size'=>$package['size'], 'tool'=>$package['tool'], 'commands'=>$package['commands']];
-            if (isset($migrations[$name])) unset($owned[$migrations[$name]]);
+            if ($ownedName !== $name) unset($owned[$ownedName]);
             $this->saveOwned($owned);
             if ($old && $old['file'] !== $package['file']) $this->deleteArchive($old);
         }
-        if (!$uninstall && !$removeAll) { $this->syncAliases(); return; }
-        // Reverse dependency order; retain packages still needed by selected packages.
-        $remove = array_diff(array_keys($owned), $required);
-        $order = []; $visiting = [];
-        $visit = function($name) use (&$visit, &$order, &$visiting, $owned, $remove) {
-            if (isset($visiting[$name])) return;
-            $visiting[$name] = true;
-            foreach (($owned[$name]['dependencies'] ?? []) as $dependency) if (in_array($dependency, $remove, true)) $visit($dependency);
-            $order[] = $name;
-        };
-        foreach ($remove as $name) $visit($name);
-        foreach (array_reverse($order) as $name) {
-            $entry = $owned[$name];
+        foreach ($remove as $name) {
+            $ownedName = $migrations[$name] ?? $name;
+            if (!isset($owned[$ownedName])) throw new RuntimeException('Planned owned package is unavailable: '.$name);
+            $entry = $owned[$ownedName];
             if (in_array($entry['record'], $this->installed(), true)) {
                 nt_log('Uninstalling '.$name);
                 $this->command(['/sbin/removepkg', $entry['record']]);
                 if (in_array($entry['record'], $this->installed(), true)) throw new RuntimeException('Package removal failed: '.$name);
             }
             if (!$removeAll || !empty($entry['legacy'])) $this->deleteArchive($entry);
-            unset($owned[$name]); $this->saveOwned($owned);
+            unset($owned[$ownedName]); $this->saveOwned($owned);
         }
         $this->syncAliases();
+    }
+    public function apply($download, $uninstall, $removeAll = false) {
+        $catalog = $removeAll ? [] : $this->catalog(); $packages = $catalog['packages'] ?? [];
+        if (!$removeAll && !$catalog) throw new RuntimeException('No valid catalog cached; check for updates first');
+        $config = $this->config(); $owned = $this->legacyOwned();
+        if ($removeAll) {
+            $this->executeChanges(false, [], $this->removalOrder($owned, array_keys($owned)), true);
+            return;
+        }
+        $selected = [];
+        foreach ($packages as $name => $package) if (nt_preference($config, $name) === 'yes') $selected[] = $name;
+        $required = nt_resolve($selected, $packages);
+        $migrated = [];
+        foreach ($required as $name) {
+            $tool = $packages[$name]['tool'];
+            if (!isset($owned[$name]) && $tool !== $name && isset($owned[$tool])) $migrated[$tool] = true;
+        }
+        // An unavailable selected package must never silently lose its dependencies.
+        foreach ($owned as $name => $entry) {
+            if (!isset($packages[$name]) && !isset($migrated[$name]) && nt_preference($config, $name) === 'yes') {
+                throw new RuntimeException('Selected package is absent from catalog: '.$name);
+            }
+        }
+        $remove = $uninstall ? array_values(array_diff(array_keys($owned), $required, array_keys($migrated))) : [];
+        $this->executeChanges($download, $required, $this->removalOrder($owned, $remove));
     }
     public function restore() {
         $owned = $this->owned(); $config = $this->config(); $selected = [];

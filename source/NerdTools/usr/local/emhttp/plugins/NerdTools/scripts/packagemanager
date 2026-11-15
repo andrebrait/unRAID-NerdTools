@@ -2,9 +2,10 @@
 <?php
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit(1); }
 require_once dirname(__DIR__).'/include/NerdToolsHelpers.php';
-$args = getopt('dquv', ['download','quiet','uninstall','verbose','check','force','release:','boot','schedule','remove-all','help','version']);
+$args = getopt('dquv', ['download','quiet','uninstall','verbose','check','force','release:','plan:','boot','schedule','remove-all','help','version']);
 if (isset($args['help'])) {
     echo "--release=<tag> select a retained published package release; --release=latest unpins\n";
+    echo "--plan=<id> execute one confirmed GUI transaction\n";
     echo "NerdTools native package manager\n\n--download  verify/download and install selected packages\n--uninstall remove only owned, unselected packages\n--check     refresh catalog when due (no package installations)\n--force     bypass normal interval, never rate-limit reset\n--boot      set schedule and restore selected packages\n--schedule  install hourly scheduler (interval defaults to daily)\n--remove-all remove owned packages and scheduler; preserve settings\n--quiet     suppress summary output\n";
     exit(0);
 }
@@ -17,6 +18,11 @@ try {
         $manager->apply(false, true, true);
         $manager->schedule(true);
     } elseif (isset($args['schedule'])) $manager->schedule();
+    elseif (isset($args['plan'])) {
+        nt_log('Checking confirmed package plan. Downloads and verification may take a few minutes...', $quiet);
+        $manager->applyPlan($args['plan'], isset($args['d']) || isset($args['download']));
+        nt_log('Confirmed package plan processed.', $quiet);
+    }
     elseif (isset($args['release'])) {
         if (!$manager->refresh(true, $args['release'])) throw new RuntimeException('GitHub rate limit is still active');
         nt_log('Selected package release '.$args['release'].'. Run --download to apply it.', $quiet);

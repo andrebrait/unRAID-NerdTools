@@ -232,6 +232,45 @@ $manager->apply(false,true,true); $manager->schedule(true);
 expect(!is_file($manager->path.'/NerdTools.cron') && is_file($manager->path.'/NerdTools.cfg'), 'Removal preserves configuration');
 expect(is_file($manager->path.'/packages/tool-2.0-x86_64-1.txz'), 'Plugin removal preserves verified cache');
 expect(is_file($root.'/boot/extra/tool-other-unrelated.txz'), 'Removal never deletes unrelated extras');
+// Confirmed plans execute exactly the reviewed dependency cascade and cannot be replayed.
+$catalog['packages'] = [
+    $makePackage('dep','2.0'),
+    $makePackage('tool','2.0',['dep']),
+    $makePackage('app','1.0',['dep']),
+    $makePackage('other','2.0'),
+];
+$manager->refresh(true,'latest');
+$seedOwned = [];
+foreach ([
+    'dep'=>['version'=>'1.0','dependencies'=>[]],
+    'tool'=>['version'=>'1.0','dependencies'=>['dep']],
+    'other'=>['version'=>'1.0','dependencies'=>[]],
+] as $name => $metadata) {
+    $file = $name.'-'.$metadata['version'].'-x86_64-1.txz'; $record = nt_record($file);
+    file_put_contents($manager->path.'/packages/'.$file,$bytes);
+    file_put_contents($root.'/var/log/packages/'.$record,"PACKAGE NAME: $record\nFILE LIST:\nopt/nerdtools/bin/$name\n");
+    file_put_contents($root.'/opt/nerdtools/bin/'.$name,'installed');
+    $seedOwned[$name] = ['file'=>$file,'record'=>$record,'dependencies'=>$metadata['dependencies'],
+        'sha256'=>hash('sha256',$bytes),'size'=>strlen($bytes),'tool'=>$name,'commands'=>[]];
+}
+nt_atomic_write($manager->path.'/owned-packages.json',json_encode($seedOwned,JSON_THROW_ON_ERROR));
+$manager->save(['dep'=>'yes','tool'=>'yes','app'=>'no','other'=>'yes'],24);
+$plan = $manager->plan(['app'=>'install'],24);
+expect(array_column($plan['changes'],'package') === ['dep','app','tool'], 'Preview includes only requested install, stale dependency and affected dependent');
+expect(!in_array('other',array_column($plan['changes'],'package'),true), 'Preview excludes unrelated installed update');
+$manager->confirmPlan($plan['id'],['app'=>'install'],24);
+$manager->save(['dep'=>'yes','tool'=>'yes','app'=>'no','other'=>'yes'],168);
+$packageCommands = count(array_filter($commands,function($args) { return in_array($args[0],['/sbin/upgradepkg','/sbin/removepkg'],true); }));
+refused(function() use ($manager,$plan) { $manager->applyPlan($plan['id'],true); }, 'Package plan is stale');
+expect(count(array_filter($commands,function($args) { return in_array($args[0],['/sbin/upgradepkg','/sbin/removepkg'],true); })) === $packageCommands, 'Stale plan reaches no package command');
+$plan = $manager->plan(['app'=>'install'],24);
+$manager->confirmPlan($plan['id'],['app'=>'install'],24);
+$manager->applyPlan($plan['id'],true);
+expect(in_array('dep-2.0-x86_64-1',$manager->installed(),true)
+    && in_array('tool-2.0-x86_64-1',$manager->installed(),true)
+    && in_array('app-1.0-x86_64-1',$manager->installed(),true)
+    && in_array('other-1.0-x86_64-1',$manager->installed(),true), 'Confirmed plan executes exact package set');
+refused(function() use ($manager,$plan) { $manager->applyPlan($plan['id'],true); }, 'No confirmed package plan');
 // The optional GitHub token: only plausible tokens are stored, and an empty value removes it.
 refused(function() use ($manager) { $manager->saveToken("ghp_x\nAuthorization: evil"); }, 'GitHub token');
 expect($manager->token() === '', 'Rejected token is not stored');
