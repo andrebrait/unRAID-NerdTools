@@ -73,6 +73,10 @@ check($plan['rows']['dep']['automatic'] && $plan['rows']['dep']['reason'] === 'R
 check(!in_array('other',array_column($plan['changes'],'package'),true), 'Unrelated update is excluded');
 $plan = nt_plan($planPackages,$planOwned,$planInstalled,$planConfig,['newapp'=>'install'],24);
 check(array_column($plan['changes'],'package') === ['fresh','newapp'], 'Missing dependency installs before requested package');
+$unselectedPlanId = $plan['id'];
+$selectedConfig = $planConfig; $selectedConfig['newapp'] = 'yes';
+$selectedPlan = nt_plan($planPackages,$planOwned,$planInstalled,$selectedConfig,['newapp'=>'install'],24);
+check($selectedPlan['id'] !== $unselectedPlanId, 'Plan fingerprint includes current preferences');
 $removeOwned = [
     'dep'=>['record'=>'dep-1.0-x86_64-1','dependencies'=>[]],
     'app'=>['record'=>'app-1.0-x86_64-1','dependencies'=>['dep']],
@@ -84,6 +88,7 @@ rejects(function() use ($planPackages,$removeOwned,$removeInstalled,$removeConfi
 });
 $plan = nt_plan($planPackages,$removeOwned,$removeInstalled,$removeConfig,['dep'=>'remove','app'=>'remove'],24);
 check(array_column($plan['changes'],'package') === ['app','dep'], 'Dependents are removed before dependencies');
+check($plan['changes'][0]['from'] === '1.0' && $plan['changes'][0]['to'] === null, 'Removal preview ends with no installed version');
 $plan = nt_plan($planPackages,$planOwned,$planInstalled,$planConfig,[],168);
 check(count($plan['changes']) === 1 && $plan['changes'][0]['change'] === 'settings', 'Settings-only change is planned');
 rejects(function() use ($planPackages,$planOwned,$planInstalled,$planConfig) {

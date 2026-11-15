@@ -306,8 +306,10 @@ function nt_plan($packages, $owned, $installed, $config, $actions, $hours) {
         $current = nt_package_version($state['record'], $state['owned_name']);
         if ($current === null && $state['record'] !== null) $current = nt_package_version($state['record'], $name);
         $target = $state['package']['version'] ?? null; $operation = $operations[$name] ?? null;
-        if ($operation) $change = $operation['change'];
-        elseif ($state['external']) $change = 'external';
+        if ($operation) {
+            $change = $operation['change'];
+            if ($change === 'remove') $target = null;
+        } elseif ($state['external']) $change = 'external';
         elseif (!$state['package']) $change = 'unavailable';
         elseif ($state['installed'] && $current !== $target) {
             $change = version_compare($target, $current) > 0 ? 'update-available' : 'downgrade-available';
@@ -325,20 +327,17 @@ function nt_plan($packages, $owned, $installed, $config, $actions, $hours) {
             'to'=>(string)$hours, 'automatic'=>false, 'reason'=>'Automatic catalog checks'];
     }
     ksort($rows, SORT_STRING); ksort($preferences, SORT_STRING); ksort($intents, SORT_STRING);
+    $currentPreferences = [];
+    foreach ($states as $name => $state) $currentPreferences[$name] = $state['selected'] ? 'yes' : 'no';
+    ksort($currentPreferences, SORT_STRING);
     $state = [
-        'packages'=>array_map(function($package) {
-            return ['file'=>$package['file'] ?? null, 'sha256'=>$package['sha256'] ?? null,
-                'dependencies'=>$package['dependencies'], 'tool'=>$package['tool'] ?? null];
-        }, $packages),
-        'owned'=>array_map(function($entry) {
-            return ['record'=>$entry['record'], 'sha256'=>$entry['sha256'] ?? null,
-                'dependencies'=>$entry['dependencies'] ?? []];
-        }, $owned),
-        'installed'=>array_values($installed), 'preferences'=>$preferences, 'hours'=>$currentHours,
+        'packages'=>$packages, 'owned'=>$owned, 'installed'=>array_values($installed),
+        'preferences'=>$currentPreferences, 'hours'=>$currentHours,
     ];
     sort($state['installed'], SORT_STRING);
+    $state = hash('sha256', json_encode(nt_canonical($state), JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
     $plan = ['rows'=>$rows, 'changes'=>$changes, 'preferences'=>$preferences, 'hours'=>$hours,
-        'actions'=>$intents, 'state'=>nt_canonical($state)];
+        'actions'=>$intents, 'state'=>$state];
     $plan['id'] = hash('sha256', json_encode(nt_canonical($plan), JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
     return $plan;
 }
