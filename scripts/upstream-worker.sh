@@ -91,13 +91,14 @@ PY
     sudo nginx -t -c /root/nerdtools-anthropic-proxy/nginx.conf
     sudo nginx -c /root/nerdtools-anthropic-proxy/nginx.conf
     node_dir="$(dirname "$(command -v node)")"
-    sudo python3 - "$node_dir" <<'PY'
+    go_dir="$(dirname "$(command -v go)")"
+    sudo python3 - "$node_dir" "$go_dir" <<'PY'
 import shlex, sys
 from pathlib import Path
 path = Path('/opt/nerdtools-controller/claude')
 command = ['/usr/bin/sudo', '-n', '-u', 'nerdtools-agent', '--', '/usr/bin/env', '-i',
            'HOME=/home/nerdtools-agent', 'USER=nerdtools-agent', 'LOGNAME=nerdtools-agent',
-           'PATH=' + sys.argv[1] + ':/usr/local/bin:/usr/bin:/bin',
+           'PATH=' + sys.argv[1] + ':' + sys.argv[2] + ':/usr/local/bin:/usr/bin:/bin',
            'ANTHROPIC_API_KEY=local-proxy-placeholder', 'ANTHROPIC_BASE_URL=http://127.0.0.1:4318',
            'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1', 'PYTHONDONTWRITEBYTECODE=1',
            '/opt/nerdtools-claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude']
