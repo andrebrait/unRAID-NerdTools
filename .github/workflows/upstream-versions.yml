@@ -212,7 +212,7 @@ jobs:
           import json, os
           from pathlib import Path
           report = json.loads(os.environ['REPORT'])
-          path = Path(os.environ['RUNNER_TEMP']) / 'nerdtools-worker/output/report.json'
+          path = Path(os.environ['RUNNER_TEMP']) / 'nerdtools-worker/claude-report.json'
           fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW | os.O_NONBLOCK, 0o644)
           with os.fdopen(fd, 'w') as stream:
               json.dump(report, stream)
@@ -223,7 +223,7 @@ jobs:
           python3 /opt/nerdtools-controller/runner.py collect \
             --workspace "$RUNNER_TEMP/nerdtools-worker/work" \
             --manifest "$RUNNER_TEMP/nerdtools-worker/control/manifest.json" \
-            --report "$RUNNER_TEMP/nerdtools-worker/output/report.json" \
+            --report "$RUNNER_TEMP/nerdtools-worker/claude-report.json" \
             --output "$RUNNER_TEMP/nerdtools-worker/collected" --outcome "$outcome"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
