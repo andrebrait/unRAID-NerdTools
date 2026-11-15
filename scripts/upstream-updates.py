@@ -385,6 +385,24 @@ def validate_report(report, candidates):
                    or not isinstance(item.get('reason'), str) or not item['reason'].strip() for item in recipes)):
         raise ValueError('Agent must give one justified accept/reject decision per candidate')
 
+def merge_retry_report(state, assessed, targets):
+    target_names = {item['name'] for item in targets}
+    frozen_names = [item['name'] for item in state.get('candidates', [])]
+    retained = {}
+    for item in state.get('report', {}).get('recipes', []):
+        if (not isinstance(item, dict) or set(item) != {'name', 'decision', 'reason'}
+                or item.get('name') not in frozen_names
+                or item.get('decision') not in ('accept', 'reject')
+                or not isinstance(item.get('reason'), str) or not item['reason'].strip()):
+            raise ValueError('Stored automation report is invalid')
+        if item['name'] in retained:
+            raise ValueError('Stored automation report has duplicate recipes')
+        if item['name'] not in target_names:
+            retained[item['name']] = item
+    retained.update((item['name'], item) for item in assessed['recipes'])
+    return {'summary': assessed['summary'],
+            'recipes': [retained[name] for name in frozen_names if name in retained]}
+
 
 def check_paths(paths, generated=False):
     for path in paths:
@@ -1110,6 +1128,8 @@ def finish(repo, gh, plan_path, workspace, report_path, dry_run=False, output=No
         paths = validate_workspace(repo, workspace, report, plan['candidates'])
         import_workspace(repo, workspace, paths, report)
         manual_workflow_updates(repo, base, report)
+        if not evaluation and state.get('retry_candidates'):
+            report = merge_retry_report(state, report, plan['candidates'])
         restore_rejected(repo, base, report)
         check_paths(changed_paths(repo), generated=True)
         run([sys.executable, 'build/native.py', 'pin-recipes'], repo)

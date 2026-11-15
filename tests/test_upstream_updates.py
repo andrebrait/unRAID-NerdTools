@@ -250,6 +250,20 @@ class IssueLifecycleTests(unittest.TestCase):
             self.assertEqual(self.updates.accepted_issue_numbers(
                 Path(folder), candidates, report, records), [43])
 
+    def test_targeted_retry_retains_prior_non_target_decisions(self):
+        vim = self.candidate()
+        tmux = {'name': 'tmux', 'ours': '3.0', 'upstream': '4.0',
+                'source': 'SlackBuilds.org 15.0', 'url': 'https://example.invalid/tmux'}
+        state = {'candidates': [vim, tmux], 'report': {'summary': 'Prior batch', 'recipes': [
+            {'name': 'vim', 'decision': 'accept', 'reason': 'Old vim assessment'},
+            {'name': 'tmux', 'decision': 'accept', 'reason': 'Pinned tmux'}]}}
+        assessed = {'summary': 'Retried vim', 'recipes': [
+            {'name': 'vim', 'decision': 'reject', 'reason': 'New vim concern'}]}
+        merged = self.updates.merge_retry_report(state, assessed, [vim])
+        self.assertEqual(merged, {'summary': 'Retried vim', 'recipes': [
+            {'name': 'vim', 'decision': 'reject', 'reason': 'New vim concern'},
+            {'name': 'tmux', 'decision': 'accept', 'reason': 'Pinned tmux'}]})
+
 
 class FeedbackFilteringTests(unittest.TestCase):
     @classmethod
