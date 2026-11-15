@@ -79,9 +79,6 @@ verify_alias(count(array_filter($calls,function($args) { return $args[0] === '/s
 // Simulate an administrator resolving the record collision; retain the host command file.
 unlink($root.'/var/log/packages/tool-9.0-x86_64-1');
 file_put_contents($root.'/boot/config/plugins/Other.plg','<!DOCTYPE PLUGIN [<!ENTITY first "to"><!ENTITY last "ol">]><PLUGIN><FILE>&first;&last;-1.0.txz</FILE></PLUGIN>');
-refuse_alias(function() use ($manager) { $manager->apply(true,false); },'referenced by another plugin');
-verify_alias(in_array('tool-1.0-x86_64-1_nerdtools',$manager->installed(),true) && is_file($root.'/boot/extra/tool-1.0-x86_64-1_nerdtools.txz'),'Positive dependency veto applies before migration even without uninstall flag');
-unlink($root.'/boot/config/plugins/Other.plg');
 $corrupt = true;
 refuse_alias(function() use ($manager) { $manager->apply(true,true); },'verification failed');
 verify_alias(is_file($root.'/boot/extra/tool-1.0-x86_64-1_nerdtools.txz'),'Failed migration preserves legacy boot artifact');
@@ -92,6 +89,7 @@ verify_alias(file_get_contents($root.'/usr/local/bin/nerdtools-tool') === 'forei
 unlink($root.'/usr/local/bin/nerdtools-tool');
 $manager->apply(true,true);
 verify_alias(isset($manager->owned()['nerdtools-tool']) && !isset($manager->owned()['tool']),'Exact legacy ownership migrates to new package identity');
+verify_alias(is_file($root.'/boot/config/plugins/Other.plg'),'Legacy migration leaves the referencing plugin declaration untouched');
 verify_alias(file_get_contents($root.'/usr/bin/tool') === 'host command','Qualified runtime migration cannot replace an existing host command');
 verify_alias(!is_file($root.'/boot/extra/tool-1.0-x86_64-1_nerdtools.txz'),'Legacy archive retired only after successful verified migration');
 verify_alias(is_file($root.'/usr/local/bin/nerdtools-tool') && !is_link($root.'/usr/local/bin/tool'),'Host command conflict leaves qualified command and no shadowing alias');
@@ -111,10 +109,10 @@ unlink($root.'/usr/local/bin/tool'); symlink('foreign-target',$root.'/usr/local/
 verify_alias(is_link($root.'/usr/local/bin/tool') && readlink($root.'/usr/local/bin/tool') === 'foreign-target','Foreign symlink replacement is preserved');
 unlink($root.'/usr/local/bin/tool'); file_put_contents($root.'/usr/local/bin/tool','foreign replacement');
 $manager->save(['nerdtools-tool'=>'no','nerdtools-dep'=>'no'],24);
-// A bare command word in another plugin's text (editor syntax tables, prose) is not a dependency.
-file_put_contents($root.'/boot/config/plugins/Other.plg','<PLUGIN name="Other"/>');
+// Other plugins' manifests and runtime references do not veto explicit removals.
+file_put_contents($root.'/boot/config/plugins/Other.plg','<PLUGIN><FILE>nerdtools-tool-2.0-x86_64-1.txz</FILE></PLUGIN>');
 mkdir($root.'/usr/local/emhttp/plugins/Other',0755,true);
-file_put_contents($root.'/usr/local/emhttp/plugins/Other/syntax.js',"regex: /\\b(?:do|end|tool|dep)\\b/ // a tool, or dep\n");
+file_put_contents($root.'/usr/local/emhttp/plugins/Other/run',"#!/bin/sh\n/usr/local/bin/nerdtools-tool\n/opt/nerdtools/bin/dep --version\n");
 $manager->apply(true,true);
 verify_alias(file_get_contents($root.'/usr/local/bin/tool') === 'foreign replacement','Uninstall never deletes foreign alias replacement');
 verify_alias(!is_link($root.'/usr/local/bin/dep') && !is_file($root.'/usr/local/bin/nerdtools-dep'),'Uninstall removes only unchanged owned aliases and qualified payload');

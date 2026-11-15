@@ -526,53 +526,6 @@ class NerdTools {
         if (is_link($file) || is_link(dirname($file))) throw new RuntimeException('Refusing linked owned archive');
         if (is_file($file) && !unlink($file)) throw new RuntimeException('Cannot delete owned package archive');
     }
-    private function assertRemovalSafe($names) {
-        if (!$names) return;
-        $sources = [];
-        foreach (glob($this->root.'/boot/config/plugins/*.plg') ?: [] as $plugin) {
-            if (strcasecmp(basename($plugin), 'NerdTools.plg') === 0 || is_link($plugin)) continue;
-            $contents = file_get_contents($plugin); $entities = [];
-            if (strlen($contents) > 1048576) throw new RuntimeException('Cannot safely inspect another plugin declaration');
-            preg_match_all('/<!ENTITY\s+([A-Za-z_:][A-Za-z0-9_.:-]*)\s+([\'"])(.*?)\2\s*>/s', $contents, $matches, PREG_SET_ORDER);
-            foreach ($matches as $match) $entities[$match[1]] = $match[3];
-            for ($depth = 0; $depth < 32; $depth++) {
-                $expandedSize = strlen($contents);
-                $expanded = preg_replace_callback('/&([A-Za-z_:][A-Za-z0-9_.:-]*);/', function($match) use ($entities, &$expandedSize) {
-                    $replacement = $entities[$match[1]] ?? $match[0];
-                    $expandedSize += strlen($replacement) - strlen($match[0]);
-                    if ($expandedSize > 1048576) throw new RuntimeException('Cannot safely inspect another plugin declaration');
-                    return $replacement;
-                }, $contents);
-                if (strlen($expanded) > 1048576) throw new RuntimeException('Cannot safely inspect another plugin declaration');
-                if ($expanded === $contents) break;
-                $contents = $expanded;
-            }
-            $sources[] = $contents;
-            $runtime = $this->root.'/usr/local/emhttp/plugins/'.pathinfo($plugin, PATHINFO_FILENAME);
-            if (!is_dir($runtime) || is_link($runtime)) continue;
-            $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($runtime, FilesystemIterator::SKIP_DOTS));
-            foreach ($files as $file) {
-                if (!$file->isFile() || $file->isLink() || $file->getSize() > 1048576) continue;
-                $text = file_get_contents($file->getPathname());
-                if (strpos($text, "\0") === false) $sources[] = $text;
-            }
-        }
-        $owned = $this->owned();
-        foreach ($names as $name) {
-            // Only unambiguous references count. A bare command word such as "bc" also appears in
-            // unrelated text (editor syntax files, prose), which made removal impossible.
-            $terms = [$name];
-            foreach (($owned[$name]['commands'] ?? [nt_tool_name($name)]) as $command) {
-                $terms[] = 'nerdtools-'.$command;
-                $terms[] = 'opt/nerdtools/bin/'.$command; $terms[] = 'opt/nerdtools/sbin/'.$command;
-            }
-            foreach ($sources as $source) foreach (array_unique($terms) as $term) {
-                if (preg_match('~(?<![A-Za-z0-9_+.-])'.preg_quote($term, '~').'(?=$|[^A-Za-z0-9_+.-]|-[0-9])~', $source)) {
-                    throw new RuntimeException('Package is referenced by another plugin: '.$name);
-                }
-            }
-        }
-    }
     public function apply($download, $uninstall, $removeAll = false) {
         $catalog = $removeAll ? [] : $this->catalog();
         $packages = $catalog['packages'] ?? [];
@@ -595,12 +548,10 @@ class NerdTools {
                 }
             }
         }
-        $this->assertRemovalSafe(array_values($migrations));
         // An unavailable selected package must never silently lose its dependencies.
         if (!$removeAll) foreach ($owned as $name => $entry) {
             if (!isset($packages[$name]) && !in_array($name, $migrations, true) && nt_preference($config, $name) === 'yes') throw new RuntimeException('Selected package is absent from catalog: '.$name);
         }
-        if ($uninstall || $removeAll) $this->assertRemovalSafe(array_diff(array_keys($owned), $required, array_values($migrations)));
         $downloads = [];
         foreach ($required as $name) {
             $package = $packages[$name];
