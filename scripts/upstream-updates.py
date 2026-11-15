@@ -698,7 +698,8 @@ def finish(repo, gh, plan_path, workspace, report_path, dry_run=False, output=No
             workspace_path(repo, output)
             if paths:
                 git(repo, 'add', '--', *paths)
-            (output / 'changes.patch').write_text(git(repo, 'diff', '--cached', '--binary', '--no-ext-diff'))
+            (output / 'changes.patch').write_text(run(
+                ['git', 'diff', '--cached', '--binary', '--no-ext-diff'], repo))
             (output / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
         summary('Dry-run native validation passed; no PR, push, catalog dispatch or release performed.')
         return
