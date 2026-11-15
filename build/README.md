@@ -115,6 +115,19 @@ Provider secrets remain in the main-only `Upstream Updates` environment: `OPENAI
 
 The trusted controller owns preparation, acceptance, rollback, commits and PR creation in separate jobs. Artifacts are treated as untrusted: extraction rejects traversal, links and special files, and import permits only accepted recipes and their dependency closure. Existing package policy and smoke assertions remain intact apart from substituting the package's own version. Native validation and the exact Unraid build/ABI/kernel gates remain authoritative; ordinary commands run by an agent do not replace them. Rejected updates return to their state on `main`. Updates that require generated workflow changes are reported for manual handling because `GITHUB_TOKEN` cannot push those changes.
 
+For a Go source recipe with `go-modules.tsv`, regenerate its offline proxy lock instead of rejecting the update as unverifiable:
+
+```sh
+python3 build/go-module-lock.py \
+  --source .upstream-downloads/<extracted-source> \
+  --recipe build/recipes/<package> \
+  --lock build/locks/<owning-lock>.json \
+  --package <package> \
+  --work .upstream-downloads/go-lock-<package>
+```
+
+The helper runs `go mod download -json all` with isolated caches and the public Go proxy, hashes every `.info`, `.mod` and `.zip`, rewrites `go-modules.tsv`, and replaces only `proxy.golang.org` inputs in the package lock. Source archives and other inputs remain for the agent to update separately. Module blobs are build-time inputs and are never added to the recipe directory. A Go update is rejected only when regeneration, source/license review, trusted validation, or native build gates fail.
+
 The controller explicitly dispatches read-only catalog builds, since token-authored pushes do not trigger push workflows. Failed builds and actionable current-head review feedback feed the next bounded repair attempt. Attempts and rejected decisions persist on discovery issues, so a failed initial session cannot reset its budget each day. Three attempts are allowed before maintainer intervention. Bot status summaries and ordinary discussion do not initiate paid repairs; use `/upstream repair <instruction>` on the batch PR for an explicit repair request. A maintainer with current write access can comment `/upstream retry` on an open discovery issue or batch PR to reset its blocked work deliberately. Closed discovery issues are not automatically reopened.
 
 Issue and PR status text distinguishes queued, assessing, building, awaiting-review, rejected and blocked work, with relevant run links. Each vendor action has a 20-minute execution limit; Claude additionally has 100-turn and USD 2.50 budget thresholds. Source assessment is model-assisted, not a security proof.

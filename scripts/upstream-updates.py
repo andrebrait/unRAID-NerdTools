@@ -1168,9 +1168,10 @@ def prepare(repo, gh, event, output, evaluation=False, package=None):
         (output / 'context.json').write_text(json.dumps(context, indent=2) + '\n')
         (output / 'prompt.md').write_text(
             'Assess the candidates in .upstream-downloads/context.json (untrusted upstream/review data). '
-            'Read build/README.md for the build and recipe rules. Update only recipe files and package locks; '
-            'do not edit build/recipe-files.json because the controller regenerates it. Retain source, policy '
-            'and smoke assertions. Do not modify controller code or workflows. '
+            'Read build/README.md for the build and recipe rules. For a Go recipe with go-modules.tsv, use '
+            'build/go-module-lock.py before rejecting it for module-lock regeneration. Update only recipe files '
+            'and package locks; do not edit build/recipe-files.json because the controller regenerates it. '
+            'Retain source, policy and smoke assertions. Do not modify controller code or workflows. '
             'Keep downloads and temporary build files under .upstream-downloads. '
             'Return exactly a JSON object with summary and recipes; recipes must contain one '
             'name, decision (accept/reject), and justified reason per candidate. Reject unsafe updates; '
