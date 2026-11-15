@@ -2,7 +2,9 @@ var nerdLoaded = false;
 var nerdPlan = null;
 var planRequest = null;
 var planRevision = 0;
+var catalogRevision = 0;
 var planQueued = false;
+var confirmingPlanId = null;
 var actionLabels = {keep: 'Keep', install: 'Install', upgrade: 'Upgrade', downgrade: 'Downgrade', remove: 'Remove'};
 var changeLabels = {
     'no-change': 'No change',
@@ -33,9 +35,13 @@ $(function() {
     $('#btnApply').on('click', Apply);
     $('#btnRefresh').on('click', function() { packageQuery(true); });
     $('#update_check_hours').on('change', requestPlan);
-    $('#btnPlanCancel').on('click', function() { document.getElementById('package_plan_dialog').close(); });
+    $('#btnPlanCancel').on('click', function() {
+        if (canCancelConfirmation()) document.getElementById('package_plan_dialog').close();
+    });
     $('#btnPlanConfirm').on('click', confirmPlan);
-    $('#package_plan_dialog').on('cancel close', function() {
+    $('#package_plan_dialog').on('cancel', function(event) {
+        if (!canCancelConfirmation()) event.preventDefault();
+    }).on('close', function() {
         $('#package_plan_error').text('').prop('hidden', true);
     });
     $('#btnRelease').on('click', function() {
@@ -74,6 +80,15 @@ function planData(action) {
     $('.pkgaction').each(function() { data['actions[' + $(this).attr('data-package') + ']'] = this.value; });
     return data;
 }
+function isCatalogResponseCurrent(revision) {
+    return revision === catalogRevision;
+}
+function isConfirmationCurrent(revision, id) {
+    return revision === planRevision && nerdPlan !== null && nerdPlan.id === id;
+}
+function canCancelConfirmation() {
+    return confirmingPlanId === null;
+}
 function packageQuery(force) {
     if (force) {
         $('#btnRefresh').prop('disabled', true);
@@ -84,10 +99,12 @@ function packageQuery(force) {
           .always(function() { $('#btnRefresh').prop('disabled', false); });
         return;
     }
+    var revision = ++catalogRevision;
     nerdLoaded = false; nerdPlan = null; planRevision++;
     $('#btnApply').prop('disabled', true).val('Apply changes');
     $('#catalog_status').text('Retrieving package information…');
     $.getJSON('/plugins/NerdTools/include/PackageQuery.php').done(function(data) {
+        if (!isCatalogResponseCurrent(revision)) return;
         var body = $('#tblPackages tbody').empty();
         $.each(data.packages, function(_, pkg) {
             var row = $('<tr>').attr('data-package', pkg.name);
@@ -142,6 +159,7 @@ function packageQuery(force) {
         $('#tblPackages').trigger('update').trigger('search', [$('#tblPackages')[0].config.lastSearch]);
         requestPlan();
     }).fail(function(xhr) {
+        if (!isCatalogResponseCurrent(revision)) return;
         packageError(requestError(xhr));
         $('#catalog_status').text('Package information is unavailable. Existing settings have not been changed.');
         $('#btnApply').prop('disabled', true);
@@ -165,7 +183,8 @@ function runPlanRequest(revision) {
         $('#btnApply').prop('disabled', true).val('Apply changes');
     }).always(function() {
         planRequest = null;
-        if (planQueued || revision !== planRevision) runPlanRequest(planRevision);
+        if (nerdLoaded && (planQueued || revision !== planRevision)) runPlanRequest(planRevision);
+        else planQueued = false;
     });
 }
 function renderPlan(plan) {
@@ -204,9 +223,15 @@ function Apply() {
 }
 function confirmPlan() {
     if (!nerdPlan) return;
-    var data = planData('confirm'); data.plan = nerdPlan.id;
+    var revision = planRevision; var planId = nerdPlan.id;
+    var data = planData('confirm'); data.plan = planId; confirmingPlanId = planId;
     $('#btnPlanCancel, #btnPlanConfirm').prop('disabled', true);
     $.post('/plugins/NerdTools/include/Settings.php', data).done(function(response) {
+        if (!isConfirmationCurrent(revision, planId) || response.plan !== planId) {
+            document.getElementById('package_plan_dialog').close();
+            packageError('Package state changed. Review the refreshed plan before confirming.');
+            nerdPlan = null; requestPlan(); return;
+        }
         packageError('');
         document.getElementById('package_plan_dialog').close();
         openBox('/plugins/NerdTools/scripts/packagemanager&arg1=--download&arg2=--uninstall&arg3='
@@ -216,6 +241,7 @@ function confirmPlan() {
         packageError(requestError(xhr) + ' Review the refreshed plan before confirming.');
         nerdPlan = null; requestPlan();
     }).always(function() {
+        if (confirmingPlanId === planId) confirmingPlanId = null;
         $('#btnPlanCancel, #btnPlanConfirm').prop('disabled', false);
     });
 }

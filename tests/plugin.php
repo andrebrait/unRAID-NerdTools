@@ -77,6 +77,34 @@ $unselectedPlanId = $plan['id'];
 $selectedConfig = $planConfig; $selectedConfig['newapp'] = 'yes';
 $selectedPlan = nt_plan($planPackages,$planOwned,$planInstalled,$selectedConfig,['newapp'=>'install'],24);
 check($selectedPlan['id'] !== $unselectedPlanId, 'Plan fingerprint includes current preferences');
+$olderPackages = [
+    'dep'=>$planPackage('dep','1.0'),
+    'app'=>$planPackage('app','1.0',['dep']),
+    'consumer'=>$planPackage('consumer','1.0',['dep']),
+];
+$newerOwned = [
+    'dep'=>['record'=>'dep-2.0-x86_64-1','dependencies'=>[]],
+    'consumer'=>['record'=>'consumer-2.0-x86_64-1','dependencies'=>['dep']],
+];
+rejects(function() use ($olderPackages,$newerOwned) {
+    nt_plan($olderPackages,$newerOwned,array_column($newerOwned,'record'),
+        ['dep'=>'yes','consumer'=>'yes','update_check_hours'=>'24'],['app'=>'install'],24);
+});
+$downgradePlan = nt_plan($olderPackages,$newerOwned,array_column($newerOwned,'record'),
+    ['dep'=>'yes','consumer'=>'yes','update_check_hours'=>'24'],
+    ['app'=>'install','dep'=>'downgrade','consumer'=>'downgrade'],24);
+check(array_column($downgradePlan['changes'],'package') === ['dep','app','consumer']
+    && !$downgradePlan['rows']['dep']['automatic'] && !$downgradePlan['rows']['consumer']['automatic'],
+    'Explicit dependency and dependent downgrades may accompany an install');
+$unavailableOwned = [
+    'dep'=>['record'=>'dep-1.0-x86_64-1','dependencies'=>[]],
+    'consumer'=>['record'=>'consumer-1.0-x86_64-1','dependencies'=>['dep']],
+];
+$availablePackages = ['dep'=>$planPackage('dep','2.0'),'app'=>$planPackage('app','1.0',['dep'])];
+rejects(function() use ($availablePackages,$unavailableOwned) {
+    nt_plan($availablePackages,$unavailableOwned,array_column($unavailableOwned,'record'),
+        ['dep'=>'yes','consumer'=>'yes','update_check_hours'=>'24'],['app'=>'install'],24);
+});
 $removeOwned = [
     'dep'=>['record'=>'dep-1.0-x86_64-1','dependencies'=>[]],
     'app'=>['record'=>'app-1.0-x86_64-1','dependencies'=>['dep']],

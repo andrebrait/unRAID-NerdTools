@@ -26,6 +26,7 @@ jobs:
           php tests/plugin_policy.php
           python3 tests/plugin_udev.py
           node --check source/NerdTools/usr/local/emhttp/plugins/NerdTools/js/jquery.NerdTools.js
+          node tests/package_ui.js
       - name: Verify package generation
         run: python3 -m unittest discover -s tests -p 'test_plugin_packaging.py'
   publish:

@@ -154,9 +154,10 @@ function nt_canonical($value) {
     foreach ($value as $key => $item) $value[$key] = nt_canonical($item);
     return $value;
 }
-function nt_plan($packages, $owned, $installed, $config, $actions, $hours) {
+function nt_plan($packages, $owned, $installed, $config, $actions, $hours, $catalogGeneration = 0) {
     if (!is_array($packages) || !is_array($owned) || !is_array($installed) || !is_array($config)
-        || !is_array($actions) || !is_int($hours) || $hours < 0 || $hours > 8760) {
+        || !is_array($actions) || !is_int($hours) || $hours < 0 || $hours > 8760
+        || !is_int($catalogGeneration) || $catalogGeneration < 0) {
         throw new RuntimeException('Invalid package plan');
     }
     $records = [];
@@ -250,19 +251,30 @@ function nt_plan($packages, $owned, $installed, $config, $actions, $hours) {
         }
     }
     $reverse = [];
-    foreach ($packages as $name => $package) {
+    foreach ($graph as $name => $package) {
         foreach ($package['dependencies'] as $dependency) $reverse[$dependency][] = $name;
     }
+    $stageMove = function($name, $root) use (&$operations, $states, $packages, $intents) {
+        if (!isset($packages[$name])) {
+            throw new RuntimeException('Installed dependent is unavailable from this release: '.$name);
+        }
+        $current = nt_package_version($states[$name]['record'], $states[$name]['owned_name']);
+        if ($current === null) throw new RuntimeException('Cannot determine installed package version: '.$name);
+        if ($current === $packages[$name]['version']) return false;
+        $change = version_compare($packages[$name]['version'], $current) > 0 ? 'upgrade' : 'downgrade';
+        if ($change === 'downgrade' && ($intents[$name] ?? 'keep') !== 'downgrade') {
+            throw new RuntimeException('Required dependency downgrade must be selected explicitly: '.$name);
+        }
+        if (!isset($operations[$name]) || $operations[$name]['change'] !== $change) {
+            $operations[$name] = ['change'=>$change,'automatic'=>true,'reason'=>'Required by '.$root];
+        }
+        return true;
+    };
     foreach ($installRoots as $root) {
         $closure = nt_resolve([$root], $packages); $queue = [];
         foreach ($closure as $name) {
             if ($name === $root || !$states[$name]['installed'] || !$states[$name]['owned']) continue;
-            $current = nt_package_version($states[$name]['record'], $states[$name]['owned_name']);
-            if ($current !== $packages[$name]['version']) {
-                $change = version_compare($packages[$name]['version'], $current) > 0 ? 'upgrade' : 'downgrade';
-                $operations[$name] = ['change'=>$change,'automatic'=>true,'reason'=>'Required by '.$root];
-                $queue[] = $name;
-            }
+            if ($stageMove($name, $root)) $queue[] = $name;
         }
         $seen = array_fill_keys($queue, true);
         while ($queue) {
@@ -270,10 +282,7 @@ function nt_plan($packages, $owned, $installed, $config, $actions, $hours) {
             foreach ($reverse[$dependency] ?? [] as $dependent) {
                 if (isset($seen[$dependent]) || empty($states[$dependent]['installed']) || empty($states[$dependent]['owned'])) continue;
                 $seen[$dependent] = true; $queue[] = $dependent;
-                $current = nt_package_version($states[$dependent]['record'], $states[$dependent]['owned_name']);
-                if ($current === $packages[$dependent]['version']) continue;
-                $change = version_compare($packages[$dependent]['version'], $current) > 0 ? 'upgrade' : 'downgrade';
-                $operations[$dependent] = ['change'=>$change,'automatic'=>true,'reason'=>'Required by '.$root];
+                $stageMove($dependent, $root);
             }
         }
     }
@@ -332,7 +341,7 @@ function nt_plan($packages, $owned, $installed, $config, $actions, $hours) {
     ksort($currentPreferences, SORT_STRING);
     $state = [
         'packages'=>$packages, 'owned'=>$owned, 'installed'=>array_values($installed),
-        'preferences'=>$currentPreferences, 'hours'=>$currentHours,
+        'preferences'=>$currentPreferences, 'hours'=>$currentHours, 'catalog_generation'=>$catalogGeneration,
     ];
     sort($state['installed'], SORT_STRING);
     $state = hash('sha256', json_encode(nt_canonical($state), JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
@@ -451,15 +460,20 @@ class NerdTools {
         if (!$cache) return [];
         // Revalidate cached data after upgrades and before any install.
         $catalog = nt_validate_catalog($cache['catalog'] ?? null, $cache['assets'] ?? [], $this->version);
+        $generation = $cache['generation'] ?? 0;
+        if (!is_int($generation) || $generation < 0) throw new RuntimeException('Invalid catalog generation');
         $catalog['release'] = $cache['release'] ?? '';
         $catalog['selector'] = $cache['selector'] ?? 'latest';
         $catalog['releases'] = $cache['releases'] ?? [];
+        $catalog['generation'] = $generation;
         return $catalog;
     }
     public function refresh($force = false, $selector = null) {
         $state = $this->state(); $now = time(); $hours = $this->interval();
         if ((!$force && (!$hours || $now < ($state['next_check'] ?? 0))) || $now < ($state['rate_limit_reset'] ?? 0)) return false;
         $cache = nt_json($this->path.'/catalog-cache.json');
+        $generation = $cache['generation'] ?? 0;
+        if (!is_int($generation) || $generation < 0) throw new RuntimeException('Invalid catalog generation');
         $selector = $selector ?? ($cache['selector'] ?? 'latest');
         if (!is_string($selector) || !preg_match('#^[A-Za-z0-9][A-Za-z0-9_./+-]{0,199}$#D', $selector)) throw new RuntimeException('Invalid release tag');
         $reset = 0;
@@ -492,7 +506,7 @@ class NerdTools {
             if (!$release) throw new RuntimeException('No compatible published package release found'.($selector === 'latest' ? '' : ': '.$selector));
             nt_atomic_write($this->path.'/catalog-cache.json', json_encode([
                 'catalog'=>$raw, 'assets'=>$release['assets'], 'release'=>$release['tag_name'],
-                'selector'=>$selector, 'releases'=>$choices,
+                'selector'=>$selector, 'releases'=>$choices, 'generation'=>$generation + 1,
             ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
             $state = ['last_success'=>$now, 'last_attempt'=>$now, 'next_check'=>nt_next_check($now, $hours ?: 24, false, 0), 'error'=>'', 'rate_limit_reset'=>0];
         } catch (Throwable $error) {
@@ -729,7 +743,7 @@ class NerdTools {
         $catalog = $this->catalog();
         if (!$catalog) throw new RuntimeException('No valid catalog cached; check for updates first');
         return nt_plan($catalog['packages'] ?? [], $this->legacyOwned(), $this->installed(), $this->config(),
-            $actions, (int)$hours);
+            $actions, (int)$hours, $catalog['generation']);
     }
     public function confirmPlan($id, $actions, $hours) {
         if (!is_string($id) || !preg_match('/^[a-f0-9]{64}$/D', $id)) throw new RuntimeException('Invalid package plan');
