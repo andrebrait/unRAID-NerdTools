@@ -120,11 +120,26 @@ class ProviderPolicyTests(provider.Base):
         entries[0]['smoke'] = [['alpha', '--expected=1.0', '--runtime=10.0.14']]
         (self.repo / 'build/locks/slackware.json').write_text(json.dumps(entries))
         session = self.session()
+        with self.assertRaises(provider.agent.ToolError):
+            session.call('patch_package', {'name': 'alpha', 'changes': {'version': '2.0',
+                         'smoke': [['alpha', '--expected=2.0', '--runtime=0.0.0']]}})
         session.call('patch_package', {'name': 'alpha', 'changes': {'version': '2.0',
-                     'smoke': [['alpha', '--expected=2.0', '--runtime=10.0.15']]}})
-        self.assertEqual(self.lock()[0]['smoke'], [['alpha', '--expected=2.0', '--runtime=10.0.15']])
+                     'smoke': [['alpha', '--expected=2.0', '--runtime=10.0.14']]}})
+        self.assertEqual(self.lock()[0]['smoke'], [['alpha', '--expected=2.0', '--runtime=10.0.14']])
         with self.assertRaises(provider.agent.ToolError):
             session.call('patch_package', {'name': 'alpha', 'changes': {'smoke': [['true']]}})
+
+    def test_package_version_substitution_does_not_rewrite_a_longer_dependency_version(self):
+        entries = self.lock()
+        entries[0]['smoke'] = [['alpha', '--expected=1.0', '--minimum=1.0.14']]
+        (self.repo / 'build/locks/slackware.json').write_text(json.dumps(entries))
+        session = self.session()
+        with self.assertRaises(provider.agent.ToolError):
+            session.call('patch_package', {'name': 'alpha', 'changes': {'version': '2.0',
+                         'smoke': [['alpha', '--expected=2.0', '--minimum=2.0.14']]}})
+        session.call('patch_package', {'name': 'alpha', 'changes': {'version': '2.0',
+                     'smoke': [['alpha', '--expected=2.0', '--minimum=1.0.14']]}})
+        self.assertEqual(self.lock()[0]['smoke'], [['alpha', '--expected=2.0', '--minimum=1.0.14']])
 
     def test_unchanged_legacy_provenance_does_not_block_a_version_update(self):
         entries = self.lock()

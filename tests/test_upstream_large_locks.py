@@ -28,7 +28,7 @@ def scripted_response(body, length=True, status=200, headers=None):
     response = mock.Mock(status=status)
     fields = {**({'Content-Length': str(len(body))} if length else {}), **(headers or {})}
     response.getheader.side_effect = lambda name, default=None: fields.get(name, default)
-    response.read.side_effect = io.BytesIO(body).read
+    response.read1.side_effect = io.BytesIO(body).read
     return response
 
 def chunked_response(length=None):
@@ -42,7 +42,7 @@ def chunked_response(length=None):
 
 def streamed(downloads):
     """fetch stand-in for {url: (sha256, size)}: streams each body through on_bytes, as a real transfer does."""
-    def fake(url, mode, offset=0, *, max_bytes=None, on_bytes=None):
+    def fake(url, mode, offset=0, *, max_bytes=None, on_bytes=None, deadline=None):
         digest, size = downloads[url]
         on_bytes(size)
         return {'url': url, 'sha256': digest, 'bytes': size}
@@ -175,7 +175,7 @@ class LargeLockTests(unittest.TestCase):
     def test_large_upstream_manifest_can_be_read_after_the_first_page(self):
         response = mock.Mock(status=200)
         response.getheader.return_value = None
-        response.read.side_effect = io.BytesIO(b'x' * agent.FETCH_TEXT + b'tail').read
+        response.read1.side_effect = io.BytesIO(b'x' * agent.FETCH_TEXT + b'tail').read
         with mock.patch.object(agent, 'resolve_public', return_value=['93.184.216.34']), mock.patch.object(
                 agent, '_request', return_value=(mock.Mock(), response)):
             result = agent.fetch('https://example.org/go.sum', 'text', offset=agent.FETCH_TEXT)
@@ -211,7 +211,7 @@ class LargeLockTests(unittest.TestCase):
         stream = scripted_response(b'x' * 50, length=False)
         with self.network(stream), self.assertRaises(agent.ToolError):
             self.session.call('fetch_url', {'url': 'https://example.org/big.tgz', 'mode': 'sha256'})
-        self.assertEqual(stream.read.call_args_list, [mock.call(10)])
+        self.assertEqual(stream.read1.call_args_list, [mock.call(10)])
         self.assertEqual(self.session.downloaded, 2 * 2**30)
         self.assertNotIn('https://example.org/big.tgz', self.session.hash_cache)
         with self.network(scripted_response(b'y')) as later, self.assertRaises(agent.ToolError):
@@ -223,7 +223,7 @@ class LargeLockTests(unittest.TestCase):
         stream = scripted_response(b'0123456789', length=False)
         with self.network(stream), self.assertRaises(agent.ToolError):
             self.session.call('fetch_url', {'url': 'https://example.org/exact.tgz', 'mode': 'sha256'})
-        self.assertEqual(stream.read.call_args_list, [mock.call(10)])
+        self.assertEqual(stream.read1.call_args_list, [mock.call(10)])
         self.assertNotIn('https://example.org/exact.tgz', self.session.hash_cache)
         self.assertEqual(self.session.downloaded, 2 * 2**30)
 
@@ -239,7 +239,7 @@ class LargeLockTests(unittest.TestCase):
         stream = scripted_response(b'x' * 11)
         with self.network(stream), self.assertRaises(agent.ToolError):
             self.session.call('fetch_url', {'url': 'https://example.org/over.tgz', 'mode': 'sha256'})
-        stream.read.assert_not_called()
+        stream.read1.assert_not_called()
         self.assertEqual(self.session.downloaded, 2 * 2**30 - 10)
 
     def test_truncated_stream_publishes_no_hash_and_keeps_its_bytes_counted(self):
@@ -255,14 +255,14 @@ class LargeLockTests(unittest.TestCase):
         seen = []
         with self.network(redirect, final), self.assertRaises(agent.ToolError):
             agent.fetch('https://example.org/start.tgz', 'sha256', max_bytes=5, on_bytes=seen.append)
-        self.assertEqual(final.read.call_args_list, [mock.call(5)])
+        self.assertEqual(final.read1.call_args_list, [mock.call(5)])
         self.assertEqual(sum(seen), 5)
 
     def test_bytes_read_before_a_transfer_error_are_still_accounted(self):
         stream = scripted_response(b'abc' * 10, length=False)
-        stream.read.side_effect = [b'abc', OSError('connection reset')]
+        stream.read1.side_effect = [b'abc', OSError('connection reset')]
         seen = []
-        with self.network(stream), self.assertRaises(OSError):
+        with self.network(stream), self.assertRaises(agent.ToolError):
             agent.fetch('https://example.org/reset.tgz', 'sha256', on_bytes=seen.append)
         self.assertEqual(seen, [3])
 

@@ -12,6 +12,7 @@ The model gets no shell, no GitHub access and never sees a secret; every tool is
 Validation, pinning, rollback and git stay with the trusted caller.
 """
 import argparse
+import contextlib
 import hashlib
 import http.client
 import ipaddress
@@ -19,10 +20,12 @@ import json
 import os
 import re
 import shutil
+import signal
 import socket
 import ssl
 import stat
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -318,15 +321,48 @@ class PinnedHTTPSConnection(http.client.HTTPSConnection):
         self.sock = self.context.wrap_socket(sock, server_hostname=self.host)
 
 
+@contextlib.contextmanager
+def _transfer_deadline(deadline):
+    """Interrupt even http.client's internal framing reads; never steal another alarm."""
+    if sys.platform != "linux" or threading.current_thread() is not threading.main_thread():
+        raise ToolError("bounded downloads require the Linux main thread")
+    remaining = min(FETCH_SECONDS, deadline - time.monotonic())
+    if remaining <= 0:
+        raise ToolError("download timed out")
+    previous_handler = signal.getsignal(signal.SIGALRM)
+    previous_timer = signal.getitimer(signal.ITIMER_REAL)
+    if previous_timer[0]:
+        raise ToolError("bounded downloads require an unused real-time alarm")
+
+    def expired(signum, frame):
+        raise ToolError("download timed out")
+
+    signal.signal(signal.SIGALRM, expired)
+    try:
+        signal.setitimer(signal.ITIMER_REAL, remaining)
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous_handler)
+        signal.setitimer(signal.ITIMER_REAL, *previous_timer)
+
+
 def _request(parts, addresses, deadline):
     target = urllib.parse.urlunsplit(("", "", parts.path or "/", parts.query, ""))
     headers = {"User-Agent": "NerdTools-upstream-agent", "Accept-Encoding": "identity", "Connection": "close"}
     failure = None
     for address in addresses:
-        connection = PinnedHTTPSConnection(parts.hostname, address, min(FETCH_IO_TIMEOUT, max(1, deadline - time.monotonic())))
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise ToolError("download timed out")
+        connection = PinnedHTTPSConnection(parts.hostname, address, min(FETCH_IO_TIMEOUT, remaining))
         try:
-            connection.request("GET", target, headers=headers)
-            return connection, connection.getresponse()
+            with _transfer_deadline(deadline):
+                connection.request("GET", target, headers=headers)
+                return connection, connection.getresponse()
+        except ToolError:
+            connection.close()
+            raise
         except (OSError, http.client.HTTPException) as exc:
             connection.close()
             failure = exc
@@ -348,9 +384,13 @@ def _body(response, mode, deadline, offset=0, *, max_bytes=None, on_bytes=None):
         raise ToolError("compressed transfer encodings are not supported")
 
     def read(size):
-        if time.monotonic() > deadline:
-            raise ToolError("download timed out")
-        chunk = response.read(size)
+        try:
+            with _transfer_deadline(deadline):
+                chunk = response.read1(size)
+        except (OSError, http.client.HTTPException) as exc:
+            if isinstance(exc, http.client.IncompleteRead) and exc.partial and on_bytes:
+                on_bytes(len(exc.partial))
+            raise ToolError(f"could not fetch: {type(exc).__name__}") from None
         if chunk and on_bytes:
             on_bytes(len(chunk))  # counted as read, so a transfer that fails later still spends it
         return chunk
@@ -386,14 +426,16 @@ def _body(response, mode, deadline, offset=0, *, max_bytes=None, on_bytes=None):
     return {"sha256": digest.hexdigest(), "bytes": total}
 
 
-def fetch(url, mode, offset=0, *, max_bytes=None, on_bytes=None):
-    """GET over validated, pinned public addresses; every redirect hop is validated and resolved again. max_bytes caps the body; on_bytes sees each chunk as it is read, even from a transfer that later fails."""
-    deadline = time.monotonic() + FETCH_SECONDS
+def fetch(url, mode, offset=0, *, max_bytes=None, on_bytes=None, deadline=None):
+    """GET pinned public HTTPS; deadline can shorten the per-download limit. on_bytes charges chunks even if a later read fails."""
+    deadline = min(time.monotonic() + FETCH_SECONDS, deadline if deadline is not None else float("inf"))
     if offset > FETCH_TEXT * 16 or (offset and mode != "text"):
         raise ToolError("invalid text offset")
     for _ in range(FETCH_REDIRECTS + 1):
         parts = check_url(url)
-        connection, response = _request(parts, resolve_public(parts.hostname), deadline)
+        with _transfer_deadline(deadline):
+            addresses = resolve_public(parts.hostname)
+        connection, response = _request(parts, addresses, deadline)
         try:
             if response.status in (301, 302, 303, 307, 308):
                 location = response.getheader("Location")
@@ -821,13 +863,10 @@ class Session:
                 or any(not isinstance(arg, str) or "\0" in arg or len(arg) > 4000 for arg in command) for command in smoke)):
             raise ToolError("smoke must be a list of non-empty string argument lists")
         if old is not None and smoke[:len(old)] != old:
-            expected = [[arg.replace(old_version, new_version) for arg in command] for command in old]
-            def skeleton(commands):
-                return [[re.sub(r"\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?",
-                                lambda match: match[0] if match[0] == new_version else "<version>", arg)
-                         for arg in command] for command in commands]
-            if skeleton(smoke[:len(old)]) != skeleton(expected):
-                raise ToolError("existing smoke checks must remain; only expected version literals may change")
+            version = re.compile(r"(?<![A-Za-z0-9_.])" + re.escape(old_version) + r"(?![A-Za-z0-9_.])")
+            expected = [[version.sub(lambda _: new_version, arg) for arg in command] for command in old]
+            if smoke[:len(old)] != expected:
+                raise ToolError("existing smoke checks must remain; only the package version may change")
 
     # --- network and decision tools
     def _hash(self, url):
@@ -837,7 +876,7 @@ class Session:
             remaining = 2 * 2**30 - self.downloaded
             if remaining <= 0:
                 raise ToolError("input download byte budget exhausted")
-            result = fetch(url, "sha256", max_bytes=remaining, on_bytes=self._account)
+            result = fetch(url, "sha256", max_bytes=remaining, on_bytes=self._account, deadline=self.deadline)
             self.hash_cache[url] = result
         return self.hash_cache[url]
 
@@ -849,7 +888,7 @@ class Session:
             if a.get("offset", 0):
                 raise ToolError("hash mode does not accept an offset")
             return self._hash(a["url"])
-        return fetch(a["url"], a["mode"], a["offset"]) if a.get("offset") else fetch(a["url"], a["mode"])
+        return fetch(a["url"], a["mode"], a.get("offset", 0), deadline=self.deadline)
 
     def _problems(self, name, entries):
         entry, problems = entries.get(name), []

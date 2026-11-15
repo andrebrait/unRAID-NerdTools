@@ -856,7 +856,7 @@ class FetchTests(Base):
             def getheader(self, name, default=None):
                 return self.headers.get(name.lower(), default)
 
-            def read(self, size=-1):
+            def read1(self, size=-1):
                 chunk = self.body[self.position:] if size < 0 else self.body[self.position:self.position + size]
                 self.position += len(chunk)
                 return chunk
