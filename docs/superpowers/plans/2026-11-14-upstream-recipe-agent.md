@@ -2,7 +2,7 @@
 
 ## Approved scope
 
-Daily discovery produces one batch PR, not per-version issues. One agent processes all candidates, evaluates source provenance and licensing, ports acceptable updates, and repairs failures from the existing native build/test workflows. Confirmed review bots participate; a human approves and merges. Publication remains behind exact-revision authorization and the native compatibility gates.
+Daily discovery retains one issue per exact upstream recipe update and produces one consolidated batch PR. One agent processes the frozen candidates, evaluates source provenance and licensing, ports acceptable updates, and repairs failures from the existing native build/test workflows. Confirmed review bots participate; a human approves and merges. Publication remains behind exact-revision authorization and the native compatibility gates.
 
 The user selected the official Codex and Claude Code actions instead of a custom runtime or OMP/Pi harness. The primary model is GPT-6 Luna with xhigh reasoning; Haiku 5.5 at medium effort is the availability fallback. No automatic premium escalation.
 
@@ -44,3 +44,20 @@ Deterministic work comes first. Attempt every independent PR rebase and preserve
 Only a completely successful rebase stage proceeds directly to AI-free sequential squashes onto a fresh upstream base. Squashing stops at the first conflict because subsequent squashes depend on the accumulated result. A failed rebase stage or squash stage invokes targeted AI repair, followed by deterministic gates.
 
 The existing OMP pipeline already follows this broad sequence. Reusing the vendor-action execution approach does not justify replacing its deterministic rebase and squash machinery.
+
+## Maintainer lifecycle
+
+GitHub discovery issues are the durable queue and retry record, including before a PR exists. This reuses the existing maintainer surface instead of adding a database, state branch, or another service. Discovery adopts matching bot-created legacy issues and does not recreate intentionally closed updates. Rejected assessments and exhausted attempts remain visible without spending on the same assessment each day.
+
+An active PR keeps its candidate set fixed. Later discoveries wait for a subsequent batch instead of resetting attempts, invalidating reviews, or rebuilding unrelated updates. The controller generates closing references from validated accepted versions, never from model prose. Each published batch is a single consolidated commit so a later rejection cannot leave an obsolete closing directive in an earlier repair commit.
+
+Only actionable current-head feedback initiates repair: inline findings, change requests, or an explicit maintainer `/upstream repair` instruction. Bot status summaries and ordinary discussion are not repair requests.
+
+Issue and PR states distinguish queued work, assessment, builds, review readiness and blocked work, with run links. A trusted completion notifier reports failures even when no batch PR was created. Recipe issues close on integration; release failures have a separate source-bound issue and publication success requires evidence that the publish job ran successfully.
+
+### Implementation ownership and verification
+
+1. Controller slice: issue identity and durable state, frozen batches, safe closing references, actionable feedback and regression cases.
+2. Notification slice: trusted workflow-run filtering, idempotent failure/publication notices, exact-source retry resolution and regression cases.
+3. Integration: workflow permissions and visible provider outcomes, operator documentation, upstream unit tests and workflow lint.
+4. Before merge: one condensed adversarial review, current-head CI and the nonpublishing live model/native build evaluation. No agent approves or merges its own recipe batch.

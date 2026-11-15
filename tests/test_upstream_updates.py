@@ -80,8 +80,10 @@ class ControllerTests(unittest.TestCase):
 
     def test_feedback_ignores_own_comments_and_reviews_of_old_heads(self):
         evidence = [
-            {'id': 1, 'body': 'fix current bug', 'commit_id': 'new', 'user': {'login': 'coderabbitai[bot]'}},
-            {'id': 2, 'body': 'old bug', 'commit_id': 'old', 'user': {'login': 'coderabbitai[bot]'}},
+            {'id': 1, 'body': 'fix current bug', 'commit_id': 'new', 'path': 'build/recipes/vim/build',
+             'line': 12, 'user': {'login': 'coderabbitai[bot]'}},
+            {'id': 2, 'body': 'old bug', 'commit_id': 'old', 'path': 'build/recipes/vim/build',
+             'line': 13, 'user': {'login': 'coderabbitai[bot]'}},
             {'id': 3, 'body': '@codex review', 'user': {'login': 'github-actions[bot]'}},
         ]
         feedback = self.updates.current_feedback(evidence, 'new', '2026-11-14T00:00:00Z', ['coderabbitai[bot]'])
@@ -130,7 +132,9 @@ class ControllerTests(unittest.TestCase):
         gh = GitHubFixture(None)
         gh.api = lambda *args, **kwargs: self.fail('Evaluation must not access PR metadata')
         with tempfile.TemporaryDirectory() as folder, patch.object(
-                self.updates, 'run', return_value=json.dumps([{'name': 'sshfs', 'upstream': '2'}])), patch.object(
+                self.updates, 'run', return_value=json.dumps([{
+                    'name': 'sshfs', 'ours': '1', 'upstream': '2',
+                    'source': 'Slackware-current', 'url': 'https://example.invalid/packages'}])), patch.object(
                 self.updates, 'git', side_effect=lambda repo, *args: (
                     'source' if args == ('rev-parse', 'HEAD') else 'main' if args[0] == 'rev-parse' else '')), patch.object(
                 self.updates, 'prepare_branch') as branch:
@@ -143,6 +147,143 @@ class ControllerTests(unittest.TestCase):
             self.assertEqual(plan['pr_number'], None)
             self.assertEqual([item['name'] for item in plan['candidates']], ['sshfs'])
 
+class IssueLifecycleTests(unittest.TestCase):
+    def setUp(self):
+        self.updates = module()
+
+    def candidate(self, upstream='2.0', url='https://example.invalid/releases'):
+        return {'name': 'vim', 'ours': '1.0', 'upstream': upstream,
+                'source': 'Slackware-current', 'url': url}
+
+    def test_exact_candidate_adopts_legacy_issue_and_distinct_version_gets_its_own(self):
+        candidate = self.candidate()
+        legacy = {'number': 7, 'state': 'open',
+                  'title': 'Upstream update: vim 1.0 -> 2.0',
+                  'body': 'Existing readable description\n\n' + candidate['url'],
+                  'user': {'login': 'github-actions[bot]', 'type': 'Bot'}}
+        gh = GitHubFixture(None)
+        gh.issues.append(legacy)
+
+        records = self.updates.sync_candidate_issues(gh, [candidate], run_url='https://example.invalid/run/1')
+
+        self.assertEqual([item['number'] for item in records], [7])
+        self.assertEqual(len(gh.issues), 1)
+        self.assertIn('Existing readable description', gh.issues[0]['body'])
+        self.assertEqual(self.updates.read_issue_state(gh.issues[0])['candidate'],
+                         self.updates.candidate_identity(candidate))
+        self.assertEqual(self.updates.read_issue_state(gh.issues[0])['status'], 'queued')
+
+        self.updates.sync_candidate_issues(gh, [candidate], run_url='https://example.invalid/run/1')
+        self.assertEqual(len(gh.issues), 1)
+        drifted = candidate | {'ours': '1.5'}
+        self.assertEqual(self.updates.sync_candidate_issues(gh, [drifted])[0]['number'], 7)
+        self.assertEqual(len(gh.issues), 1)
+        self.updates.sync_candidate_issues(gh, [self.candidate('3.0')])
+        self.assertEqual(len(gh.issues), 2)
+        self.assertEqual(gh.issues[1]['labels'], ['upstream-update'])
+
+    def test_closed_exact_issue_is_never_reopened_or_recreated(self):
+        candidate = self.candidate()
+        closed = {'number': 8, 'state': 'closed',
+                  'title': 'Upstream update: vim 1.0 -> 2.0',
+                  'body': candidate['url'],
+                  'user': {'login': 'github-actions[bot]', 'type': 'Bot'}}
+        gh = GitHubFixture(None)
+        gh.issues.append(closed)
+
+        records = self.updates.sync_candidate_issues(gh, [candidate])
+
+        self.assertEqual([item['number'] for item in records], [8])
+        self.assertEqual(records[0]['status'], 'closed')
+        self.assertEqual(len(gh.issues), 1)
+        self.assertFalse(any(method == 'PATCH' for _, _, method in gh.calls))
+
+    def test_issue_status_and_attempts_are_durable_and_render_links_and_failure(self):
+        gh = GitHubFixture(None)
+        record = self.updates.sync_candidate_issues(gh, [self.candidate()])[0]
+
+        self.updates.set_issue_status(gh, record, 'assessing', attempts=1,
+                                      run_url='https://example.invalid/run/2')
+        self.updates.set_issue_status(gh, record, 'queued', failure='catalog validation failed',
+                                      build_url='https://example.invalid/build/4')
+
+        stored = self.updates.read_issue_state(gh.issues[0])
+        self.assertEqual(stored['attempts'], 1)
+        self.assertEqual(stored['status'], 'queued')
+        self.assertEqual(stored['failure'], 'catalog validation failed')
+        self.assertIn('https://example.invalid/run/2', gh.issues[0]['body'])
+        self.assertIn('https://example.invalid/build/4', gh.issues[0]['body'])
+        self.assertIn('catalog validation failed', gh.issues[0]['body'])
+
+    def test_closure_refs_require_accepted_version_and_retain_prior_batch_accepts(self):
+        candidate = self.candidate()
+        retained = {'name': 'tmux', 'ours': '3.0', 'upstream': '4.0',
+                    'source': 'SlackBuilds.org 15.0', 'url': 'https://example.invalid/tmux'}
+        records = [{'candidate': candidate, 'number': 42},
+                   {'candidate': self.updates.candidate_identity(retained), 'number': 43,
+                    'status': 'blocked', 'decision': 'accept'}]
+        with tempfile.TemporaryDirectory() as folder:
+            locks = Path(folder) / 'build/locks'
+            locks.mkdir(parents=True)
+            (locks / 'slackware.json').write_text(json.dumps([{'name': 'vim', 'version': '2.0'}]))
+            (locks / 'slackbuilds.json').write_text(json.dumps([{'name': 'tmux', 'version': '4.0'}]))
+            report = {'recipes': [{'name': 'vim', 'decision': 'accept', 'reason': 'Pinned source'}]}
+            candidates = [candidate, retained]
+            self.assertEqual(self.updates.accepted_issue_numbers(
+                Path(folder), candidates, report, records), [42, 43])
+            (locks / 'slackware.json').write_text(json.dumps([{'name': 'vim', 'version': '3.0'}]))
+            self.assertEqual(self.updates.accepted_issue_numbers(
+                Path(folder), candidates, report, records), [43])
+            report['recipes'][0]['decision'] = 'reject'
+            (locks / 'slackware.json').write_text(json.dumps([{'name': 'vim', 'version': '2.0'}]))
+            self.assertEqual(self.updates.accepted_issue_numbers(
+                Path(folder), candidates, report, records), [43])
+
+
+class FeedbackFilteringTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.updates = module()
+
+    def test_only_actionable_current_head_review_inline_or_explicit_command_is_repair_input(self):
+        evidence = [
+            {'id': 1, 'body': 'Summary says tests failed', 'commit_id': 'head', 'state': 'COMMENTED',
+             'user': {'login': 'reviewbot[bot]', 'type': 'Bot'}},
+            {'id': 2, 'body': 'Fix ABI handling', 'commit_id': 'head', 'path': 'build/recipe',
+             'line': 8, 'user': {'login': 'reviewbot[bot]', 'type': 'Bot'}},
+            {'id': 3, 'body': 'Fix ABI handling', 'commit_id': 'head', 'state': 'CHANGES_REQUESTED',
+             'user': {'login': 'reviewbot[bot]', 'type': 'Bot'}},
+            {'id': 4, 'body': 'please change this', 'commit_id': 'head',
+             'user': {'login': 'owner', 'type': 'User'}, 'author_association': 'OWNER'},
+            {'id': 5, 'body': '/upstream repair retain the original smoke assertion',
+             'commit_id': 'head', 'user': {'login': 'owner', 'type': 'User'},
+             'author_association': 'OWNER'},
+            {'id': 6, 'body': 'Fix ABI handling', 'commit_id': 'head', 'path': 'build/recipe',
+             'line': 9, 'user': {'login': 'owner', 'type': 'User'}, 'author_association': 'OWNER'},
+            {'id': 7, 'body': 'LGTM', 'commit_id': 'head', 'state': 'APPROVED',
+             'user': {'login': 'owner', 'type': 'User'}, 'author_association': 'OWNER'},
+        ]
+
+        result = self.updates.current_feedback(
+            evidence, 'head', '2026-11-14T00:00:00Z', ['reviewbot[bot]'])
+
+        self.assertEqual([item['id'] for item in result], [2, 3, 5, 6])
+
+    def test_model_closure_directive_is_not_executable_in_pr_body(self):
+        body = self.updates.pr_body({
+            'attempts': 1,
+            'report': {'summary': 'Fixes #999', 'recipes': [
+                {'name': 'vim', 'decision': 'accept', 'reason': 'Resolves #998'}]},
+            'candidate_issues': [],
+            'issue_closures': [42],
+            'run_url': 'https://example.invalid/run/1',
+        })
+
+        self.assertIn('Fixes #42', body)
+        self.assertNotIn('Fixes #999', body)
+        self.assertNotIn('Resolves #998', body)
+
+
 class GitHubFixture:
     repository = 'owner/tools'
 
@@ -153,12 +294,34 @@ class GitHubFixture:
         self.edits = []
         self.statuses = []
 
+        self.issues = []
+        self.calls = []
+
     def api(self, path, data=None, method=None):
-        if path == 'collaborators/maintainer/permission':
+        self.calls.append((path, data, method))
+        if path.startswith('collaborators/') and path.endswith('/permission'):
             return {'permission': 'admin'}
+        if path.startswith('pulls?state=open&head='):
+            return [self.pr] if self.pr and self.pr.get('state') == 'open' else []
+        if path == 'issues' and method == 'POST':
+            issue = {'number': max((item['number'] for item in self.issues), default=0) + 1,
+                     'state': 'open', 'title': data['title'], 'body': data['body'],
+                     'labels': data.get('labels', []),
+                     'user': {'login': 'github-actions[bot]', 'type': 'Bot'}}
+            self.issues.append(issue)
+            return issue
+        if path.startswith('issues/'):
+            number = int(path.split('/')[1])
+            issue = next((item for item in self.issues if item['number'] == number), None)
+            if issue is None:
+                raise AssertionError(f'Unexpected issue request: {path}')
+            if data:
+                issue.update(data)
+            return issue
         if path == 'pulls/12':
             if data:
                 self.edits.append(data)
+                self.pr.update(data)
             return self.pr
         if path == 'statuses/merge12' and data:
             self.statuses.append(data | {'creator': {'login': 'github-actions[bot]'}})
@@ -166,10 +329,14 @@ class GitHubFixture:
         raise AssertionError(f'Unexpected API request: {path}')
 
     def pages(self, path):
+        if path == 'issues?state=all&per_page=100':
+            return self.issues
         if path == 'pulls/12/reviews?per_page=100':
             return self.reviews
         if path == 'commits/merge12/statuses?per_page=100':
             return self.statuses
+        if path.endswith('/comments?per_page=100'):
+            return []
         raise AssertionError(f'Unexpected pagination: {path}')
 
     def dispatch(self, workflow, ref='main', inputs=None):
@@ -200,7 +367,7 @@ class ControllerIntegrationTests(unittest.TestCase):
         gh = GitHubFixture(self.pr(), [review])
         event = {'pull_request': {'number': 12},
                  'sender': {'login': 'coderabbitai[bot]', 'type': 'Bot'},
-                 'review': {'commit_id': 'a' * 40}}
+                 'review': {'commit_id': 'a' * 40, 'state': 'CHANGES_REQUESTED'}}
         self.updates.feedback(gh, event)
         self.assertEqual(gh.dispatched, [('upstream-versions.yml', 'main', None)])
         gh = GitHubFixture(self.pr(), [review])
@@ -294,6 +461,9 @@ class BatchLifecycleTests(unittest.TestCase):
                         self.pr.update(data)
                     if path == 'pulls/12' and data is None and self.close_on_get:
                         self.pr.update(state='closed', merged=True)
+                    if path == 'git/refs/heads/automation%2Fupstream-recipes' and method == 'DELETE':
+                        git('push', 'origin', '--delete', 'automation/upstream-recipes')
+                        return None
                     return super().api(path, data, method)
 
                 def pages(self, path):
@@ -309,16 +479,23 @@ class BatchLifecycleTests(unittest.TestCase):
                 if args[:3] == ['gh', 'pr', 'ready']:
                     gh.pr['draft'] = False
                     return ''
+                if args[:3] == ['gh', 'api', 'graphql']:
+                    gh.pr['draft'] = True
+                    return ''
                 return real_run(args, repo, input)
             with patch.object(updates, 'run', side_effect=boundary), patch.object(
                     updates, 'push', side_effect=lambda repo, service, previous: git(
-                        'push', 'origin', 'HEAD:refs/heads/automation/upstream-recipes')), patch.dict(
+                        'push', '--force', 'origin', 'HEAD:refs/heads/automation/upstream-recipes')), patch.dict(
                             'os.environ', {'GITHUB_EVENT_NAME': 'schedule', 'UPSTREAM_REVIEW_BOTS': ''}):
                 output = Path(folder) / 'handoff'
                 self.assertTrue(updates.prepare(root, gh, {}, output))
                 plan = json.loads((output / 'plan.json').read_text())
                 self.assertEqual(plan['head_sha'], '')
                 self.assertEqual(plan['state']['attempts'], 1)
+                self.assertEqual(len(gh.issues), 1)
+                issue_state = updates.read_issue_state(gh.issues[0])
+                self.assertEqual((issue_state['attempts'], issue_state['status']), (1, 'assessing'))
+                self.assertNotIn('number', plan['context']['candidates'][0])
                 self.assertNotIn('guide', json.loads((output / 'context.json').read_text()))
                 self.assertIn('build/README.md', (output / 'prompt.md').read_text())
                 import tarfile
@@ -352,6 +529,8 @@ class BatchLifecycleTests(unittest.TestCase):
                 sha = git('rev-parse', 'HEAD')
                 self.assertEqual(git('rev-parse', 'refs/remotes/origin/automation/upstream-recipes'), sha)
                 self.assertTrue(gh.pr['draft'])
+                self.assertIn(f"Fixes #{gh.issues[0]['number']}", gh.pr['body'])
+                self.assertIn(f"Fixes #{gh.issues[0]['number']}", git('log', '-1', '--format=%B'))
                 self.assertEqual(gh.dispatched[0][0:2], ('build-packages.yml', 'automation/upstream-recipes'))
                 self.assertEqual(gh.dispatched[0][2]['publish'], 'false')
                 entries = json.loads((root / 'build/locks/slackware.json').read_text())
@@ -371,6 +550,9 @@ class BatchLifecycleTests(unittest.TestCase):
                 self.assertFalse(gh.pr['draft'])
                 self.assertEqual(len(gh.dispatched), 1)
                 self.assertIn('https://example.invalid/build/9', gh.pr['body'])
+                issue_state = updates.read_issue_state(gh.issues[0])
+                self.assertEqual(issue_state['status'], 'awaiting-review')
+                self.assertIn('https://example.invalid/build/9', gh.issues[0]['body'])
                 self.assertIn('Unverified, not requested', gh.pr['body'])
                 saved_body = gh.pr['body']
                 retry_state = updates.read_state(gh.pr)
@@ -380,9 +562,14 @@ class BatchLifecycleTests(unittest.TestCase):
                 self.assertEqual(json.loads((output / 'context.json').read_text())['validation_error'],
                                  'native source smoke failed')
                 self.assertEqual(updates.read_state(gh.pr)['attempts'], 2)
+                stale_plan = Path(folder) / 'stale-plan.json'
+                stale_plan.write_text((output / 'plan.json').read_text())
                 gh.pr['body'] = saved_body
                 git('checkout', '-q', 'main')
+                record = updates.sync_candidate_issues(gh, [candidate])[0]
+                updates.set_issue_status(gh, record, 'blocked', attempts=3, failure='Repair budget exhausted')
                 state = updates.read_state(gh.pr)
+                state['candidate_issues'] = [record]
                 state['attempts'] = 3
                 gh.pr['body'] = updates.pr_body(state)
                 gh.builds[0]['conclusion'] = 'failure'
@@ -392,11 +579,47 @@ class BatchLifecycleTests(unittest.TestCase):
                 self.assertEqual(updates.read_state(gh.pr)['attempts'], 3)
                 candidate['upstream'] = '99.1'
                 gh.builds[0]['conclusion'] = 'success'
-                gh.close_on_get = True
+                self.assertFalse(updates.prepare(root, gh, {}, output))
+                frozen = updates.read_state(gh.pr)
+                self.assertEqual([item['upstream'] for item in frozen['candidates']], ['99.0'])
+                self.assertEqual(len(gh.issues), 2)
+                self.assertEqual(updates.read_issue_state(gh.issues[1])['status'], 'queued')
+                retry = {'issue': {'number': 12, 'pull_request': {'url': 'https://example.invalid/pr/12'}},
+                         'comment': {'body': '/upstream retry'},
+                         'sender': {'login': 'maintainer', 'type': 'User'}}
+                updates.feedback(gh, retry)
+                state = updates.read_state(gh.pr)
+                state['validation_error'] = 'maintainer retry'
+                gh.pr['body'] = updates.pr_body(state)
                 self.assertTrue(updates.prepare(root, gh, {}, output))
+                plan = json.loads((output / 'plan.json').read_text())
+                self.assertEqual([item['upstream'] for item in plan['candidates']], ['99.0'])
+                workspace.mkdir()
+                with tarfile.open(output / 'workspace.tar') as archive:
+                    archive.extractall(workspace, filter='data')
+                report.write_text(json.dumps({'summary': 'Rejected after reassessment', 'recipes': [
+                    {'name': 'vim', 'decision': 'reject', 'reason': 'Maintainer requested a fresh review'}]}))
+                updates.finish(root, gh, output / 'plan.json', workspace, report)
+                rejected = updates.read_issue_state(gh.issues[0])
+                self.assertEqual((gh.issues[0]['state'], rejected['status'], rejected['decision']),
+                                 ('open', 'rejected', 'reject'))
+                self.assertNotIn(f"Fixes #{gh.issues[0]['number']}", gh.pr['body'])
+                self.assertNotIn(f"Fixes #{gh.issues[0]['number']}",
+                                 git('log', '-1', '--format=%B'))
+                self.assertEqual(gh.pr['state'], 'closed')
+                with self.assertRaises(subprocess.CalledProcessError):
+                    subprocess.check_output(
+                        ['git', '--git-dir', str(remote), 'rev-parse',
+                         'refs/heads/automation/upstream-recipes'],
+                        text=True, stderr=subprocess.STDOUT)
+                gh.close_on_get = True
                 with self.assertRaisesRegex(ValueError, 'PR changed or closed'):
-                    updates.finish(root, gh, output / 'plan.json', workspace, report)
-                self.assertEqual(git('rev-parse', 'refs/remotes/origin/automation/upstream-recipes'), sha)
+                    updates.finish(root, gh, stale_plan, workspace, report)
+                with self.assertRaises(subprocess.CalledProcessError):
+                    subprocess.check_output(
+                        ['git', '--git-dir', str(remote), 'rev-parse',
+                         'refs/heads/automation/upstream-recipes'],
+                        text=True, stderr=subprocess.STDOUT)
 
 
 class RejectedRecipeTests(unittest.TestCase):

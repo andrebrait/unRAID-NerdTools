@@ -21,6 +21,12 @@ BOT = 'github-actions[bot]'
 LOCKS = ('build/locks/slackware.json', 'build/locks/slackbuilds.json')
 STATE = '<!-- upstream-recipes-state\n'
 MAX_REPAIR_ATTEMPTS = 3
+ISSUE_STATE = '<!-- upstream-update-issue\n'
+ISSUE_STATUS_START = '<!-- upstream-update-status -->'
+ISSUE_STATUS_END = '<!-- /upstream-update-status -->'
+ISSUE_STATUSES = {'queued', 'assessing', 'building', 'awaiting-review', 'blocked', 'rejected'}
+ISSUE_FIELDS = ('name', 'upstream', 'source', 'url')
+_UNSET = object()
 NAME = re.compile(r'[a-zA-Z0-9][a-zA-Z0-9+_.-]*\Z')
 
 
@@ -96,20 +102,262 @@ def trusted_author(item, bots=()):
     return (user.get('login') not in (None, BOT) and
             (user['login'] in bots or item.get('author_association') in ('OWNER', 'MEMBER', 'COLLABORATOR')))
 
+def candidate_identity(candidate):
+    identity = {key: candidate.get(key) for key in ISSUE_FIELDS}
+    if any(not isinstance(value, str) or not value for value in identity.values()):
+        raise ValueError('Invalid upstream candidate identity')
+    return identity
 
-def current_feedback(evidence, sha, committed_at, bots=()):
+
+def read_issue_state(issue):
+    if (issue.get('user') or {}).get('login') != BOT:
+        return None
+    body = issue.get('body') or ''
+    if ISSUE_STATE not in body:
+        return None
+    if body.count(ISSUE_STATE) != 1:
+        raise ValueError('Upstream issue has ambiguous controller state')
+    payload = body.split(ISSUE_STATE, 1)[1].split('\n-->', 1)[0]
+    try:
+        state = json.loads(payload)
+    except json.JSONDecodeError as error:
+        raise ValueError('Upstream issue controller state is invalid') from error
+    if (not isinstance(state, dict)
+            or set(state) != {'candidate', 'attempts', 'status', 'decision', 'failure', 'run_url', 'build_url'}
+            or not isinstance(state['candidate'], dict)
+            or set(state['candidate']) != set(ISSUE_FIELDS)
+            or any(not isinstance(value, str) or not value for value in state['candidate'].values())
+            or isinstance(state['attempts'], bool) or not isinstance(state['attempts'], int)
+            or not 0 <= state['attempts'] <= MAX_REPAIR_ATTEMPTS
+            or not isinstance(state['status'], str) or state['status'] not in ISSUE_STATUSES
+            or state['decision'] not in (None, 'accept', 'reject')
+            or any(state[key] is not None and not isinstance(state[key], str)
+                   for key in ('failure', 'run_url', 'build_url'))):
+        raise ValueError('Upstream issue controller state has an invalid schema')
+    return state
+
+
+def issue_body(issue, state):
+    body = issue.get('body') or ''
+    if ISSUE_STATE in body:
+        body = body.rsplit(ISSUE_STATE, 1)[0].rstrip()
+    lines = [
+        ISSUE_STATUS_START,
+        f"**Status:** {state['status']} ({state['attempts']}/{MAX_REPAIR_ATTEMPTS} agent sessions)",
+    ]
+    if state.get('run_url'):
+        lines.append(f"[Workflow run]({state['run_url']})")
+    if state.get('build_url'):
+        lines.append(f"[Catalog build]({state['build_url']})")
+    if state.get('failure'):
+        lines.append(f"**Latest failure:** {html.escape(state['failure'], quote=False).replace('@', '&#64;').replace('#', '&#35;')}")
+    lines.append(ISSUE_STATUS_END)
+    status_block = '\n'.join(lines)
+    if ISSUE_STATUS_START in body:
+        before, rest = body.split(ISSUE_STATUS_START, 1)
+        _, after = rest.split(ISSUE_STATUS_END, 1)
+        body = before.rstrip() + '\n\n' + status_block + after
+    else:
+        body = body.rstrip() + '\n\n' + status_block
+    stored = json.dumps(state, sort_keys=True).replace('<', '\\u003c').replace('>', '\\u003e')
+    stored = stored.replace('@', '\\u0040').replace('#', '\\u0023')
+    return body.rstrip() + '\n\n' + ISSUE_STATE + stored + '\n-->'
+
+
+def issue_title(candidate):
+    return f"Upstream update: {candidate['name']} {candidate['ours']} -> {candidate['upstream']}"
+
+
+def issue_description(candidate):
+    return (f"## Upstream update: {candidate['name']}\n\n"
+            f"- Current version: `{candidate['ours']}`\n"
+            f"- Proposed version: `{candidate['upstream']}`\n"
+            f"- Source: [{candidate['source']}]({candidate['url']})\n\n"
+            "This candidate is tracked independently from the reviewed batch PR.")
+
+
+def issue_matches_candidate(issue, candidate):
+    if (issue.get('pull_request') or (issue.get('user') or {}).get('login') != BOT):
+        return False
+    try:
+        state = read_issue_state(issue)
+    except ValueError:
+        state = None
+    identity = candidate_identity(candidate)
+    if state:
+        return state['candidate'] == identity
+    title = issue.get('title') or ''
+    title_prefix = f"Upstream update: {candidate['name']} "
+    title_suffix = f" -> {candidate['upstream']}"
+    return (title.startswith(title_prefix) and title.endswith(title_suffix)
+            and len(title) > len(title_prefix) + len(title_suffix)
+            and identity['url'] in (issue.get('body') or ''))
+
+
+def candidate_record(candidate, issue, state, repository):
+    return {'candidate': candidate_identity(candidate), 'number': issue['number'],
+            'issue_url': issue.get('html_url') or
+                         f"https://github.com/{repository}/issues/{issue['number']}",
+            **state}
+
+
+def sync_candidate_issues(gh, candidates, run_url=None, prior_records=()):
+    existing = gh.pages('issues?state=all&per_page=100')
+    records = []
+    unique = {tuple(candidate_identity(item).values()): item for item in candidates}
+    prior = [item for item in prior_records if isinstance(item, dict)]
+    for key in sorted(unique):
+        candidate = unique[key]
+        matches = [item for item in existing if issue_matches_candidate(item, candidate)]
+        closed_matches = [item for item in matches if item.get('state') == 'closed']
+        issue = min(closed_matches or matches, key=lambda item: item['number']) if matches else None
+        prior_record = next((item for item in prior
+                             if item.get('candidate') == candidate_identity(candidate)), None)
+        if issue is None and prior_record:
+            records.append({**prior_record, 'candidate': candidate_identity(candidate)})
+            continue
+        if issue is None:
+            state = {'candidate': candidate_identity(candidate), 'attempts': 0, 'status': 'queued',
+                     'decision': None, 'failure': None, 'run_url': run_url, 'build_url': None}
+            draft = {'title': issue_title(candidate), 'labels': ['upstream-update'], 'body': issue_body(
+                {'body': issue_description(candidate)}, state)}
+            issue = gh.api('issues', draft, method='POST')
+        else:
+            try:
+                state = read_issue_state(issue)
+            except ValueError:
+                state = None
+            if state is None:
+                state = {'candidate': candidate_identity(candidate), 'attempts': 0,
+                         'status': 'blocked' if ISSUE_STATE in (issue.get('body') or '') else 'queued',
+                         'decision': None,
+                         'failure': ('Issue metadata is invalid; maintainer review required'
+                                     if ISSUE_STATE in (issue.get('body') or '') else None),
+                         'run_url': run_url, 'build_url': None}
+            if issue.get('state') == 'closed':
+                state['status'] = 'blocked'
+            if issue.get('state') != 'closed':
+                body = issue_body(issue, state)
+                if body != (issue.get('body') or ''):
+                    issue = gh.api(f"issues/{issue['number']}", {'body': body}, method='PATCH')
+        record = candidate_record(candidate, issue, state, gh.repository)
+        if issue.get('state') == 'closed':
+            record['status'] = 'closed'
+        records.append(record)
+    return records
+
+
+def set_issue_status(gh, record, status, attempts=None, decision=_UNSET, failure=_UNSET,
+                     run_url=_UNSET, build_url=_UNSET):
+    if status not in ISSUE_STATUSES:
+        raise ValueError('Invalid upstream issue status')
+    number = record.get('number')
+    if not isinstance(number, int) or isinstance(number, bool) or number < 1:
+        raise ValueError('Invalid upstream issue number')
+    issue = gh.api(f"issues/{number}")
+    if issue.get('state') == 'closed':
+        record['status'] = 'closed'
+        return record
+    state = read_issue_state(issue)
+    if not state or state['candidate'] != record['candidate']:
+        raise ValueError('Upstream issue state changed or is untrusted')
+    state['status'] = status
+    if attempts is not None:
+        state['attempts'] = attempts
+    if failure is not _UNSET:
+        state['failure'] = failure
+    if decision is not _UNSET:
+        if decision not in (None, 'accept', 'reject'):
+            raise ValueError('Invalid upstream issue decision')
+        state['decision'] = decision
+    if run_url is not _UNSET:
+        state['run_url'] = run_url
+    if build_url is not _UNSET:
+        state['build_url'] = build_url
+    if (isinstance(state['attempts'], bool) or not isinstance(state['attempts'], int)
+            or not 0 <= state['attempts'] <= MAX_REPAIR_ATTEMPTS):
+        raise ValueError('Upstream issue repair budget is invalid')
+    body = issue_body(issue, state)
+    if body != (issue.get('body') or ''):
+        issue = gh.api(f"issues/{issue['number']}", {'body': body}, method='PATCH')
+    record.update(state)
+    record['issue_url'] = issue.get('html_url') or record.get('issue_url')
+    return record
+
+
+def workflow_run_url(repository):
+    if os.environ.get('GITHUB_RUN_URL'):
+        return os.environ['GITHUB_RUN_URL']
+    if os.environ.get('GITHUB_RUN_ID'):
+        return f"{os.environ.get('GITHUB_SERVER_URL', 'https://github.com')}/{repository}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
+    return None
+
+def issue_record_for(records, candidate):
+    identity = candidate_identity(candidate)
+    return next((item for item in records if item.get('candidate') == identity), None)
+
+
+def update_candidate_issues(gh, records, candidates, status, **changes):
+    for candidate in candidates:
+        record = issue_record_for(records, candidate)
+        if record and record.get('status') != 'closed':
+            set_issue_status(gh, record, status, **changes)
+
+
+def verify_issue_attempts(gh, records, candidates):
+    for candidate in candidates:
+        record = issue_record_for(records, candidate)
+        if not record:
+            continue
+        number = record.get('number')
+        if not isinstance(number, int) or isinstance(number, bool) or number < 1:
+            raise ValueError('Invalid upstream issue number')
+        issue = gh.api(f"issues/{number}")
+        current = read_issue_state(issue) if issue.get('state') == 'open' else None
+        if (not current or current['candidate'] != record['candidate']
+                or current['attempts'] != record['attempts'] or current['status'] != record['status']):
+            raise ValueError('Upstream issue changed during agent work; refusing stale update')
+
+
+
+def feedback_actionable(item, source='mixed', bots=(), allow_bot_summary=False):
+    path = item.get('path')
+    line = item.get('line') or item.get('original_line')
+    inline = (isinstance(path, str) and bool(path) and isinstance(line, int)
+              and not isinstance(line, bool) and line > 0)
+    state = item.get('state')
+    user = item.get('user') or {}
+    human_command = (user.get('type') != 'Bot' and user.get('login') not in set(bots) | {BOT}
+                     and re.match(r'(?is)^/upstream repair\s+\S',
+                                  (item.get('body') or '').strip()) is not None)
+    bot_summary = (allow_bot_summary and state == 'COMMENTED' and user.get('type') == 'Bot'
+                   and user.get('login') in bots
+                   and not re.search(r'(?i)\b(no issues?|no findings?|all checks passed)\b',
+                                     item.get('body') or ''))
+    if source == 'inline':
+        return inline
+    if source == 'review':
+        return state == 'CHANGES_REQUESTED' or bot_summary
+    if source == 'comment':
+        return not inline and human_command
+    return inline or state == 'CHANGES_REQUESTED' or human_command or bot_summary
+
+
+def current_feedback(evidence, sha, committed_at, bots=(), source='mixed', allow_bot_summary=False):
     result = []
     for item in evidence:
         body = (item.get('body') or '').strip()
         if (not trusted_author(item, bots) or not body or item.get('state') in ('APPROVED', 'DISMISSED')
                 or re.fullmatch(r'(?i)(lgtm|looks good|thanks|thank you|approved)[.! ]*', body)
-                or 'usage limit' in body.lower()):
+                or 'usage limit' in body.lower()
+                or not feedback_actionable(item, source, bots, allow_bot_summary)):
             continue
         commit = item.get('commit_id') or item.get('original_commit_id')
         if commit != sha and (commit or item.get('created_at', '') < committed_at):
             continue
         result.append({'id': item['id'], 'user': item['user']['login'], 'body': body[:20000],
-                       'path': item.get('path'), 'line': item.get('line'), 'state': item.get('state')})
+                       'path': item.get('path'), 'line': item.get('line') or item.get('original_line'),
+                       'state': item.get('state')})
     return result
 
 
@@ -192,11 +440,11 @@ def validate_workspace(repo, workspace, report, candidates):
                          (repo / path).is_symlink() or not (repo / path).is_file()
                          or files[path].read_bytes() != (repo / path).read_bytes()
                          or (files[path].stat().st_mode & 0o111) != ((repo / path).stat().st_mode & 0o111))))
+    # This generated inventory is trusted only after the controller rebuilds it.
+    changed = [path for path in changed if path != 'build/recipe-files.json']
     check_paths(changed, generated=False)
     if any((repo / path).is_symlink() for path in changed):
         raise ValueError('Tracked symlinks must remain unchanged')
-    if 'build/recipe-files.json' in changed:
-        raise ValueError('Recipe inventory must be generated by the controller')
     before, after = {}, {}
     for lock in LOCKS:
         old = json.loads((repo / lock).read_text())
@@ -387,25 +635,83 @@ def read_state(pr):
     return json.loads(body.rsplit(STATE, 1)[1].split('\n-->', 1)[0])
 
 
+def accepted_issue_numbers(repo, candidates, report, records):
+    candidate_by_identity = {tuple(candidate_identity(item).values()): item for item in candidates}
+    decisions = {item['name']: item['decision'] for item in report.get('recipes', [])}
+    versions = {item['name']: item['version'] for lock in LOCKS
+                for item in json.loads((repo / lock).read_text())}
+    numbers = set()
+    for record in records:
+        candidate = candidate_by_identity.get(tuple((record.get('candidate') or {}).get(key)
+                                                       for key in ISSUE_FIELDS))
+        number = record.get('number')
+        decision = decisions.get(candidate['name'], record.get('decision')) if candidate else None
+        if (candidate and record.get('status') != 'closed' and isinstance(number, int)
+                and not isinstance(number, bool) and number > 0
+                and decision == 'accept' and versions.get(candidate['name']) == candidate['upstream']):
+            numbers.add(number)
+    return sorted(numbers)
+
+
+def issue_reference(record):
+    number = record.get('number')
+    url = record.get('issue_url')
+    if (not isinstance(number, int) or isinstance(number, bool) or number < 1
+            or not isinstance(url, str)
+            or not re.fullmatch(r'https://github\.com/[\w.-]+/[\w.-]+/issues/\d+', url)):
+        return f"Issue {number}" if isinstance(number, int) and not isinstance(number, bool) else 'Issue'
+    return f"[Issue {number}]({url})"
+
+
+
 def pr_body(state):
     report = state.get('report', {'summary': 'Awaiting assessment', 'recipes': []})
-    evidence = state.get('build_url', 'Not yet built; no compatibility claim.')
+    evidence = state.get('build_url')
     reviews = state.get('review_status', 'Bot review requests await successful catalog verification.')
+
     def safe(text):
-        return html.escape(text, quote=False).replace('@', '&#64;')
+        return html.escape(str(text), quote=False).replace('@', '&#64;').replace('#', '&#35;')
+
+    def link(label, url):
+        return f"[{label}]({html.escape(url, quote=True)})" if isinstance(url, str) and url.startswith('https://') else ''
+
     for limit in (240, 120, 60, 30):
         compact = {'summary': report['summary'][:limit * 4], 'recipes': [
             {**item, 'reason': item['reason'][:limit]} for item in report['recipes']]}
-        stored = json.dumps({**state, 'report': compact}, sort_keys=True)
-        stored = stored.replace('<', '\\u003c').replace('>', '\\u003e').replace('@', '\\u0040')
+        candidate_issues = [{**item, 'failure': (item.get('failure') or '')[:limit]}
+                            for item in state.get('candidate_issues', [])]
+        stored = json.dumps({**state, 'report': compact, 'candidate_issues': candidate_issues}, sort_keys=True)
+        stored = stored.replace('<', '\\u003c').replace('>', '\\u003e')
+        stored = stored.replace('@', '\\u0040').replace('#', '\\u0023')
         decisions = '\n'.join(f"- **{safe(item['name'])}**: {item['decision']} — {safe(item['reason'])}"
                               for item in compact['recipes'])
+        lifecycle = []
+        for item in candidate_issues:
+            candidate = item.get('candidate') or {}
+            links = [issue_reference(item)]
+            for key, label in (('run_url', 'Workflow run'), ('build_url', 'Catalog build')):
+                target = link(label, item.get(key))
+                if target:
+                    links.append(target)
+            failure = f" — Latest failure: {safe(item['failure'])}" if item.get('failure') else ''
+            lifecycle.append(
+                f"- **{safe(candidate.get('name', 'candidate'))}** — {safe(item.get('status', 'queued'))} "
+                f"({item.get('attempts', 0)}/{MAX_REPAIR_ATTEMPTS}) — {'; '.join(links)}{failure}")
+        run_link = link('Workflow run', state.get('run_url'))
+        build_link = link('Catalog build', evidence)
+        overview_links = ' · '.join(item for item in (run_link, build_link) if item)
+        closure_numbers = sorted({number for number in state.get('issue_closures', [])
+                                  if isinstance(number, int) and not isinstance(number, bool) and number > 0})
+        closures = '\n'.join(f"Fixes #{number}" for number in closure_numbers)
+        lifecycle_block = '\n'.join(lifecycle) or safe(state.get('status', 'assessing'))
         body = (f"## Upstream recipe batch\n\n{safe(compact['summary'])}\n\n{decisions}\n\n"
-                f"## Acceptance\n\n{evidence}\n\n## Reviews\n\n{reviews}\n\n"
+                f"## Candidate lifecycle\n\n{lifecycle_block}\n\n"
+                f"## Acceptance\n\n{build_link or 'Not yet built; no compatibility claim.'}\n\n"
+                f"## Reviews\n\n{safe(reviews)}\n\n{overview_links}\n\n"
                 'Human approval is required before merge. This automation never approves or merges its PR. '
                 'Publication follows approved merge and the default-branch compatibility gates.\n\n'
-                f"Agent sessions: {state.get('attempts', 0)}/{MAX_REPAIR_ATTEMPTS}.\n\n"
-                + STATE + stored + '\n-->')
+                f"Agent sessions this batch: {state.get('attempts', 0)}. Per-candidate budget: {MAX_REPAIR_ATTEMPTS}.\n\n"
+                f"{closures}\n\n" + STATE + stored + '\n-->')
         if len(body) <= 65000:
             return body
     raise ValueError('Batch metadata exceeds GitHub PR body limit')
@@ -513,7 +819,8 @@ def prepare(repo, gh, event, output, evaluation=False, package=None):
     needed_output(False)
     if package and not evaluation:
         raise ValueError('--package requires --evaluation')
-    requests = [] if evaluation else gh.api(f'pulls?state=open&head={quote(gh.repository.split("/")[0] + ":" + BRANCH)}&per_page=100')
+    requests = [] if evaluation else gh.api(
+        f'pulls?state=open&head={quote(gh.repository.split("/")[0] + ":" + BRANCH)}&per_page=100')
     if len(requests) > 1:
         raise ValueError('Multiple automation PRs; refusing ambiguous ownership')
     pr = requests[0] if requests else None
@@ -524,18 +831,76 @@ def prepare(repo, gh, event, output, evaluation=False, package=None):
         if not pr or completed['head_sha'] != pr['head']['sha']:
             summary('Ignoring stale-head build completion.')
             return False
-    # Discovery always uses main, not the already-updated batch lock versions.
-    candidates = json.loads(run([sys.executable, 'scripts/check-upstream-versions.py'], repo))
+    discovered = json.loads(run([sys.executable, 'scripts/check-upstream-versions.py'], repo))
     if package:
-        candidates = [item for item in candidates if item['name'] == package]
-    state = read_state(pr) if pr else {'attempts': 0, 'candidates': [], 'report': {'summary': '', 'recipes': []}}
+        discovered = [item for item in discovered if item['name'] == package]
+    discovered = sorted(discovered, key=lambda item: tuple(candidate_identity(item).values()))
+    state = read_state(pr) if pr else {
+        'attempts': 0, 'candidates': [], 'candidate_issues': [],
+        'report': {'summary': '', 'recipes': []}}
+    run_url = workflow_run_url(gh.repository)
+    records = []
+    if not evaluation:
+        frozen = state.get('candidates', []) if pr else []
+        queue = {tuple(candidate_identity(item).values()): item for item in discovered + frozen}
+        records = sync_candidate_issues(
+            gh, list(queue.values()), run_url, state.get('candidate_issues', []))
+        if pr:
+            old_records = state.get('candidate_issues', [])
+            for candidate in frozen:
+                record = issue_record_for(records, candidate)
+                if (record and not issue_record_for(old_records, candidate)
+                        and state.get('attempts', 0) and record.get('attempts', 0) == 0):
+                    set_issue_status(gh, record, record['status'],
+                                     attempts=min(state['attempts'], MAX_REPAIR_ATTEMPTS))
+            state['batch'] = state.get('batch') or hashlib.sha256(
+                json.dumps(frozen, sort_keys=True).encode()).hexdigest()
+            candidates = frozen
+            new_batch = False
+        else:
+            candidates = []
+            for candidate in discovered:
+                record = issue_record_for(records, candidate)
+                if not record:
+                    continue
+                if record.get('attempts', 0) >= MAX_REPAIR_ATTEMPTS:
+                    if record.get('status') not in ('closed', 'rejected', 'blocked'):
+                        set_issue_status(gh, record, 'blocked',
+                                         failure='Agent session budget exhausted; maintainer intervention required.')
+                    continue
+                if record.get('status') in ('queued', 'assessing'):
+                    candidates.append(candidate)
+            state.update(batch=hashlib.sha256(json.dumps(candidates, sort_keys=True).encode()).hexdigest(),
+                         attempts=0, candidates=candidates, feedback_digest='', reviewed_head='')
+            new_batch = True
+        state['candidate_issues'] = records
+        if run_url:
+            state['run_url'] = run_url
+    else:
+        candidates = discovered
+        new_batch = True
+        state.update(batch=hashlib.sha256(json.dumps(candidates, sort_keys=True).encode()).hexdigest(),
+                     candidates=candidates)
+    if pr:
+        active = []
+        for candidate in candidates:
+            record = issue_record_for(records, candidate)
+            if not record or record.get('status') in ('closed', 'rejected', 'blocked'):
+                continue
+            if record.get('attempts', 0) >= MAX_REPAIR_ATTEMPTS:
+                set_issue_status(gh, record, 'blocked',
+                                 failure='Agent session budget exhausted; maintainer intervention required.')
+                continue
+            active.append(candidate)
+        candidates = active
+        state['candidate_issues'] = records
     if not candidates:
-        summary('No newer upstream recipes. No issue or PR created.')
+        if pr:
+            gh.api(f"pulls/{pr['number']}", {'body': pr_body(state)}, method='PATCH')
+        summary('No eligible upstream candidates. Rejected, closed, blocked, or exhausted issues remain unchanged.')
         return False
-    batch = hashlib.sha256(json.dumps(candidates, sort_keys=True).encode()).hexdigest()
-    new_batch = state.get('batch') != batch
-    if new_batch:
-        state.update(batch=batch, attempts=0, candidates=candidates, feedback_digest='', reviewed_head='')
+    if pr:
+        gh.api(f"pulls/{pr['number']}", {'body': pr_body(state)}, method='PATCH')
     reviews, inline, comments = evidence(gh, pr['number']) if pr else ([], [], [])
     build = None
     feedback = []
@@ -546,12 +911,21 @@ def prepare(repo, gh, event, output, evaluation=False, package=None):
         build = latest_build([item for item in runs if item.get('display_title') == title], pr['head']['sha'])
         committed_at = gh.api(f"commits/{pr['head']['sha']}")['commit']['committer']['date']
         bots = available_bots(os.environ.get('UPSTREAM_REVIEW_BOTS', ''), reviews)
-        feedback = current_feedback(reviews + inline + comments, pr['head']['sha'], committed_at, bots)
+        inline_feedback = current_feedback(inline, pr['head']['sha'], committed_at, bots, 'inline')
+        feedback = (inline_feedback
+                    + current_feedback(reviews, pr['head']['sha'], committed_at, bots, 'review',
+                                       allow_bot_summary=not inline_feedback)
+                    + current_feedback(comments, pr['head']['sha'], committed_at, bots, 'comment'))
         if build and build['status'] != 'completed':
+            state['build_url'] = build['html_url']
+            update_candidate_issues(gh, records, candidates, 'building', build_url=build['html_url'])
+            gh.api(f"pulls/{pr['number']}", {'body': pr_body(state)}, method='PATCH')
             summary(f"Batch build is still running: {build['html_url']}")
             return False
-        if build and build['conclusion'] == 'success' and not new_batch and not state.get('validation_error'):
+        if build and build['conclusion'] == 'success' and not state.get('validation_error'):
             state['build_url'] = build['html_url']
+            update_candidate_issues(gh, records, candidates, 'awaiting-review',
+                                   failure=None, build_url=build['html_url'])
             if pr.get('draft'):
                 run(['gh', 'pr', 'ready', str(pr['number']), '--repo', gh.repository])
             request_reviews(gh, pr, state, reviews)
@@ -561,54 +935,99 @@ def prepare(repo, gh, event, output, evaluation=False, package=None):
                 summary(f"Exact-head catalog gates passed; waiting for reviews and human approval: {pr['html_url']}")
                 return False
         elif build and build['conclusion'] != 'success':
-            state['build_url'] = f"FAILED: {build['html_url']} — no compatibility claim."
+            state['build_url'] = build['html_url']
+            update_candidate_issues(gh, records, candidates, 'building',
+                                   failure='Catalog build failed; no compatibility claim.',
+                                   build_url=build['html_url'])
         if build is None and not new_batch and not state.get('validation_error'):
+            update_candidate_issues(gh, records, candidates, 'building')
+            state['candidate_issues'] = records
             dispatch_catalog(repo, gh, pr, state)
             summary('Dispatched the missing exact-head catalog build.')
             return False
     digest = hashlib.sha256(json.dumps(feedback, sort_keys=True).encode()).hexdigest()
-    if state['attempts'] >= MAX_REPAIR_ATTEMPTS:
-        summary('Repair budget exhausted. Human intervention required; no merge or publication performed.')
+    included = []
+    for candidate in candidates:
+        record = issue_record_for(records, candidate) if not evaluation else None
+        if record and (record.get('status') in ('closed', 'rejected', 'blocked')
+                       or record.get('attempts', 0) >= MAX_REPAIR_ATTEMPTS):
+            if (record.get('status') not in ('closed', 'rejected', 'blocked')
+                    and record.get('attempts', 0) >= MAX_REPAIR_ATTEMPTS):
+                set_issue_status(gh, record, 'blocked',
+                                 failure='Agent session budget exhausted; maintainer intervention required.')
+            continue
+        included.append(candidate)
+    if not included:
+        if pr:
+            state['candidate_issues'] = records
+            gh.api(f"pulls/{pr['number']}", {'body': pr_body(state)}, method='PATCH')
+        summary('Repair budget exhausted or maintainer decisions block all frozen candidates.')
         return False
-    previous = '' if evaluation else branch_lease(gh, pr)
-    main_sha = git(repo, 'rev-parse', 'origin/main')
-    source_sha = git(repo, 'rev-parse', 'HEAD') if evaluation else main_sha
-    head_sha = pr['head']['sha'] if pr else ''
-    state['attempts'] += 1
+    for candidate in included:
+        if evaluation:
+            continue
+        record = issue_record_for(records, candidate)
+        changes = {'attempts': record['attempts'] + 1, 'failure': record.get('failure')}
+        if run_url:
+            changes['run_url'] = run_url
+        set_issue_status(gh, record, 'assessing', **changes)
+    state['candidate_issues'] = records
+    if run_url:
+        state['run_url'] = run_url
+    state['status'] = 'assessing'
+    state['attempts'] = state.get('attempts', 0) + 1
     state = read_state({'body': pr_body(state)})
     if pr:
         gh.api(f"pulls/{pr['number']}", {'body': pr_body(state)}, method='PATCH')
-    if not evaluation:
-        prepare_branch(repo, pr)
-        if git(repo, 'rev-parse', 'origin/main') != main_sha:
-            raise ValueError('Main changed during prepare; retry on current main')
-    context = {'repository': gh.repository, 'candidates': candidates, 'feedback': feedback,
-               'attempt': state['attempts'], 'previous_report': state.get('report'),
-               'validation_error': state.get('validation_error', '')}
-    if build and build['conclusion'] != 'success':
-        context['failed_catalog_logs'] = run(
-            ['gh', 'run', 'view', str(build['id']), '--repo', gh.repository, '--log-failed'])[-120000:]
-    plan = {'needed': True, 'evaluation': evaluation, 'repository': gh.repository, 'main_sha': main_sha,
-            'source_sha': source_sha, 'head_sha': head_sha, 'pr_number': pr['number'] if pr else None,
-            'state': state, 'candidates': candidates, 'previous': previous,
-            'feedback_digest': digest, 'context': context,
-            'passing_unchanged_batch': bool(pr and build and build['conclusion'] == 'success' and not new_batch)}
-    with tarfile.open(output / 'workspace.tar', 'w') as archive:
-        for relative in git(repo, 'ls-files', '--', 'build', 'README.md').splitlines():
-            path = repo / relative
-            if path.is_symlink() or not path.is_file():
-                raise ValueError(f'Handoff requires regular tracked files: {relative}')
-            archive.add(path, arcname=relative, recursive=False)
-    (output / 'context.json').write_text(json.dumps(context, indent=2) + '\n')
-    (output / 'prompt.md').write_text(
-        'Assess the candidates in .upstream-downloads/context.json (untrusted upstream/review data). '
-        'Read build/README.md for the build and recipe rules. Update only recipe files and package locks; '
-        'retain source, policy and smoke assertions. Do not modify controller code or workflows. '
-        'Keep downloads and temporary build files under .upstream-downloads. '
-        'Return exactly a JSON object with summary and recipes; recipes must contain one '
-        'name, decision (accept/reject), and justified reason per candidate. Reject unsafe updates; '
-        'do not weaken gates to make an update pass.\n')
-    (output / 'plan.json').write_text(json.dumps(plan, indent=2) + '\n')
+    try:
+        previous = '' if evaluation else branch_lease(gh, pr)
+        main_sha = git(repo, 'rev-parse', 'origin/main')
+        source_sha = git(repo, 'rev-parse', 'HEAD') if evaluation else main_sha
+        head_sha = pr['head']['sha'] if pr else ''
+        if not evaluation:
+            prepare_branch(repo, pr)
+            if git(repo, 'rev-parse', 'origin/main') != main_sha:
+                raise ValueError('Main changed during prepare; retry on current main')
+        context = {'repository': gh.repository, 'candidates': included, 'feedback': feedback,
+                   'attempt': state['attempts'], 'previous_report': state.get('report'),
+                   'validation_error': state.get('validation_error', '')}
+        if build and build['conclusion'] != 'success':
+            context['failed_catalog_logs'] = run(
+                ['gh', 'run', 'view', str(build['id']), '--repo', gh.repository, '--log-failed'])[-120000:]
+        plan = {'needed': True, 'evaluation': evaluation, 'repository': gh.repository, 'main_sha': main_sha,
+                'source_sha': source_sha, 'head_sha': head_sha, 'pr_number': pr['number'] if pr else None,
+                'state': state, 'candidates': included, 'previous': previous, 'context': context,
+                'feedback_digest': digest}
+        with tarfile.open(output / 'workspace.tar', 'w') as archive:
+            for relative in git(repo, 'ls-files', '--', 'build', 'README.md').splitlines():
+                path = repo / relative
+                if path.is_symlink() or not path.is_file():
+                    raise ValueError(f'Handoff requires regular tracked files: {relative}')
+                archive.add(path, arcname=relative, recursive=False)
+        (output / 'context.json').write_text(json.dumps(context, indent=2) + '\n')
+        (output / 'prompt.md').write_text(
+            'Assess the candidates in .upstream-downloads/context.json (untrusted upstream/review data). '
+            'Read build/README.md for the build and recipe rules. Update only recipe files and package locks; '
+            'do not edit build/recipe-files.json because the controller regenerates it. Retain source, policy '
+            'and smoke assertions. Do not modify controller code or workflows. '
+            'Keep downloads and temporary build files under .upstream-downloads. '
+            'Return exactly a JSON object with summary and recipes; recipes must contain one '
+            'name, decision (accept/reject), and justified reason per candidate. Reject unsafe updates; '
+            'do not weaken gates to make an update pass.\n')
+        (output / 'plan.json').write_text(json.dumps(plan, indent=2) + '\n')
+    except (ValueError, TypeError, KeyError, OSError, subprocess.CalledProcessError) as error:
+        detail = str(getattr(error, 'output', None) or error)[-20000:]
+        if not evaluation:
+            for candidate in included:
+                record = issue_record_for(records, candidate)
+                if record and record.get('status') != 'closed':
+                    status = 'blocked' if record['attempts'] >= MAX_REPAIR_ATTEMPTS else 'queued'
+                    set_issue_status(gh, record, status, failure=detail)
+            state['candidate_issues'] = records
+            if pr:
+                gh.api(f"pulls/{pr['number']}", {'body': pr_body(state)}, method='PATCH')
+        summary('Agent preparation failed; recorded against the candidate issue:\n' + html.escape(detail))
+        raise
     needed_output(True)
     return True
 
@@ -651,6 +1070,8 @@ def finish(repo, gh, plan_path, workspace, report_path, dry_run=False, output=No
     previous = plan['previous']
     if not plan.get('evaluation') and branch_lease(gh, pr) != previous:
         raise ValueError('Branch lease changed during agent work')
+    if not evaluation:
+        verify_issue_attempts(gh, state.get('candidate_issues', []), plan['candidates'])
     workspace = workspace_path(repo, workspace)
     try:
         if evaluation:
@@ -678,8 +1099,16 @@ def finish(repo, gh, plan_path, workspace, report_path, dry_run=False, output=No
     except (ValueError, TypeError, KeyError, OSError, subprocess.CalledProcessError) as error:
         detail = str(getattr(error, 'output', None) or error)[-20000:]
         state['validation_error'] = detail
-        if pr and not dry_run:
-            gh.api(f"pulls/{pr['number']}", {'body': pr_body(state)}, method='PATCH')
+        if not evaluation and not dry_run:
+            records = state.get('candidate_issues', [])
+            for candidate in plan['candidates']:
+                record = issue_record_for(records, candidate)
+                if record and record.get('status') != 'closed':
+                    status = 'blocked' if record['attempts'] >= MAX_REPAIR_ATTEMPTS else 'queued'
+                    set_issue_status(gh, record, status, failure=detail)
+            state['candidate_issues'] = records
+            if pr:
+                gh.api(f"pulls/{pr['number']}", {'body': pr_body(state)}, method='PATCH')
         summary('Recipe validation failed; no publication performed:\n' + html.escape(detail))
         raise
     finally:
@@ -697,18 +1126,44 @@ def finish(repo, gh, plan_path, workspace, report_path, dry_run=False, output=No
             workspace_path(repo, output)
             if paths:
                 git(repo, 'add', '--', *paths)
-            (output / 'changes.patch').write_text(git(repo, 'diff', '--cached', '--binary', '--no-ext-diff'))
+            (output / 'changes.patch').write_text(run(
+                ['git', 'diff', '--cached', '--binary', '--no-ext-diff'], repo))
             (output / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
         summary('Dry-run native validation passed; no PR, push, catalog dispatch or release performed.')
         return
-    changed = bool(paths)
-    if changed:
+    records = state.get('candidate_issues', [])
+    decisions = {item['name']: item['decision'] for item in report['recipes']}
+    versions = {item['name']: item['version'] for lock in LOCKS
+                for item in json.loads((repo / lock).read_text())}
+    for candidate in plan['candidates']:
+        record = issue_record_for(records, candidate)
+        if not record:
+            continue
+        if decisions.get(candidate['name']) == 'reject':
+            set_issue_status(gh, record, 'rejected', decision='reject', failure=None, build_url=None)
+        elif (decisions.get(candidate['name']) == 'accept'
+              and versions.get(candidate['name']) == candidate['upstream']):
+            set_issue_status(gh, record, 'building', decision='accept', failure=None, build_url=None)
+        else:
+            set_issue_status(gh, record, 'blocked', decision=None,
+                             failure='Accepted target version is absent after validation; maintainer review required.',
+                             build_url=None)
+    state['candidate_issues'] = records
+    state['issue_closures'] = accepted_issue_numbers(
+        repo, state.get('candidates', plan['candidates']), report, records)
+    if paths:
         git(repo, 'add', '--', *paths)
-        git(repo, '-c', 'user.name=github-actions[bot]', '-c',
-            'user.email=41898282+github-actions[bot]@users.noreply.github.com',
-            'commit', '-m', 'Update assessed upstream recipes')
-    elif plan['passing_unchanged_batch']:
-        state['attempts'] -= 1
+    git(repo, 'reset', '--soft', 'origin/main')
+    consolidated_paths = git(repo, 'diff', '--cached', '--name-only', 'origin/main').splitlines()
+    check_paths(consolidated_paths, generated=True)
+    changed = bool(consolidated_paths)
+    if changed:
+        commit = ['git', '-c', 'user.name=github-actions[bot]', '-c',
+                  'user.email=41898282+github-actions[bot]@users.noreply.github.com',
+                  'commit', '-m', 'Update assessed upstream recipes']
+        if state['issue_closures']:
+            commit += ['-m', '\n'.join(f"Fixes #{number}" for number in state['issue_closures'])]
+        run(commit, repo)
     sha = git(repo, 'rev-parse', 'HEAD')
     if pr:
         current = gh.api(f"pulls/{pr['number']}")
@@ -716,6 +1171,11 @@ def finish(repo, gh, plan_path, workspace, report_path, dry_run=False, output=No
             raise ValueError('PR changed or closed during agent work; refusing to overwrite it')
     if not pr and not changed:
         summary(pr_body(state))
+        return
+    if pr and not changed:
+        gh.api(f"pulls/{pr['number']}", {'state': 'closed', 'body': pr_body(state)}, method='PATCH')
+        gh.api(f"git/refs/heads/{quote(BRANCH, safe='')}", method='DELETE')
+        summary(f"Closed empty automation PR {pr['number']}; rejected issues remain open.")
         return
     if changed or sha != previous:
         if pr and not pr.get('draft'):
@@ -750,23 +1210,144 @@ def event_pr(event):
     return None
 
 
+def current_writer(gh, sender):
+    login = sender.get('login')
+    if sender.get('type') != 'User' or not isinstance(login, str) or login == BOT:
+        return False
+    try:
+        permission = gh.api(f"collaborators/{quote(login, safe='')}/permission")
+    except subprocess.CalledProcessError:
+        return False
+    return (permission or {}).get('permission') in ('write', 'maintain', 'admin')
+
+
+def retry_issue(gh, number, run_url=None):
+    if not isinstance(number, int) or isinstance(number, bool) or number < 1:
+        return False
+    issue = gh.api(f'issues/{number}')
+    if issue.get('state') != 'open' or issue.get('pull_request'):
+        return False
+    try:
+        metadata = read_issue_state(issue)
+    except ValueError:
+        return False
+    if not metadata:
+        return False
+    record = candidate_record(metadata['candidate'], issue, metadata, gh.repository)
+    active = None
+    requests = gh.api(
+        f'pulls?state=open&head={quote(gh.repository.split("/")[0] + ":" + BRANCH)}&per_page=100')
+    if len(requests) > 1:
+        return False
+    if requests and trusted_pr(requests[0], gh.repository):
+        pr = requests[0]
+        try:
+            pr_state = read_state(pr)
+        except ValueError:
+            return False
+        identity = tuple(candidate_identity(metadata['candidate']).values())
+        frozen = {tuple(candidate_identity(item).values()) for item in pr_state.get('candidates', [])}
+        index = next((index for index, item in enumerate(pr_state.get('candidate_issues', []))
+                      if item.get('number') == number and item.get('candidate') == metadata['candidate']), None)
+        if identity in frozen and index is not None:
+            if not pr.get('draft'):
+                run(['gh', 'api', 'graphql', '-f',
+                     'query=mutation($id:ID!){convertPullRequestToDraft(input:{pullRequestId:$id}){pullRequest{id}}}',
+                     '-f', f'id={pr["node_id"]}'])
+            active = (pr, pr_state, index)
+    set_issue_status(gh, record, 'queued', attempts=0, decision=None, failure=None,
+                     run_url=run_url, build_url=None)
+    if record.get('status') == 'closed':
+        return False
+    if active:
+        pr, pr_state, index = active
+        pr_state['candidate_issues'][index].update(record)
+        report = pr_state.get('report', {})
+        report['recipes'] = [item for item in report.get('recipes', [])
+                             if item.get('name') != metadata['candidate']['name']]
+        report['summary'] = 'Awaiting maintainer-requested reassessment'
+        pr_state.update(attempts=0, feedback_digest='', issue_closures=[
+            item for item in pr_state.get('issue_closures', []) if item != number], reviewed_head='')
+        pr_state.pop('build_url', None)
+        pr_state.pop('validation_error', None)
+        gh.api(f"pulls/{pr['number']}", {'body': pr_body(pr_state)}, method='PATCH')
+    return True
+
+
+def retry_pr_batch(gh, number, run_url=None):
+    if not isinstance(number, int) or isinstance(number, bool) or number < 1:
+        return False
+    pr = gh.api(f'pulls/{number}')
+    if not trusted_pr(pr, gh.repository) or pr.get('state') != 'open':
+        return False
+    state = read_state(pr)
+    frozen = {tuple(candidate_identity(item).values()) for item in state.get('candidates', [])}
+    reset = []
+    for record in state.get('candidate_issues', []):
+        if tuple((record.get('candidate') or {}).get(key) for key in ISSUE_FIELDS) not in frozen:
+            continue
+        issue_number = record.get('number')
+        if not isinstance(issue_number, int) or isinstance(issue_number, bool) or issue_number < 1:
+            continue
+        issue = gh.api(f"issues/{issue_number}")
+        if issue.get('state') != 'open':
+            record['status'] = 'closed'
+            continue
+        try:
+            metadata = read_issue_state(issue)
+        except ValueError:
+            continue
+        if not metadata or metadata['candidate'] != record.get('candidate'):
+            continue
+        set_issue_status(gh, record, 'queued', attempts=0, decision=None, failure=None,
+                         run_url=run_url, build_url=None)
+        if record.get('status') != 'closed':
+            reset.append(record)
+    if not reset:
+        return False
+    state.update(attempts=0, report={'summary': 'Awaiting maintainer-requested reassessment', 'recipes': []},
+                 feedback_digest='', issue_closures=[], reviewed_head='')
+    state.pop('build_url', None)
+    if not pr.get('draft'):
+        run(['gh', 'api', 'graphql', '-f',
+             'query=mutation($id:ID!){convertPullRequestToDraft(input:{pullRequestId:$id}){pullRequest{id}}}',
+             '-f', f'id={pr["node_id"]}'])
+    gh.api(f"pulls/{number}", {'body': pr_body(state)}, method='PATCH')
+    return True
+
+
 def feedback(gh, event):
+    sender = event.get('sender') or {}
+    item = event.get('comment') or event.get('review') or {}
+    if event.get('comment') and (item.get('body') or '').strip() == '/upstream retry':
+        if not current_writer(gh, sender):
+            return
+        issue = event.get('issue') or {}
+        if issue.get('pull_request'):
+            reset = retry_pr_batch(gh, issue.get('number'), workflow_run_url(gh.repository))
+        else:
+            reset = retry_issue(gh, issue.get('number'), workflow_run_url(gh.repository))
+        if reset:
+            gh.dispatch('upstream-versions.yml')
+            summary('Queued a maintainer-requested upstream reassessment.')
+        return
     number = event_pr(event)
-    if not number or event.get('sender', {}).get('login') == BOT:
+    if not number or sender.get('login') == BOT:
         return
     pr = gh.api(f'pulls/{number}')
     if not trusted_pr(pr, gh.repository) or pr['state'] != 'open':
         return
-    sender = event.get('sender') or {}
-    item = event.get('review') or event.get('comment') or {}
-    known = available_bots(os.environ.get('UPSTREAM_REVIEW_BOTS', ''), gh.pages(f'pulls/{number}/reviews?per_page=100'))
-    if not trusted_author({**item, 'user': sender}, known):
+    known = available_bots(os.environ.get('UPSTREAM_REVIEW_BOTS', ''),
+                           gh.pages(f'pulls/{number}/reviews?per_page=100'))
+    source = 'review' if event.get('review') else (
+        'inline' if item.get('path') else 'comment')
+    evidence = {**item, 'user': sender}
+    if not trusted_author(evidence, known) or not feedback_actionable(evidence, source, known):
         return
     if item.get('commit_id') and item['commit_id'] != pr['head']['sha']:
         return
     gh.dispatch('upstream-versions.yml')
-    summary(f'Relayed review feedback for automation PR {number} to main.')
-
+    summary(f'Relayed actionable review feedback for automation PR {number} to main.')
 
 def require_approval(gh, pr):
     reviews = gh.pages(f"pulls/{pr['number']}/reviews?per_page=100")

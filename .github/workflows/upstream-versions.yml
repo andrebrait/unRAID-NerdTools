@@ -1,4 +1,5 @@
 name: Update upstream recipes
+run-name: Upstream recipe ${{ inputs.evaluation && 'evaluation' || 'update' }}
 
 on:
   schedule:
@@ -113,6 +114,10 @@ jobs:
           scripts/upstream-worker.sh stop
           outcome=failure
           if [[ "$OUTCOME" == success ]]; then outcome=success; fi
+          if [[ "$outcome" == failure ]]; then
+            echo '### Primary assessment failed; fallback eligibility is checked separately.' >> "$GITHUB_STEP_SUMMARY"
+            echo 'This successful collection step is not a successful model assessment.' >> "$GITHUB_STEP_SUMMARY"
+          fi
           python3 /opt/nerdtools-controller/runner.py collect \
             --workspace "$RUNNER_TEMP/nerdtools-worker/work" \
             --manifest "$RUNNER_TEMP/nerdtools-worker/control/manifest.json" \
@@ -212,7 +217,7 @@ jobs:
           import json, os
           from pathlib import Path
           report = json.loads(os.environ['REPORT'])
-          path = Path(os.environ['RUNNER_TEMP']) / 'nerdtools-worker/output/report.json'
+          path = Path(os.environ['RUNNER_TEMP']) / 'nerdtools-worker/claude-report.json'
           fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW | os.O_NONBLOCK, 0o644)
           with os.fdopen(fd, 'w') as stream:
               json.dump(report, stream)
@@ -220,10 +225,13 @@ jobs:
           fi
           outcome=failure
           if [[ "$OUTCOME" == success ]]; then outcome=success; fi
+          if [[ "$outcome" == failure ]]; then
+            echo '### Fallback assessment failed; publication is blocked.' >> "$GITHUB_STEP_SUMMARY"
+          fi
           python3 /opt/nerdtools-controller/runner.py collect \
             --workspace "$RUNNER_TEMP/nerdtools-worker/work" \
             --manifest "$RUNNER_TEMP/nerdtools-worker/control/manifest.json" \
-            --report "$RUNNER_TEMP/nerdtools-worker/output/report.json" \
+            --report "$RUNNER_TEMP/nerdtools-worker/claude-report.json" \
             --output "$RUNNER_TEMP/nerdtools-worker/collected" --outcome "$outcome"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
@@ -241,6 +249,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      issues: write
       actions: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

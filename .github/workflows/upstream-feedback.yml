@@ -10,7 +10,8 @@ on:
 
 permissions:
   actions: write
-  pull-requests: read
+  pull-requests: write
+  issues: write
   contents: read
 
 jobs:
@@ -19,7 +20,7 @@ jobs:
       github.event.sender.login != 'github-actions[bot]' &&
       (github.event.sender.type == 'Bot' ||
       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association || github.event.review.author_association)) &&
-      (github.event_name != 'issue_comment' || github.event.issue.pull_request) &&
+      (github.event_name != 'issue_comment' || github.event.issue.pull_request || github.event.comment.body == '/upstream retry') &&
       (github.event_name == 'issue_comment' ||
       (github.event.pull_request.head.ref == 'automation/upstream-recipes' &&
       github.event.pull_request.head.repo.full_name == github.repository &&

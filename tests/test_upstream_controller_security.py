@@ -21,9 +21,132 @@ class StateAndFeedbackTests(unittest.TestCase):
         self.assertNotIn('@everyone', body)
         self.assertEqual(body.count(self.updates.STATE), 1)
 
+    def test_only_exact_current_write_permission_can_reset_open_issue_or_pr_batch(self):
+        candidate = {'name': 'vim', 'ours': '1.0', 'upstream': '2.0',
+                     'source': 'Slackware-current', 'url': 'https://example.invalid/releases'}
+        gh = controller.GitHubFixture(None)
+        record = self.updates.sync_candidate_issues(gh, [candidate])[0]
+        self.updates.set_issue_status(gh, record, 'rejected', attempts=3)
+        event = {'issue': {'number': record['number']}, 'comment': {'body': '/upstream retry'},
+                 'sender': {'login': 'maintainer', 'type': 'User'}}
+
+        self.updates.feedback(gh, event)
+
+        reset = self.updates.read_issue_state(gh.issues[0])
+        self.assertEqual((reset['attempts'], reset['status']), (0, 'queued'))
+        self.assertEqual(gh.dispatched, [('upstream-versions.yml', 'main', None)])
+
+        class ReadOnly(controller.GitHubFixture):
+            def api(self, path, data=None, method=None):
+                if path == 'collaborators/maintainer/permission':
+                    return {'permission': 'read'}
+                return super().api(path, data, method)
+
+        readonly = ReadOnly(None)
+        record = self.updates.sync_candidate_issues(readonly, [candidate])[0]
+        self.updates.set_issue_status(readonly, record, 'rejected', attempts=3)
+        self.updates.feedback(readonly, event)
+        self.assertEqual(self.updates.read_issue_state(readonly.issues[0])['attempts'], 3)
+        self.assertEqual(readonly.dispatched, [])
+
+    def test_pr_retry_resets_only_open_frozen_batch_issues(self):
+        candidate = {'name': 'vim', 'ours': '1.0', 'upstream': '2.0',
+                     'source': 'Slackware-current', 'url': 'https://example.invalid/releases'}
+        gh = controller.GitHubFixture(controller.ControllerTests.pr(self) | {'node_id': 'node12', 'draft': True})
+        record = self.updates.sync_candidate_issues(gh, [candidate])[0]
+        self.updates.set_issue_status(gh, record, 'blocked', attempts=3, failure='attempts exhausted')
+        state = {'attempts': 3, 'candidates': [candidate], 'candidate_issues': [record],
+                 'report': {'summary': 'blocked', 'recipes': []}}
+        gh.pr['body'] = self.updates.pr_body(state)
+        event = {'issue': {'number': 12, 'pull_request': {'url': 'https://example.invalid/pr/12'}},
+                 'comment': {'body': '/upstream retry'},
+                 'sender': {'login': 'maintainer', 'type': 'User'}}
+
+        self.updates.feedback(gh, event)
+
+        self.assertEqual(self.updates.read_issue_state(gh.issues[0])['status'], 'queued')
+        self.assertEqual(self.updates.read_issue_state(gh.issues[0])['attempts'], 0)
+        reset_pr = self.updates.read_state(gh.pr)
+        self.assertEqual(reset_pr['attempts'], 0)
+        self.assertEqual(reset_pr['report']['recipes'], [])
+        self.assertEqual(gh.dispatched, [('upstream-versions.yml', 'main', None)])
+
+    def test_issue_retry_in_active_batch_preserves_other_decisions_and_drops_only_its_closure(self):
+        vim = {'name': 'vim', 'ours': '1.0', 'upstream': '2.0',
+               'source': 'Slackware-current', 'url': 'https://example.invalid/vim'}
+        tmux = {'name': 'tmux', 'ours': '3.0', 'upstream': '4.0',
+                'source': 'SlackBuilds.org 15.0', 'url': 'https://example.invalid/tmux'}
+        pr = controller.ControllerTests.pr(self) | {'node_id': 'node12', 'draft': False}
+        gh = controller.GitHubFixture(pr)
+        records = self.updates.sync_candidate_issues(gh, [vim, tmux])
+        vim_record = next(item for item in records if item['candidate']['name'] == 'vim')
+        tmux_record = next(item for item in records if item['candidate']['name'] == 'tmux')
+        self.updates.set_issue_status(gh, vim_record, 'rejected', attempts=3, decision='reject')
+        self.updates.set_issue_status(gh, tmux_record, 'building', attempts=1, decision='accept')
+        state = {'attempts': 2, 'candidates': [vim, tmux], 'candidate_issues': records,
+                 'report': {'summary': 'previous batch', 'recipes': [
+                     {'name': 'vim', 'decision': 'reject', 'reason': 'Needs repair'},
+                     {'name': 'tmux', 'decision': 'accept', 'reason': 'Pinned'}]},
+                 'issue_closures': [tmux_record['number']]}
+        gh.pr['body'] = self.updates.pr_body(state)
+        event = {'issue': {'number': vim_record['number']}, 'comment': {'body': '/upstream retry'},
+                 'sender': {'login': 'maintainer', 'type': 'User'}}
+
+        with mock.patch.object(self.updates, 'run', return_value='') as run:
+            self.updates.feedback(gh, event)
+
+        reset = self.updates.read_state(gh.pr)
+        self.assertEqual(reset['attempts'], 0)
+        self.assertEqual([item['name'] for item in reset['report']['recipes']], ['tmux'])
+        self.assertEqual(reset['issue_closures'], [tmux_record['number']])
+        issue_by_name = {self.updates.read_issue_state(issue)['candidate']['name']: issue for issue in gh.issues}
+        self.assertEqual(self.updates.read_issue_state(issue_by_name['vim'])['decision'], None)
+        self.assertEqual(self.updates.read_issue_state(issue_by_name['tmux'])['decision'], 'accept')
+        self.assertTrue(run.called)
+        self.assertEqual(gh.dispatched, [('upstream-versions.yml', 'main', None)])
+
+    def test_model_closure_reference_is_escaped_but_lifecycle_links_are_visible(self):
+        body = self.updates.pr_body({
+            'attempts': 1,
+            'report': {'summary': 'Fixes #999', 'recipes': [
+                {'name': 'vim', 'decision': 'reject', 'reason': 'Fixes #998'}]},
+            'candidate_issues': [{
+                'candidate': {'name': 'vim'}, 'number': 42,
+                'issue_url': 'https://github.com/owner/tools/issues/42',
+                'status': 'blocked', 'attempts': 3, 'failure': 'catalog validation failed',
+                'run_url': 'https://example.invalid/run/1',
+                'build_url': 'https://example.invalid/build/1'}]})
+
+        self.assertNotIn('Fixes #999', body)
+        self.assertNotIn('Fixes #998', body)
+        self.assertIn(r'Fixes \u0023999', body)
+        self.assertIn('blocked', body)
+        self.assertIn('Issue 42', body)
+        self.assertIn('https://example.invalid/run/1', body)
+        self.assertIn('https://example.invalid/build/1', body)
+        self.assertIn('catalog validation failed', body)
+        self.assertEqual(self.updates.read_state({'body': body})['report']['summary'], 'Fixes #999')
+
+    def test_bot_summary_review_comments_are_fallback_only_without_inline_findings(self):
+        summary = {'id': 8, 'body': 'Change the recipe pin to match the declared source',
+                   'commit_id': 'head', 'state': 'COMMENTED',
+                   'user': {'login': 'reviewbot[bot]', 'type': 'Bot'}}
+
+        self.assertEqual(self.updates.current_feedback(
+            [summary], 'head', '2026-11-14T00:00:00Z', ['reviewbot[bot]'],
+            source='review', allow_bot_summary=True)[0]['id'], 8)
+        self.assertEqual(self.updates.current_feedback(
+            [summary], 'head', '2026-11-14T00:00:00Z', ['reviewbot[bot]'],
+            source='review', allow_bot_summary=False), [])
+
     def test_large_batch_report_stays_within_github_body_limit(self):
         state = {'attempts': 2, 'report': {'summary': 'summary' * 500, 'recipes': [
-            {'name': f'package-{n}', 'decision': 'reject', 'reason': '<@reason>' * 220} for n in range(86)]}}
+            {'name': f'package-{n}', 'decision': 'reject', 'reason': '<@reason>' * 220} for n in range(86)]},
+                 'candidate_issues': [
+                     {'candidate': {'name': f'package-{n}'}, 'number': n + 100,
+                      'issue_url': f'https://github.com/owner/tools/issues/{n + 100}',
+                      'status': 'blocked', 'attempts': 3, 'failure': 'validation failed ' * 100}
+                     for n in range(86)]}
         body = self.updates.pr_body(state)
         self.assertLessEqual(len(body), 65000)
         self.assertEqual(len(self.updates.read_state({'body': body})['report']['recipes']), 86)
@@ -139,7 +262,8 @@ class ScratchPolicyTests(unittest.TestCase):
         import shutil
         shutil.copytree(self.repo, self.scratch, symlinks=True, ignore=shutil.ignore_patterns('.git'))
         self.report = {'summary': 'update', 'recipes': [{'name': 'alpha', 'decision': 'accept', 'reason': 'source'}]}
-        self.candidates = [{'name': 'alpha', 'upstream': '2.0'}]
+        self.candidates = [{'name': 'alpha', 'ours': '1.0', 'upstream': '2.0',
+                            'source': 'Slackware-current', 'url': 'https://example.invalid/packages'}]
 
     def write_entry(self, **changes):
         (self.scratch / 'build/locks/slackware.json').write_text(json.dumps([self.entry | changes]))
@@ -242,6 +366,16 @@ class ScratchPolicyTests(unittest.TestCase):
         entry = json.loads((self.repo / 'build/locks/slackware.json').read_text())[0]
         self.assertEqual(entry['recipe_sha256'], hashlib.sha256(b'updated source build').hexdigest())
         self.assertTrue((self.repo / 'build/recipes/alpha/slack-desc').is_symlink())
+
+    def test_generated_inventory_change_is_ignored_until_controller_regenerates_it(self):
+        self.write_entry(version='2.0')
+        (self.repo / 'build/recipe-files.json').write_text('{"trusted":"controller output"}\n')
+        inventory = self.scratch / 'build/recipe-files.json'
+        inventory.write_text('{"untrusted":"agent output"}\n')
+        paths = self.validate()
+        self.assertNotIn('build/recipe-files.json', paths)
+        self.updates.import_workspace(self.repo, self.scratch, paths, self.report)
+        self.assertNotEqual((self.repo / 'build/recipe-files.json').read_text(), inventory.read_text())
 
     def test_download_directory_symlink_is_not_ignored(self):
         self.write_entry(version='2.0')
@@ -400,6 +534,7 @@ class ScratchPolicyTests(unittest.TestCase):
                 manual.assert_called_once_with(self.repo, source, self.report)
                 restore.assert_called_once_with(self.repo, source, self.report)
                 generated.assert_called_once_with(self.repo, source)
+            self.assertTrue((result / 'changes.patch').read_bytes().endswith(b'\n'))
             branch.assert_not_called()
         self.assertEqual(git('rev-parse', 'HEAD'), source)
         self.assertTrue(helper.exists())
