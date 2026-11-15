@@ -69,6 +69,8 @@ class StateAndFeedbackTests(unittest.TestCase):
         reset_pr = self.updates.read_state(gh.pr)
         self.assertEqual(reset_pr['attempts'], 0)
         self.assertEqual(reset_pr['report']['recipes'], [])
+        self.assertTrue(reset_pr['force_repair'])
+        self.assertEqual(reset_pr['retry_candidates'], [self.updates.candidate_identity(candidate)])
         self.assertEqual(gh.dispatched, [('upstream-versions.yml', 'main', None)])
 
     def test_issue_retry_in_active_batch_preserves_other_decisions_and_drops_only_its_closure(self):
@@ -99,6 +101,8 @@ class StateAndFeedbackTests(unittest.TestCase):
         self.assertEqual(reset['attempts'], 0)
         self.assertEqual([item['name'] for item in reset['report']['recipes']], ['tmux'])
         self.assertEqual(reset['issue_closures'], [tmux_record['number']])
+        self.assertTrue(reset['force_repair'])
+        self.assertEqual(reset['retry_candidates'], [self.updates.candidate_identity(vim)])
         issue_by_name = {self.updates.read_issue_state(issue)['candidate']['name']: issue for issue in gh.issues}
         self.assertEqual(self.updates.read_issue_state(issue_by_name['vim'])['decision'], None)
         self.assertEqual(self.updates.read_issue_state(issue_by_name['tmux'])['decision'], 'accept')

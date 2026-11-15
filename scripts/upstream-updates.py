@@ -237,9 +237,13 @@ def sync_candidate_issues(gh, candidates, run_url=None, prior_records=()):
             if issue.get('state') == 'closed':
                 state['status'] = 'blocked'
             if issue.get('state') != 'closed':
-                body = issue_body(issue, state)
-                if body != (issue.get('body') or ''):
-                    issue = gh.api(f"issues/{issue['number']}", {'body': body}, method='PATCH')
+                labels = {item.get('name') if isinstance(item, dict) else item
+                          for item in issue.get('labels', [])}
+                update = {'body': issue_body(issue, state)}
+                if 'upstream-update' not in labels:
+                    update['labels'] = sorted((labels - {None}) | {'upstream-update'})
+                if update['body'] != (issue.get('body') or '') or 'labels' in update:
+                    issue = gh.api(f"issues/{issue['number']}", update, method='PATCH')
         record = candidate_record(candidate, issue, state, gh.repository)
         if issue.get('state') == 'closed':
             record['status'] = 'closed'
@@ -295,6 +299,14 @@ def workflow_run_url(repository):
 def issue_record_for(records, candidate):
     identity = candidate_identity(candidate)
     return next((item for item in records if item.get('candidate') == identity), None)
+
+
+def all_candidates_decided(state):
+    candidates = state.get('candidates', [])
+    records = state.get('candidate_issues', [])
+    return bool(candidates) and all(
+        (issue_record_for(records, candidate) or {}).get('status') in ('closed', 'rejected')
+        for candidate in candidates)
 
 
 def update_candidate_issues(gh, records, candidates, status, **changes):
@@ -893,8 +905,19 @@ def prepare(repo, gh, event, output, evaluation=False, package=None):
                 continue
             active.append(candidate)
         candidates = active
+        retry_candidates = state.get('retry_candidates')
+        if retry_candidates:
+            retry_identities = {tuple(item.get(key) for key in ISSUE_FIELDS)
+                                for item in retry_candidates if isinstance(item, dict)}
+            candidates = [item for item in candidates
+                          if tuple(candidate_identity(item).values()) in retry_identities]
         state['candidate_issues'] = records
     if not candidates:
+        if pr and all_candidates_decided(state):
+            delete_branch(repo, gh, pr['head']['sha'])
+            gh.api(f"pulls/{pr['number']}", {'state': 'closed', 'body': pr_body(state)}, method='PATCH')
+            summary(f"Closed empty automation PR {pr['number']}; rejected issues remain open.")
+            return False
         if pr:
             gh.api(f"pulls/{pr['number']}", {'body': pr_body(state)}, method='PATCH')
         summary('No eligible upstream candidates. Rejected, closed, blocked, or exhausted issues remain unchanged.')
@@ -922,7 +945,8 @@ def prepare(repo, gh, event, output, evaluation=False, package=None):
             gh.api(f"pulls/{pr['number']}", {'body': pr_body(state)}, method='PATCH')
             summary(f"Batch build is still running: {build['html_url']}")
             return False
-        if build and build['conclusion'] == 'success' and not state.get('validation_error'):
+        if (build and build['conclusion'] == 'success' and not state.get('validation_error')
+                and not state.get('force_repair')):
             state['build_url'] = build['html_url']
             update_candidate_issues(gh, records, candidates, 'awaiting-review',
                                    failure=None, build_url=build['html_url'])
@@ -1115,6 +1139,8 @@ def finish(repo, gh, plan_path, workspace, report_path, dry_run=False, output=No
         shutil.rmtree(workspace)
     state.pop('validation_error', None)
     state.update(report=report, feedback_digest=plan['feedback_digest'])
+    state.pop('force_repair', None)
+    state.pop('retry_candidates', None)
     if dry_run:
         if output is not None:
             output = Path(output)
@@ -1173,8 +1199,8 @@ def finish(repo, gh, plan_path, workspace, report_path, dry_run=False, output=No
         summary(pr_body(state))
         return
     if pr and not changed:
+        delete_branch(repo, gh, previous)
         gh.api(f"pulls/{pr['number']}", {'state': 'closed', 'body': pr_body(state)}, method='PATCH')
-        gh.api(f"git/refs/heads/{quote(BRANCH, safe='')}", method='DELETE')
         summary(f"Closed empty automation PR {pr['number']}; rejected issues remain open.")
         return
     if changed or sha != previous:
@@ -1200,6 +1226,12 @@ def dispatch_catalog(repo, gh, pr, state):
                 'channel': 'stable', 'publish': 'false'})
     state['dispatched_head'] = pr['head']['sha']
     gh.api(f"pulls/{pr['number']}", {'body': pr_body(state)}, method='PATCH')
+
+
+def delete_branch(repo, gh, previous):
+    git(repo, '-c', 'credential.helper=!gh auth git-credential',
+        'push', f'--force-with-lease=refs/heads/{BRANCH}:{previous}',
+        f'https://github.com/{gh.repository}.git', f':refs/heads/{BRANCH}')
 
 
 def event_pr(event):
@@ -1267,7 +1299,8 @@ def retry_issue(gh, number, run_url=None):
                              if item.get('name') != metadata['candidate']['name']]
         report['summary'] = 'Awaiting maintainer-requested reassessment'
         pr_state.update(attempts=0, feedback_digest='', issue_closures=[
-            item for item in pr_state.get('issue_closures', []) if item != number], reviewed_head='')
+            item for item in pr_state.get('issue_closures', []) if item != number], reviewed_head='',
+            force_repair=True, retry_candidates=[metadata['candidate']])
         pr_state.pop('build_url', None)
         pr_state.pop('validation_error', None)
         gh.api(f"pulls/{pr['number']}", {'body': pr_body(pr_state)}, method='PATCH')
@@ -1306,7 +1339,8 @@ def retry_pr_batch(gh, number, run_url=None):
     if not reset:
         return False
     state.update(attempts=0, report={'summary': 'Awaiting maintainer-requested reassessment', 'recipes': []},
-                 feedback_digest='', issue_closures=[], reviewed_head='')
+                 feedback_digest='', issue_closures=[], reviewed_head='', force_repair=True,
+                 retry_candidates=[item['candidate'] for item in reset])
     state.pop('build_url', None)
     if not pr.get('draft'):
         run(['gh', 'api', 'graphql', '-f',

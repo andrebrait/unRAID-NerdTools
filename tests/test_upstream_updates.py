@@ -78,6 +78,16 @@ class ControllerTests(unittest.TestCase):
                          ['chatgpt-codex-connector[bot]'])
         self.assertEqual(self.updates.available_bots('', []), [])
 
+    def test_branch_deletion_requires_exact_previous_head(self):
+        gh = GitHubFixture(None)
+        with patch.object(self.updates, 'run', return_value='') as command:
+            self.updates.delete_branch(Path('/repo'), gh, 'a' * 40)
+        args = command.call_args.args[0]
+        self.assertIn(
+            '--force-with-lease=refs/heads/automation/upstream-recipes:' + 'a' * 40,
+            args)
+        self.assertEqual(args[-1], ':refs/heads/automation/upstream-recipes')
+
     def test_feedback_ignores_own_comments_and_reviews_of_old_heads(self):
         evidence = [
             {'id': 1, 'body': 'fix current bug', 'commit_id': 'new', 'path': 'build/recipes/vim/build',
@@ -172,6 +182,7 @@ class IssueLifecycleTests(unittest.TestCase):
         self.assertEqual(self.updates.read_issue_state(gh.issues[0])['candidate'],
                          self.updates.candidate_identity(candidate))
         self.assertEqual(self.updates.read_issue_state(gh.issues[0])['status'], 'queued')
+        self.assertEqual(gh.issues[0]['labels'], ['upstream-update'])
 
         self.updates.sync_candidate_issues(gh, [candidate], run_url='https://example.invalid/run/1')
         self.assertEqual(len(gh.issues), 1)
@@ -485,7 +496,8 @@ class BatchLifecycleTests(unittest.TestCase):
                 return real_run(args, repo, input)
             with patch.object(updates, 'run', side_effect=boundary), patch.object(
                     updates, 'push', side_effect=lambda repo, service, previous: git(
-                        'push', '--force', 'origin', 'HEAD:refs/heads/automation/upstream-recipes')), patch.dict(
+                        'push', '--force', 'origin', 'HEAD:refs/heads/automation/upstream-recipes')), patch.object(
+                    updates, 'delete_branch') as delete, patch.dict(
                             'os.environ', {'GITHUB_EVENT_NAME': 'schedule', 'UPSTREAM_REVIEW_BOTS': ''}):
                 output = Path(folder) / 'handoff'
                 self.assertTrue(updates.prepare(root, gh, {}, output))
@@ -588,9 +600,6 @@ class BatchLifecycleTests(unittest.TestCase):
                          'comment': {'body': '/upstream retry'},
                          'sender': {'login': 'maintainer', 'type': 'User'}}
                 updates.feedback(gh, retry)
-                state = updates.read_state(gh.pr)
-                state['validation_error'] = 'maintainer retry'
-                gh.pr['body'] = updates.pr_body(state)
                 self.assertTrue(updates.prepare(root, gh, {}, output))
                 plan = json.loads((output / 'plan.json').read_text())
                 self.assertEqual([item['upstream'] for item in plan['candidates']], ['99.0'])
@@ -599,7 +608,13 @@ class BatchLifecycleTests(unittest.TestCase):
                     archive.extractall(workspace, filter='data')
                 report.write_text(json.dumps({'summary': 'Rejected after reassessment', 'recipes': [
                     {'name': 'vim', 'decision': 'reject', 'reason': 'Maintainer requested a fresh review'}]}))
-                updates.finish(root, gh, output / 'plan.json', workspace, report)
+                delete.side_effect = OSError('transient branch deletion failure')
+                with self.assertRaisesRegex(OSError, 'transient branch deletion'):
+                    updates.finish(root, gh, output / 'plan.json', workspace, report)
+                self.assertEqual(gh.pr['state'], 'open')
+                delete.side_effect = lambda repo, service, previous: git(
+                    'push', 'origin', '--delete', 'automation/upstream-recipes')
+                self.assertFalse(updates.prepare(root, gh, {}, output))
                 rejected = updates.read_issue_state(gh.issues[0])
                 self.assertEqual((gh.issues[0]['state'], rejected['status'], rejected['decision']),
                                  ('open', 'rejected', 'reject'))
