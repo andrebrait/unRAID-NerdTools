@@ -319,7 +319,7 @@
     },
     "inputs": [
       {
-        "url": "https://brick.kernel.dk/snaps/fio-3.43.tar.gz",
+        "url": "https://slackware.uk/sbosrcarch/by-name/system/fio/fio-3.43.tar.gz",
         "file": "fio-3.43.tar.gz",
         "sha256": "6f57893c7a73d9ed72e9e2b6e15f136a99c137bd6a7645fdeeb4a40b3e9da78d"
       }

@@ -338,6 +338,8 @@ def _body(response, mode, deadline, offset=0, *, max_bytes=None, on_bytes=None):
     if mode != "text" and max_bytes is not None:
         limit = min(limit, max_bytes)
     length = response.getheader("Content-Length")
+    if length is not None and 'chunked' in (response.getheader("Transfer-Encoding") or '').lower():
+        raise ToolError("response declares both Content-Length and chunked framing")
     declared = int(length) if length and length.isdigit() else None
     if mode == "sha256" and declared is not None and declared > limit:
         raise ToolError("download is too large")

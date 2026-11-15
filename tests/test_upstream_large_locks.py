@@ -2,6 +2,7 @@
 import copy
 import contextlib
 import hashlib
+import http.client
 import importlib.util
 import io
 import json
@@ -29,6 +30,14 @@ def scripted_response(body, length=True, status=200, headers=None):
     response.getheader.side_effect = lambda name, default=None: fields.get(name, default)
     response.read.side_effect = io.BytesIO(body).read
     return response
+
+def chunked_response(length=None):
+    length_header = f"Content-Length: {length}\r\n".encode() if length is not None else b""
+    wire = b"HTTP/1.1 200 OK\r\n" + length_header + b"Transfer-Encoding: ChUnKeD\r\n\r\n8\r\nabcdefgh\r\n0\r\n\r\n"
+    response = http.client.HTTPResponse(mock.Mock(makefile=lambda *args: io.BytesIO(wire)))
+    response.begin()
+    return response
+
 
 
 def streamed(downloads):
@@ -172,6 +181,16 @@ class LargeLockTests(unittest.TestCase):
             result = agent.fetch('https://example.org/go.sum', 'text', offset=agent.FETCH_TEXT)
         self.assertEqual(result['text'], 'tail')
         self.assertFalse(result['truncated'])
+
+    def test_hash_rejects_ambiguous_chunked_and_length_headers_before_reading(self):
+        with chunked_response(4) as response, self.assertRaises(agent.ToolError):
+            agent._body(response, 'sha256', float('inf'), max_bytes=4, on_bytes=self.session._account)
+        self.assertEqual(self.session.downloaded, 0)
+
+    def test_chunked_only_response_hashes_the_complete_body(self):
+        with chunked_response() as response:
+            result = agent._body(response, 'sha256', float('inf'), max_bytes=16)
+        self.assertEqual(result, {'sha256': sha(b'abcdefgh'), 'bytes': 8})
 
     def test_exhausted_download_budget_starts_no_transfer(self):
         self.session.downloaded = 2 * 2**30
