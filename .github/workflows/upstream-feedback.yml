@@ -16,6 +16,10 @@ permissions:
 
 jobs:
   relay:
+    concurrency:
+      group: upstream-recipe-issue-writes
+      queue: max
+      cancel-in-progress: false
     if: >-
       github.event.sender.login != 'github-actions[bot]' &&
       (github.event.sender.type == 'Bot' ||

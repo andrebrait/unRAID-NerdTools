@@ -9,11 +9,17 @@ on:
       - Build native packages
     types: [completed]
 
+concurrency:
+  group: upstream-notify-${{ github.event.workflow_run.workflow_id }}-${{ github.event.workflow_run.head_sha }}
+  queue: max
+  cancel-in-progress: false
+
 permissions:
   contents: read
   actions: read
   pull-requests: write
   issues: write
+  statuses: write
 
 jobs:
   notify:

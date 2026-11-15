@@ -400,6 +400,45 @@ class ScratchPolicyTests(unittest.TestCase):
         self.updates.import_workspace(self.repo, self.scratch, paths, self.report)
         self.assertNotEqual((self.repo / 'build/recipe-files.json').read_text(), inventory.read_text())
 
+    def test_import_applies_file_to_directory_replacement_exactly(self):
+        self.write_entry(version='2.0')
+        repository_path = self.repo / 'build/recipes/alpha/data'
+        repository_path.write_text('old tracked file')
+        scratch_path = self.scratch / 'build/recipes/alpha/data'
+        scratch_path.write_text('old tracked file')
+        scratch_path.unlink()
+        scratch_path.mkdir()
+        (scratch_path / 'child').write_text('replacement child')
+
+        self.updates.import_workspace(
+            self.repo, self.scratch,
+            ['build/recipes/alpha/data', 'build/recipes/alpha/data/child'],
+            self.report)
+
+        self.assertTrue(repository_path.is_dir())
+        self.assertEqual((repository_path / 'child').read_text(), 'replacement child')
+
+    def test_directory_to_file_conflict_preserves_unrelated_contents(self):
+        self.write_entry(version='2.0')
+        repository_path = self.repo / 'build/recipes/alpha/data'
+        repository_path.mkdir()
+        (repository_path / 'tracked').write_text('tracked')
+        (repository_path / 'unrelated').write_text('keep')
+        scratch_path = self.scratch / 'build/recipes/alpha/data'
+        scratch_path.mkdir()
+        (scratch_path / 'tracked').write_text('tracked')
+        import shutil
+        shutil.rmtree(scratch_path)
+        scratch_path.write_text('replacement')
+
+        with self.assertRaisesRegex(ValueError, 'non-empty directory'):
+            self.updates.import_workspace(
+                self.repo, self.scratch,
+                ['build/recipes/alpha/data', 'build/recipes/alpha/data/tracked'],
+                self.report)
+
+        self.assertEqual((repository_path / 'unrelated').read_text(), 'keep')
+
     def test_download_directory_symlink_is_not_ignored(self):
         self.write_entry(version='2.0')
         (self.scratch / '.upstream-downloads').symlink_to(self.repo, target_is_directory=True)

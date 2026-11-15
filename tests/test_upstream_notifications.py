@@ -1,6 +1,7 @@
 """Pure fixtures for trusted terminal workflow notifications."""
 import importlib.util
 from pathlib import Path
+import re
 import unittest
 
 SCRIPT = Path(__file__).resolve().parents[1] / 'scripts/upstream-notify.py'
@@ -32,12 +33,17 @@ class FakeGitHub:
         self.comparisons = {}
         self.calls = []
         self.jobs = []
+        self.statuses = []
+        self.page_calls = []
 
-    def pages(self, path):
+    def pages(self, path, field=None):
+        self.page_calls.append((path, field))
         if path.startswith('actions/runs/'):
-            return self.jobs
+            return self.jobs if field == 'jobs' else self.jobs
         if path.startswith('pulls?'):
             return [{key: value for key, value in pr.items() if key != 'merged'} for pr in self.pull_requests]
+        if path.startswith('commits/') and path.endswith('/statuses?per_page=100'):
+            return self.statuses
         if path.startswith('issues?'):
             return self.issues
         if path.endswith('/comments?per_page=100'):
@@ -46,17 +52,24 @@ class FakeGitHub:
 
     def api(self, path, data=None, method=None):
         self.calls.append((path, data, method))
+        if method == 'POST' and path.startswith('statuses/'):
+            self.statuses.append({**data, 'creator': {'login': 'github-actions[bot]'}})
+            return self.statuses[-1]
         if path.startswith('pulls/') and path[6:].isdigit():
             return next((pr for pr in self.pull_requests if pr['number'] == int(path[6:])), {})
         if path.startswith('compare/'):
             return self.comparisons.get(path.split('compare/', 1)[1], {'status': 'diverged'})
         if method == 'POST' and path == 'issues':
-            self.issues.append({'number': 900, 'state': 'open', **data, 'user': {'login': 'github-actions[bot]'}})
-            return {}
+            issue = {'number': 900, 'state': 'open', **data,
+                     'user': {'login': 'github-actions[bot]'}}
+            self.issues.append(issue)
+            return issue
         if method == 'POST' and path.startswith('issues/') and path.endswith('/comments'):
             number = int(path.split('/')[1])
             self.comments.setdefault(number, []).append({'body': data['body'], 'user': {'login': 'github-actions[bot]'}})
             return {}
+        if method is None and path.startswith('issues/') and path[7:].isdigit():
+            return next((item for item in self.issues if item['number'] == int(path[7:])), {})
         if method == 'PATCH' and path.startswith('issues/'):
             number = int(path.split('/')[1])
             issue = next((item for item in self.issues if item['number'] == number), None)
@@ -89,16 +102,15 @@ class NotificationTests(unittest.TestCase):
             self.assertFalse(notify.process(e, gh))
             self.assertEqual(gh.calls, [])
 
-    def test_updater_failure_comments_active_trusted_pr_once_per_run_attempt(self):
+    def test_updater_failure_uses_canonical_issue_not_racy_pr_comment(self):
         gh = FakeGitHub()
         gh.pull_requests = [pr()]
         e = event()
         self.assertTrue(notify.process(e, gh))
         self.assertFalse(notify.process(e, gh))
-        comments = gh.comments[12]
-        self.assertEqual(len(comments), 1)
-        self.assertIn('Blocked—maintainer action required', comments[0]['body'])
-        self.assertIn('https://github.com/owner/tools/actions/runs/123', comments[0]['body'])
+        self.assertEqual(len(gh.issues), 1)
+        self.assertEqual(gh.issues[0]['state'], 'open')
+        self.assertEqual(gh.comments, {})
 
     def test_failure_before_discovery_still_notifies_and_matching_success_resolves(self):
         gh = FakeGitHub()
@@ -108,13 +120,88 @@ class NotificationTests(unittest.TestCase):
         notify.process(event(conclusion='success', id=124), gh)
         self.assertEqual(gh.issues[0]['state'], 'closed')
 
+    def test_delayed_failures_cannot_override_newer_success(self):
+        for newer, older in (
+                (event(conclusion='success', id=124), event(id=123)),
+                (event(conclusion='success', run_attempt=2), event(run_attempt=1))):
+            gh = FakeGitHub()
+            gh.pull_requests = [pr()]
+            self.assertFalse(notify.process(newer, gh))
+            self.assertFalse(notify.process(older, gh))
+            self.assertEqual(gh.issues, [])
+            self.assertEqual(gh.comments, {})
+            self.assertEqual(len(gh.statuses), 1)
+
+    def test_success_checkpoint_arriving_during_failure_creation_closes_stale_issue(self):
+        older = event(id=123)['workflow_run']
+        newer = dict(older, id=124, conclusion='success')
+
+        class RacingGitHub(FakeGitHub):
+            def api(self, path, data=None, method=None):
+                result = super().api(path, data, method)
+                if path == 'issues' and method == 'POST':
+                    _, context = notify.success_context(newer, SHA)
+                    self.statuses.append({
+                        'context': context, 'state': 'success',
+                        'description': 'Successful run 124:1',
+                        'creator': {'login': 'github-actions[bot]'},
+                    })
+                return result
+
+        gh = RacingGitHub()
+        self.assertFalse(notify.terminal(gh, older, False, SHA))
+        self.assertEqual(gh.issues[0]['state'], 'closed')
+
+    def test_stale_failure_cleanup_preserves_newer_reopened_failure(self):
+        baseline = event('Discover Unraid releases', id=122)['workflow_run']
+        older = dict(baseline, id=123)
+        newer_success = dict(baseline, id=124, conclusion='success')
+        newest_failure = dict(baseline, id=125)
+
+        class RacingGitHub(FakeGitHub):
+            racing = False
+
+            def api(self, path, data=None, method=None):
+                result = super().api(path, data, method)
+                if (path == 'issues/900' and method == 'PATCH' and not self.racing
+                        and '<!-- upstream-notify: result:123:1:failure -->' in (data or {}).get('body', '')):
+                    self.racing = True
+                    _, context = notify.success_context(newer_success, SHA)
+                    self.statuses.append({
+                        'context': context, 'state': 'success',
+                        'description': 'Successful run 124:1',
+                        'creator': {'login': 'github-actions[bot]'},
+                    })
+                    notify.terminal(self, newer_success, True, SHA)
+                    notify.terminal(self, newest_failure, False, SHA)
+                return result
+
+        gh = RacingGitHub()
+        notify.terminal(gh, baseline, False, SHA)
+        notify.terminal(gh, older, False, SHA)
+        issue = gh.issues[0]
+        self.assertEqual(notify.latest_result(issue['body']), (125, 1, 'failure'))
+        self.assertEqual(issue['state'], 'open')
+
+    def test_duplicate_failure_reopens_closed_canonical_newer_failure(self):
+        gh = FakeGitHub()
+        run = event('Discover Unraid releases')['workflow_run']
+        notify.terminal(gh, run, False, SHA)
+        newer = dict(run, id=125)
+        notify.terminal(gh, newer, False, SHA)
+        gh.issues[0]['state'] = 'closed'
+        self.assertFalse(notify.terminal(gh, newer, False, SHA))
+        self.assertEqual(gh.issues[0]['state'], 'open')
+
+
     def test_manual_update_is_not_rejected_for_skipped_eval_job(self):
         gh = FakeGitHub()
         gh.pull_requests = [pr()]
         gh.jobs = [{'name': 'native-evaluation', 'conclusion': 'skipped'}]
         e = event(event='workflow_dispatch')
         self.assertTrue(notify.process(e, gh))
-        self.assertEqual(len(gh.comments[12]), 1)
+        self.assertEqual(len(gh.issues), 1)
+        self.assertEqual(gh.comments, {})
 
     def test_untrusted_comment_marker_does_not_suppress_bot_comment(self):
         gh = FakeGitHub()
@@ -174,7 +261,8 @@ class NotificationTests(unittest.TestCase):
                                  pull_requests=[{'number': 12}], head_sha=merged['merge_commit_sha'])
         self.assertTrue(notify.process(e, gh))
         self.assertTrue(any(path == 'pulls/12' for path, _, _ in gh.calls))
-        self.assertIn('Workflow run: https://github.com/owner/tools/actions/runs/123', gh.comments[12][0]['body'])
+        self.assertEqual(len(gh.issues), 1)
+        self.assertEqual(gh.comments, {})
         self.assertFalse(any(path.startswith('compare/') for path, _, _ in gh.calls))
 
     def test_discovery_ancestry_compares_merge_commit_not_pr_head(self):
@@ -212,6 +300,9 @@ class NotificationTests(unittest.TestCase):
         gh.jobs = [{'name': 'publish', 'conclusion': 'success'}]
         self.assertTrue(notify.process(e, gh))
         self.assertIn('Publication succeeded.', gh.comments[12][0]['body'])
+        self.assertIn((
+            'actions/runs/123/attempts/1/jobs?per_page=100', 'jobs'),
+            gh.page_calls)
 
     def test_untrusted_title_is_escaped_and_never_interpreted_as_mention(self):
         text = notify.safe_text('@everyone <script>alert(1)</script>')

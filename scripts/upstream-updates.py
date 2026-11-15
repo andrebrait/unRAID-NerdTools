@@ -54,9 +54,15 @@ class GitHub:
         result = run(args, input=json.dumps(data) if data is not None else None)
         return json.loads(result) if result.strip() else None
 
-    def pages(self, path):
+    def pages(self, path, field=None):
         pages = json.loads(run(['gh', 'api', '--paginate', '--slurp', f'{self.root}/{path}']))
-        return [item for page in pages for item in page]
+        if field is None:
+            if any(not isinstance(page, list) for page in pages):
+                raise ValueError('Paginated GitHub response must contain arrays')
+            return [item for page in pages for item in page]
+        if any(not isinstance(page, dict) or not isinstance(page.get(field), list) for page in pages):
+            raise ValueError(f'Paginated GitHub response has no {field} array')
+        return [item for page in pages for item in page[field]]
 
     def dispatch(self, workflow, ref='main', inputs=None):
         self.api(f'actions/workflows/{workflow}/dispatches', {'ref': ref, 'inputs': inputs or {}})
@@ -252,17 +258,25 @@ def sync_candidate_issues(gh, candidates, run_url=None, prior_records=()):
 
 
 def set_issue_status(gh, record, status, attempts=None, decision=_UNSET, failure=_UNSET,
-                     run_url=_UNSET, build_url=_UNSET):
+                     run_url=_UNSET, build_url=_UNSET, expected=None):
     if status not in ISSUE_STATUSES:
         raise ValueError('Invalid upstream issue status')
     number = record.get('number')
     if not isinstance(number, int) or isinstance(number, bool) or number < 1:
         raise ValueError('Invalid upstream issue number')
     issue = gh.api(f"issues/{number}")
+    state = read_issue_state(issue) if expected is not None else None
+    if expected is not None and (
+            not state or state['candidate'] != expected.get('candidate')
+            or state['status'] != expected.get('status')
+            or state['attempts'] != expected.get('attempts')
+            or state['decision'] != expected.get('decision')):
+        return record
     if issue.get('state') == 'closed':
         record['status'] = 'closed'
         return record
-    state = read_issue_state(issue)
+    if state is None:
+        state = read_issue_state(issue)
     if not state or state['candidate'] != record['candidate']:
         raise ValueError('Upstream issue state changed or is untrusted')
     state['status'] = status
@@ -334,9 +348,19 @@ def verify_issue_attempts(gh, records, candidates):
         if not isinstance(number, int) or isinstance(number, bool) or number < 1:
             raise ValueError('Invalid upstream issue number')
         issue = gh.api(f"issues/{number}")
-        current = read_issue_state(issue) if issue.get('state') == 'open' else None
-        if (not current or current['candidate'] != record['candidate']
-                or current['attempts'] != record['attempts'] or current['status'] != record['status']):
+        current = read_issue_state(issue)
+        unchanged_closed = (
+            record.get('status') == 'closed' and issue.get('state') == 'closed' and current
+            and current['candidate'] == record['candidate']
+            and current['attempts'] == record['attempts']
+            and current['decision'] == record.get('decision'))
+        unchanged_open = (
+            issue.get('state') == 'open' and current
+            and current['candidate'] == record['candidate']
+            and current['attempts'] == record['attempts']
+            and current['status'] == record['status']
+            and current['decision'] == record.get('decision'))
+        if not (unchanged_closed or unchanged_open):
             raise ValueError('Upstream issue changed during agent work; refusing stale update')
 
 
@@ -397,6 +421,9 @@ def validate_report(report, candidates):
 def merge_retry_report(state, assessed, targets):
     target_names = {item['name'] for item in targets}
     frozen_names = [item['name'] for item in state.get('candidates', [])]
+    statuses = {(record.get('candidate') or {}).get('name'): record.get('status')
+                for record in state.get('candidate_issues', [])
+                if isinstance(record, dict) and isinstance(record.get('candidate'), dict)}
     retained = {}
     for item in state.get('report', {}).get('recipes', []):
         if (not isinstance(item, dict) or set(item) != {'name', 'decision', 'reason'}
@@ -408,6 +435,10 @@ def merge_retry_report(state, assessed, targets):
             raise ValueError('Stored automation report has duplicate recipes')
         if item['name'] not in target_names:
             retained[item['name']] = item
+    for name, status in statuses.items():
+        if name in frozen_names and name not in target_names and status in ('rejected', 'closed'):
+            retained[name] = {'name': name, 'decision': 'reject',
+                              'reason': 'Candidate issue was rejected or closed; discard its changes.'}
     retained.update((item['name'], item) for item in assessed['recipes'])
     return {'summary': assessed['summary'],
             'recipes': [retained[name] for name in frozen_names if name in retained]}
@@ -544,7 +575,8 @@ def validate_workspace(repo, workspace, report, candidates):
 
 def import_workspace(repo, workspace, paths, report):
     before = {item['name']: item for lock in LOCKS for item in json.loads((repo / lock).read_text())}
-    deleted = [relative for relative in paths if not (workspace / relative).exists()]
+    deleted = [relative for relative in paths
+               if not (workspace / relative).is_file() or (workspace / relative).is_symlink()]
     for relative in sorted(deleted, key=lambda value: len(PurePosixPath(value).parts), reverse=True):
         destination = repo / relative
         if destination.is_dir() and not destination.is_symlink():
@@ -859,6 +891,76 @@ def branch_lease(gh, pr):
             check_paths([item['filename'] for item in comparison['files']])
     return existing
 
+def recover_orphaned_publication(repo, gh, records, discovered):
+    candidates = [candidate for candidate in discovered
+                  if (record := issue_record_for(records, candidate))
+                  and record.get('status') == 'building' and record.get('decision') == 'accept']
+    if not candidates:
+        return False
+    previous = branch_lease(gh, None)
+    if not previous:
+        for candidate in candidates:
+            record = issue_record_for(records, candidate)
+            set_issue_status(
+                gh, record, 'queued',
+                failure=record.get('failure')
+                or 'Publication failed before a recoverable branch was pushed; retrying assessment.')
+        return False
+    comparison = gh.api(f'compare/main...{quote(previous, safe="")}')
+    commits = comparison.get('commits', [])
+    files = comparison.get('files', [])
+    if (not commits or len(commits) != comparison.get('total_commits') or len(files) >= 300
+            or any((item.get('author') or {}).get('login') != BOT for item in commits)):
+        raise ValueError('Leased automation branch is not a complete bot-authored update')
+    check_paths([item['filename'] for item in files])
+    closures = {int(number) for commit in commits
+                for number in re.findall(
+                    r'(?im)^Fixes #(\d+)\s*$',
+                    ((commit.get('commit') or {}).get('message') or ''))}
+    verify_issue_attempts(gh, records, candidates)
+    current_records = [issue_record_for(records, candidate) for candidate in candidates]
+    issues = {record['number'] for record in current_records
+              if (record and record.get('status') == 'building'
+                  and record.get('decision') == 'accept'
+                  and isinstance(record.get('number'), int)
+                  and not isinstance(record.get('number'), bool))}
+    if len(issues) != len(candidates) or issues != closures:
+        raise ValueError('Recovered candidate issue changed or closed during publication recovery')
+    refs = gh.api(f'git/matching-refs/heads/{BRANCH}')
+    current = next((item['object']['sha'] for item in refs
+                    if item['ref'] == f'refs/heads/{BRANCH}'), '')
+    if current != previous:
+        raise ValueError('Automation branch changed during publication recovery')
+    verify_issue_attempts(gh, records, candidates)
+    report = {'summary': 'Recovered previously assessed changes after publication failed.',
+              'recipes': [{'name': candidate['name'], 'decision': 'accept',
+                           'reason': 'Accepted and validated before branch publication.'}
+                          for candidate in candidates]}
+    state = {'attempts': max(issue_record_for(records, item)['attempts'] for item in candidates),
+             'batch': hashlib.sha256(json.dumps(candidates, sort_keys=True).encode()).hexdigest(),
+             'candidates': candidates, 'candidate_issues': records, 'report': report,
+             'issue_closures': sorted(issues), 'feedback_digest': '', 'reviewed_head': '',
+             'status': 'building'}
+    try:
+        pr = gh.api('pulls', {'title': TITLE, 'head': BRANCH, 'base': 'main',
+                              'draft': True, 'body': pr_body(state)})
+        if (not trusted_pr(pr, gh.repository) or pr.get('state') != 'open'
+                or pr.get('head', {}).get('sha') != previous):
+            raise ValueError('Recovered PR does not match the leased automation branch')
+        dispatch_catalog(repo, gh, pr, state)
+    except Exception as error:
+        detail = str(getattr(error, 'output', None) or error)[-20000:]
+        for candidate in candidates:
+            record = issue_record_for(records, candidate)
+            if record.get('status') != 'closed':
+                try:
+                    set_issue_status(gh, record, 'building', failure=detail, expected=record)
+                except Exception:
+                    pass
+        raise
+    summary(f"Recovered assessed branch as batch PR {pr['html_url']}.")
+    return True
+
 
 def prepare(repo, gh, event, output, evaluation=False, package=None):
     output = Path(output)
@@ -906,6 +1008,8 @@ def prepare(repo, gh, event, output, evaluation=False, package=None):
             candidates = frozen
             new_batch = False
         else:
+            if recover_orphaned_publication(repo, gh, records, discovered):
+                return False
             candidates = []
             for candidate in discovered:
                 record = issue_record_for(records, candidate)
@@ -934,10 +1038,6 @@ def prepare(repo, gh, event, output, evaluation=False, package=None):
         for candidate in candidates:
             record = issue_record_for(records, candidate)
             if not record or record.get('status') in ('closed', 'rejected', 'blocked'):
-                continue
-            if record.get('attempts', 0) >= MAX_REPAIR_ATTEMPTS:
-                set_issue_status(gh, record, 'blocked',
-                                 failure='Agent session budget exhausted; maintainer intervention required.')
                 continue
             active.append(candidate)
         candidates = active
@@ -1132,7 +1232,9 @@ def finish(repo, gh, plan_path, workspace, report_path, dry_run=False, output=No
     if not plan.get('evaluation') and branch_lease(gh, pr) != previous:
         raise ValueError('Branch lease changed during agent work')
     if not evaluation:
-        verify_issue_attempts(gh, state.get('candidate_issues', []), plan['candidates'])
+        verify_issue_attempts(
+            gh, state.get('candidate_issues', []),
+            state.get('candidates', plan['candidates']))
     workspace = workspace_path(repo, workspace)
     try:
         if evaluation:
@@ -1147,7 +1249,9 @@ def finish(repo, gh, plan_path, workspace, report_path, dry_run=False, output=No
         paths = validate_workspace(repo, workspace, report, plan['candidates'])
         import_workspace(repo, workspace, paths, report)
         manual_workflow_updates(repo, base, report)
-        if not evaluation and state.get('retry_candidates'):
+        frozen_names = {item['name'] for item in state.get('candidates', [])}
+        target_names = {item['name'] for item in plan['candidates']}
+        if not evaluation and target_names < frozen_names:
             report = merge_retry_report(state, report, plan['candidates'])
         restore_rejected(repo, base, report)
         check_paths(changed_paths(repo), generated=True)
@@ -1242,19 +1346,34 @@ def finish(repo, gh, plan_path, workspace, report_path, dry_run=False, output=No
         gh.api(f"pulls/{pr['number']}", {'state': 'closed', 'body': pr_body(state)}, method='PATCH')
         summary(f"Closed empty automation PR {pr['number']}; rejected issues remain open.")
         return
-    if changed or sha != previous:
-        if pr and not pr.get('draft'):
-            node = pr['node_id']
-            run(['gh', 'api', 'graphql', '-f', 'query=mutation($id:ID!){convertPullRequestToDraft(input:{pullRequestId:$id}){pullRequest{id}}}', '-f', f'id={node}'])
-        push(repo, gh, previous)
-        state.pop('build_url', None)
-        state.pop('reviewed_head', None)
-    if pr:
-        pr = gh.api(f"pulls/{pr['number']}", {'body': pr_body(state)}, method='PATCH')
-    else:
-        pr = gh.api('pulls', {'title': TITLE, 'head': BRANCH, 'base': 'main', 'draft': True, 'body': pr_body(state)})
-    if changed or state.get('dispatched_head') != sha:
-        dispatch_catalog(repo, gh, pr, state)
+    try:
+        if changed or sha != previous:
+            if pr and not pr.get('draft'):
+                node = pr['node_id']
+                run(['gh', 'api', 'graphql', '-f',
+                     'query=mutation($id:ID!){convertPullRequestToDraft(input:{pullRequestId:$id}){pullRequest{id}}}',
+                     '-f', f'id={node}'])
+            push(repo, gh, previous)
+            state.pop('build_url', None)
+            state.pop('reviewed_head', None)
+        if pr:
+            pr = gh.api(f"pulls/{pr['number']}", {'body': pr_body(state)}, method='PATCH')
+        else:
+            pr = gh.api('pulls', {'title': TITLE, 'head': BRANCH, 'base': 'main',
+                                  'draft': True, 'body': pr_body(state)})
+        if changed or state.get('dispatched_head') != sha:
+            dispatch_catalog(repo, gh, pr, state)
+    except Exception as error:
+        detail = str(getattr(error, 'output', None) or error)[-20000:]
+        for candidate in plan['candidates']:
+            record = issue_record_for(records, candidate)
+            if record and record.get('status') == 'building':
+                try:
+                    set_issue_status(gh, record, 'building', failure=detail, expected=record)
+                except Exception:
+                    pass
+        state['candidate_issues'] = records
+        raise
     summary(f"Batch PR: {pr['html_url']}. Catalog verification pending; human approval required.")
 
 
