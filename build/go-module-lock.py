@@ -34,6 +34,23 @@ def sha256_file(path):
     return digest.hexdigest()
 
 
+def proxy_record(path, download_root):
+    try:
+        resolved = path.resolve(strict=True)
+        relative = resolved.relative_to(download_root)
+    except (OSError, ValueError) as error:
+        raise ValueError("Go emitted a path outside module cache") from error
+    if path.is_symlink() or not resolved.is_file():
+        raise ValueError("Go module cache entry must be a regular file")
+    destination = relative.as_posix()
+    url = PROXY + destination
+    suffix = resolved.suffix
+    if suffix not in (".info", ".mod", ".zip"):
+        raise ValueError("unexpected Go proxy file type")
+    name = hashlib.sha256(url.encode()).hexdigest()[:24] + suffix
+    return name, destination, url, sha256_file(resolved)
+
+
 def stage_file(path, data):
     descriptor, name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     staged = Path(name)
@@ -109,6 +126,7 @@ def main():
     env = {
         **os.environ,
         "GOMODCACHE": str(module_cache),
+        "GOFLAGS": "",
         "GOCACHE": str(build_cache),
         "GOPROXY": PROXY.removesuffix("/"),
         "GOSUMDB": "sum.golang.org",
@@ -127,6 +145,15 @@ def main():
 
     download_root = (module_cache / "cache/download").resolve()
     generated = {}
+
+    def add(path):
+        item = proxy_record(path, download_root)
+        if item[1].startswith("golang.org/toolchain/@v/"):
+            return
+        previous = generated.setdefault(item[1], item)
+        if previous != item:
+            raise ValueError("conflicting Go module cache entries")
+
     for module in json_stream(result.stdout):
         if not isinstance(module, dict):
             raise ValueError("Go emitted a non-object module record")
@@ -134,26 +161,11 @@ def main():
             raise ValueError(f"Go module download failed: {module['Error']}")
         for key in ("Info", "GoMod", "Zip"):
             value = module.get(key)
-            if not value:
-                continue
-            path = Path(value)
-            try:
-                resolved = path.resolve(strict=True)
-                relative = resolved.relative_to(download_root)
-            except (OSError, ValueError) as error:
-                raise ValueError("Go emitted a path outside module cache") from error
-            if path.is_symlink() or not resolved.is_file():
-                raise ValueError("Go module cache entry must be a regular file")
-            destination = relative.as_posix()
-            url = PROXY + destination
-            suffix = resolved.suffix
-            if suffix not in (".info", ".mod", ".zip"):
-                raise ValueError("unexpected Go proxy file type")
-            name = hashlib.sha256(url.encode()).hexdigest()[:24] + suffix
-            item = (name, destination, url, sha256_file(resolved))
-            previous = generated.setdefault(destination, item)
-            if previous != item:
-                raise ValueError("conflicting Go module cache entries")
+            if value:
+                add(Path(value))
+    # Graph loading may fetch older .mod files omitted from the selected build list.
+    for path in download_root.rglob("*.mod"):
+        add(path)
 
     if not generated:
         raise ValueError("Go produced no module proxy inputs")

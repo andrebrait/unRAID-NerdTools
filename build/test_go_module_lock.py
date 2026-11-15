@@ -52,6 +52,7 @@ class GoModuleLockTests(unittest.TestCase):
         go.write_text("""#!/usr/bin/env python3
 import json, os
 from pathlib import Path
+assert os.environ['GOFLAGS'] == ''
 assert os.environ['GOPROXY'] == 'https://proxy.golang.org'
 assert os.environ['GOSUMDB'] == 'sum.golang.org'
 assert os.environ['GOTOOLCHAIN'] == 'auto'
@@ -70,6 +71,12 @@ for module, version, contents in [
         path.write_bytes(data)
         record[{'info':'Info', 'mod':'GoMod', 'zip':'Zip'}[suffix]] = str(path)
     records.append(record)
+extra = cache / 'example.com/transitive/@v/v1.0.0.mod'
+extra.parent.mkdir(parents=True)
+extra.write_bytes(b'module example.com/transitive\\n')
+toolchain = cache / 'golang.org/toolchain/@v/v0.0.1-go1.26.11.linux-amd64.mod'
+toolchain.parent.mkdir(parents=True)
+toolchain.write_bytes(b'module golang.org/toolchain\\n')
 print(''.join(json.dumps(record) for record in records))
 """)
         go.chmod(0o755)
@@ -100,8 +107,15 @@ print(''.join(json.dumps(record) for record in records))
         expected.append((other_name, "example.com/other/@v/v2.0.0.mod", other_url,
                          hashlib.sha256(b"module example.com/other\n").hexdigest()))
         self.assertFalse((self.recipe / other_name).exists())
+        transitive_url = "https://proxy.golang.org/example.com/transitive/@v/v1.0.0.mod"
+        transitive_name = hashlib.sha256(transitive_url.encode()).hexdigest()[:24] + ".mod"
+        expected.append((
+            transitive_name, "example.com/transitive/@v/v1.0.0.mod", transitive_url,
+            hashlib.sha256(b"module example.com/transitive\n").hexdigest()))
+        self.assertFalse((self.recipe / transitive_name).exists())
         self.assertEqual((self.recipe / "go-modules.tsv").read_text(),
                          "".join(f"{name}\t{destination}\n" for name, destination, _, _ in expected))
+        self.assertNotIn("golang.org/toolchain/@v/", (self.recipe / "go-modules.tsv").read_text())
         entry = json.loads(self.lock.read_text())[0]
         self.assertEqual(entry["inputs"], [
             *[{"url": url, "file": name, "sha256": digest}
@@ -118,6 +132,11 @@ print(''.join(json.dumps(record) for record in records))
 
     def test_relative_work_directory_is_resolved_for_go(self):
         result = self.run_helper(Path("relative-work"))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_inherited_goflags_cannot_select_an_alternate_module_file(self):
+        with mock.patch.dict(os.environ, {"GOFLAGS": "-modfile=/tmp/alternate.mod"}):
+            result = self.run_helper()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
