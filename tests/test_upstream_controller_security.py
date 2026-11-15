@@ -266,43 +266,153 @@ class ScratchPolicyTests(unittest.TestCase):
         entries = json.loads((self.repo / 'build/locks/slackware.json').read_text())
         self.assertEqual(entries[1]['recipe_sha256'], hashlib.sha256(b'dependency source build').hexdigest())
 
-    def test_invalid_report_and_failed_import_always_clean_scratch(self):
-        import shutil
-        from types import SimpleNamespace
-        (self.repo / 'build/README.md').write_text('trusted guide')
+    def test_finish_rejects_stale_plan_before_import_and_never_deletes_unsafe_workspace(self):
+        plan_path = Path(self.temp.name) / 'plan.json'
+        report_path = Path(self.temp.name) / 'report.json'
+        report_path.write_text(json.dumps(self.report))
+        pr = controller.ControllerTests.pr(self)
+        state = {'attempts': 1}
+        pr['body'] = self.updates.pr_body(state)
+        state = self.updates.read_state(pr)
         class Service(controller.GitHubFixture):
             def api(self, path, data=None, method=None):
+                if path == 'git/ref/heads/main':
+                    return {'object': {'sha': 'main'}}
                 if path.startswith('pulls?state=open'):
-                    return []
+                    return [self.pr]
                 return super().api(path, data, method)
+        plan = {'repository': 'owner/tools', 'main_sha': 'main', 'head_sha': pr['head']['sha'],
+                'pr_number': 12, 'state': state, 'candidates': self.candidates,
+                'previous': pr['head']['sha'], 'context': {'repository': 'owner/tools'}}
+        gh = Service(pr)
+        for changes, message in (({'repository': 'foreign/tools'}, 'repository'),
+                                 ({'main_sha': 'stale'}, 'main'),
+                                 ({'head_sha': 'stale'}, 'PR changed'),
+                                 ({'state': {'attempts': 0}}, 'state')):
+            plan_path.write_text(json.dumps(plan | changes))
+            with mock.patch.object(self.updates, 'import_workspace') as importer:
+                with self.assertRaisesRegex(ValueError, message):
+                    self.updates.finish(self.repo, gh, plan_path, self.repo, report_path)
+                importer.assert_not_called()
+            self.assertTrue(self.repo.exists())
+        plan_path.write_text(json.dumps(plan))
+        for unsafe in (self.repo, Path(self.temp.name)):
+            with self.assertRaisesRegex(ValueError, 'external temporary'):
+                self.updates.finish(self.repo, gh, plan_path, unsafe, report_path)
+            self.assertTrue(self.repo.exists())
+
+    def test_native_failure_persists_one_attempt_for_next_schedule_and_cleans_owned_scratch(self):
+        pr = controller.ControllerTests.pr(self)
+        state = {'attempts': 1}
+        pr['body'] = self.updates.pr_body(state)
+        state = self.updates.read_state(pr)
+        class Service(controller.GitHubFixture):
+            def api(self, path, data=None, method=None):
+                if path == 'git/ref/heads/main':
+                    return {'object': {'sha': 'main'}}
+                if path == 'pulls/12' and data:
+                    self.pr.update(data)
+                return super().api(path, data, method)
+        gh = Service(pr)
+        plan = {'repository': gh.repository, 'main_sha': 'main', 'head_sha': pr['head']['sha'],
+                'pr_number': 12, 'state': state, 'candidates': self.candidates,
+                'previous': pr['head']['sha'], 'context': {'repository': gh.repository}}
+        plan_path = Path(self.temp.name) / 'plan.json'
+        plan_path.write_text(json.dumps(plan))
+        report_path = Path(self.temp.name) / 'report.json'
+        report_path.write_text(json.dumps(self.report))
+        self.write_entry(version='2.0')
+        real_git = self.updates.git
         real_run = self.updates.run
-        def boundary(args, repo=None, input=None):
+        def run(args, repo=None, input=None):
+            if args[1:2] == ['build/native.py']:
+                raise failure
+            return real_run(args, repo, input)
+        def git(repo, *args):
+            return 'main' if args == ('rev-parse', 'origin/main') else real_git(repo, *args)
+        failure = subprocess.CalledProcessError(1, ['native.py'], output='source smoke drift')
+        with mock.patch.object(self.updates, 'prepare_branch'), mock.patch.object(
+                self.updates, 'git', side_effect=git), mock.patch.object(
+                self.updates, 'manual_workflow_updates'), mock.patch.object(
+                self.updates, 'restore_rejected'), mock.patch.object(
+                self.updates, 'run', side_effect=run):
+            with self.assertRaises(subprocess.CalledProcessError):
+                self.updates.finish(self.repo, gh, plan_path, self.scratch, report_path)
+        self.assertFalse(self.scratch.exists())
+        self.assertEqual(self.updates.read_state(gh.pr)['attempts'], 1)
+        self.assertEqual(self.updates.read_state(gh.pr)['validation_error'], 'source smoke drift')
+        self.assertEqual(gh.dispatched, [])
+
+    def test_evaluation_keeps_unmerged_source_and_patch_uses_that_revision(self):
+        import shutil
+        import tarfile
+        def git(*args):
+            return subprocess.check_output(['git', '-C', str(self.repo), *args], text=True).strip()
+        main = git('rev-parse', 'HEAD')
+        git('update-ref', 'refs/remotes/origin/main', main)
+        git('checkout', '-qb', 'evaluation')
+        (self.repo / 'build/recipes/alpha/slack-desc').unlink()
+        (self.repo / 'build/README.md').write_text('unmerged evaluation guide')
+        (self.repo / 'scripts').mkdir()
+        helper = self.repo / 'scripts/evaluation-helper.py'
+        helper.write_text('trusted unmerged helper')
+        (self.repo / '.github/workflows').mkdir(parents=True)
+        (self.repo / '.github/workflows/evaluate.yml').write_text('trusted evaluation workflow')
+        git('add', '.')
+        git('-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'evaluation helpers')
+        source = git('rev-parse', 'HEAD')
+        gh = controller.GitHubFixture(None)
+        gh.api = lambda *args, **kwargs: self.fail('Evaluation must not mutate or read PR metadata')
+        output = Path(self.temp.name) / 'handoff'
+        real_run = self.updates.run
+        def run(args, repo=None, input=None):
             if args[1:2] == ['scripts/check-upstream-versions.py']:
                 return json.dumps(self.candidates)
+            if args[1:2] in (['build/native.py'], ['scripts/package-change-workflows.py']):
+                return ''
             return real_run(args, repo, input)
-        for invalid_report in (True, False):
-            attempts = []
-            def agent_run(repo, context):
-                attempts.append((context['attempt'], context['feedback']))
-                if not self.scratch.exists():
-                    shutil.copytree(self.repo, self.scratch, symlinks=True, ignore=shutil.ignore_patterns('.git'))
-                self.write_entry(version='2.0')
-                report = self.report | {'workspace': str(self.scratch)}
-                if invalid_report:
-                    report['recipes'] = []
-                return report
-            agent = SimpleNamespace(run_agent=agent_run)
-            with mock.patch.object(self.updates, 'run', side_effect=boundary), mock.patch.object(
-                    self.updates, 'prepare_branch'), mock.patch.object(self.updates, 'branch_lease', return_value=''), mock.patch.object(
-                    self.updates, 'load_script', return_value=agent), mock.patch.object(
-                    self.updates, 'import_workspace', side_effect=ValueError('import failed')), mock.patch.dict(
-                    'os.environ', {'GITHUB_EVENT_NAME': 'schedule'}), self.assertRaises(ValueError):
-                self.updates.update(self.repo, Service(None), {})
-            self.assertFalse(self.scratch.exists())
-            self.assertEqual(json.loads((self.repo / 'build/locks/slackware.json').read_text())[0]['version'], '1.0')
-            self.assertEqual(len(attempts), 3 if invalid_report else 1)
-            if invalid_report:
-                self.assertIn('workspace validation', attempts[1][1])
+        with mock.patch.object(self.updates, 'run', side_effect=run), mock.patch.object(
+                self.updates, 'prepare_branch') as branch:
+            self.assertTrue(self.updates.prepare(self.repo, gh, {}, output, evaluation=True, package='alpha'))
+            self.assertEqual(git('rev-parse', 'HEAD'), source)
+            self.assertEqual(helper.read_text(), 'trusted unmerged helper')
+            shutil.rmtree(self.scratch)
+            self.scratch.mkdir()
+            with tarfile.open(output / 'workspace.tar') as archive:
+                archive.extractall(self.scratch, filter='data')
+            self.assertEqual((self.scratch / 'build/README.md').read_text(), 'unmerged evaluation guide')
+            self.write_entry(version='2.0')
+            report = output / 'report.json'
+            report.write_text(json.dumps(self.report))
+            result = Path(self.temp.name) / 'result'
+            plan_path = output / 'plan.json'
+            plan = json.loads(plan_path.read_text())
+            plan_path.write_text(json.dumps(plan | {'source_sha': main}))
+            with self.assertRaisesRegex(ValueError, 'Stale evaluation source'):
+                self.updates.finish(self.repo, gh, plan_path, self.scratch, report, dry_run=True)
+            self.assertTrue(self.scratch.exists())
+            plan_path.write_text(json.dumps(plan))
+            with mock.patch.object(self.updates, 'manual_workflow_updates') as manual, mock.patch.object(
+                    self.updates, 'restore_rejected') as restore, mock.patch.object(
+                    self.updates, 'check_generated') as generated:
+                self.updates.finish(self.repo, gh, output / 'plan.json', self.scratch, report,
+                                    dry_run=True, output=result)
+                manual.assert_called_once_with(self.repo, source, self.report)
+                restore.assert_called_once_with(self.repo, source, self.report)
+                generated.assert_called_once_with(self.repo, source)
+            branch.assert_not_called()
+        self.assertEqual(git('rev-parse', 'HEAD'), source)
+        self.assertTrue(helper.exists())
+        self.assertEqual(gh.dispatched, [])
+        git('restore', '--staged', '.')
+        git('restore', '--worktree', '.')
+        git('apply', '--check', str(result / 'changes.patch'))
+
+    def test_controller_has_no_paid_process_or_provider_credentials(self):
+        source = controller.SCRIPT.read_text()
+        for forbidden in ('run_agent', 'upstream-agent.py', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY',
+                          'codex exec', 'claude -'):
+            self.assertNotIn(forbidden, source)
 
 
 class DurableApprovalTests(unittest.TestCase):

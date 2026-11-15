@@ -1,0 +1,21 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "summary": {"type": "string"},
+    "recipes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {"type": "string"},
+          "decision": {"type": "string", "enum": ["accept", "reject"]},
+          "reason": {"type": "string"}
+        },
+        "required": ["name", "decision", "reason"]
+      }
+    }
+  },
+  "required": ["summary", "recipes"]
+}

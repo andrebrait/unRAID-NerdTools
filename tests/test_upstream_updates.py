@@ -107,6 +107,42 @@ class ControllerTests(unittest.TestCase):
                                   'build/recipe-files.json'])
 
 
+    def test_prepare_empty_discovery_never_prepares_or_launches_provider(self):
+        updates = self.updates
+        gh = GitHubFixture(None)
+        gh.api = lambda path: []
+        with tempfile.TemporaryDirectory() as folder, patch.object(
+                updates, 'run', return_value='[]') as run, patch.object(updates, 'prepare_branch') as branch:
+            self.assertFalse(updates.prepare(Path(folder), gh, {}, Path(folder) / 'handoff'))
+            self.assertEqual(run.call_args.args[0][1], 'scripts/check-upstream-versions.py')
+            self.assertEqual(run.call_count, 1)
+            branch.assert_not_called()
+            self.assertEqual(json.loads((Path(folder) / 'handoff/plan.json').read_text()), {'needed': False})
+
+    def test_report_rejects_non_schema_and_empty_reports(self):
+        for report in ({}, [], {'summary': '', 'recipes': [], 'workspace': '/tmp/attack'},
+                       {'summary': 'Update vim', 'recipes': [
+                           {'name': 'vim', 'decision': 'accept', 'reason': 'Verified', 'extra': {'untrusted': True}}]}):
+            with self.assertRaises(ValueError):
+                self.updates.validate_report(report, [{'name': 'vim'}])
+
+    def test_evaluation_filters_discovery_without_reading_or_editing_pr_state(self):
+        gh = GitHubFixture(None)
+        gh.api = lambda *args, **kwargs: self.fail('Evaluation must not access PR metadata')
+        with tempfile.TemporaryDirectory() as folder, patch.object(
+                self.updates, 'run', return_value=json.dumps([{'name': 'sshfs', 'upstream': '2'}])), patch.object(
+                self.updates, 'git', side_effect=lambda repo, *args: (
+                    'source' if args == ('rev-parse', 'HEAD') else 'main' if args[0] == 'rev-parse' else '')), patch.object(
+                self.updates, 'prepare_branch') as branch:
+            output = Path(folder) / 'handoff'
+            self.assertTrue(self.updates.prepare(Path(folder), gh, {}, output, evaluation=True, package='sshfs'))
+            plan = json.loads((output / 'plan.json').read_text())
+            self.assertTrue(plan['evaluation'])
+            self.assertEqual(plan['source_sha'], 'source')
+            branch.assert_not_called()
+            self.assertEqual(plan['pr_number'], None)
+            self.assertEqual([item['name'] for item in plan['candidates']], ['sshfs'])
+
 class GitHubFixture:
     repository = 'owner/tools'
 
@@ -220,22 +256,7 @@ class BatchLifecycleTests(unittest.TestCase):
             git('init', '-q', '-b', 'main')
             git('config', 'user.name', 'Test')
             git('config', 'user.email', 'test@example.invalid')
-            # Only the external model/discovery/GitHub boundaries are fixtures. Validation,
-            # inventory generation, commits, remote pushes and branch selection are real.
-            (root / 'scripts/upstream-agent.py').write_text(
-                'import json, shutil, tempfile\n'
-                'from pathlib import Path\n'
-                'def run_agent(repo, context):\n'
-                '    workspace = Path(tempfile.mkdtemp())\n'
-                '    shutil.copytree(repo, workspace, dirs_exist_ok=True, symlinks=True, ignore=shutil.ignore_patterns(".git", "__pycache__"))\n'
-                '    path = workspace / "build/locks/slackware.json"\n'
-                '    entries = json.loads(path.read_text())\n'
-                '    candidate = context[\"candidates\"][0]\n'
-                '    for entry in entries:\n'
-                '        if entry[\"name\"] == \"vim\": entry[\"version\"] = candidate[\"upstream\"]\n'
-                '    path.write_text(json.dumps(entries, indent=2) + \"\\n\")\n'
-                '    return {"workspace":str(workspace), "summary":"Reviewed source", "recipes":[{"name":"vim",'
-                '"decision":"accept","reason":"Pinned licensed source"}]}\n')
+            # Discovery/GitHub are fixtures; handoff, validation and publication are real.
             git('add', '.')
             git('commit', '-qm', 'baseline')
             remote = Path(folder) / 'remote.git'
@@ -253,6 +274,8 @@ class BatchLifecycleTests(unittest.TestCase):
                     self.close_on_get = False
 
                 def api(self, path, data=None, method=None):
+                    if path == 'git/ref/heads/main':
+                        return {'object': {'sha': git('rev-parse', 'origin/main')}}
                     if path.startswith('pulls?state=open'):
                         return [self.pr] if self.pr else []
                     if path.startswith('git/matching-refs'):
@@ -291,7 +314,41 @@ class BatchLifecycleTests(unittest.TestCase):
                     updates, 'push', side_effect=lambda repo, service, previous: git(
                         'push', 'origin', 'HEAD:refs/heads/automation/upstream-recipes')), patch.dict(
                             'os.environ', {'GITHUB_EVENT_NAME': 'schedule', 'UPSTREAM_REVIEW_BOTS': ''}):
-                updates.update(root, gh, {})
+                output = Path(folder) / 'handoff'
+                self.assertTrue(updates.prepare(root, gh, {}, output))
+                plan = json.loads((output / 'plan.json').read_text())
+                self.assertEqual(plan['head_sha'], '')
+                self.assertEqual(plan['state']['attempts'], 1)
+                self.assertNotIn('guide', json.loads((output / 'context.json').read_text()))
+                self.assertIn('build/README.md', (output / 'prompt.md').read_text())
+                import tarfile
+                self.assertEqual(plan['context']['repository'], gh.repository)
+                workspace = Path(folder) / 'workspace'
+                workspace.mkdir()
+                with tarfile.open(output / 'workspace.tar') as archive:
+                    self.assertTrue(all(item.isfile() for item in archive.getmembers()))
+                    archive.extractall(workspace, filter='data')
+                lock = workspace / 'build/locks/slackware.json'
+                entries = json.loads(lock.read_text())
+                next(item for item in entries if item['name'] == 'vim')['version'] = '99.0'
+                lock.write_text(json.dumps(entries, indent=2) + '\n')
+                report = output / 'report.json'
+                report.write_text(json.dumps({'summary': 'Reviewed source', 'recipes': [
+                    {'name': 'vim', 'decision': 'accept', 'reason': 'Pinned licensed source'}]}))
+                evaluation = Path(folder) / 'evaluation'
+                updates.finish(root, gh, output / 'plan.json', workspace, report,
+                               dry_run=True, output=evaluation)
+                self.assertIsNone(gh.pr)
+                self.assertEqual(gh.dispatched, [])
+                self.assertIn('slackware.json', (evaluation / 'changes.patch').read_text())
+                self.assertEqual(json.loads((evaluation / 'report.json').read_text())['recipes'][0]['decision'], 'accept')
+                git('restore', '--staged', '.')
+                git('restore', '--worktree', '.')
+                workspace.mkdir()
+                with tarfile.open(output / 'workspace.tar') as archive:
+                    archive.extractall(workspace, filter='data')
+                lock.write_text(json.dumps(entries, indent=2) + '\n')
+                updates.finish(root, gh, output / 'plan.json', workspace, report)
                 sha = git('rev-parse', 'HEAD')
                 self.assertEqual(git('rev-parse', 'refs/remotes/origin/automation/upstream-recipes'), sha)
                 self.assertTrue(gh.pr['draft'])
@@ -303,24 +360,42 @@ class BatchLifecycleTests(unittest.TestCase):
                               'conclusion': 'success', 'html_url': 'https://example.invalid/build/9',
                               'display_title': f"Unraid compatibility {baseline['version']} {baseline['image']['sha256']} publish=false"}]
                 git('checkout', '-q', 'main')
-                updates.update(root, gh, {})
+                gh.builds[0]['status'] = 'in_progress'
+                self.assertFalse(updates.prepare(root, gh, {}, output))
+                self.assertTrue(gh.pr['draft'])
+                self.assertEqual(updates.read_state(gh.pr)['attempts'], 1)
+                gh.builds[0]['status'] = 'completed'
+                with patch.dict('os.environ', {'GITHUB_EVENT_NAME': 'workflow_run'}):
+                    self.assertFalse(updates.prepare(root, gh, {'workflow_run': {'head_sha': 'stale'}}, output))
+                self.assertFalse(updates.prepare(root, gh, {}, output))
                 self.assertFalse(gh.pr['draft'])
                 self.assertEqual(len(gh.dispatched), 1)
                 self.assertIn('https://example.invalid/build/9', gh.pr['body'])
                 self.assertIn('Unverified, not requested', gh.pr['body'])
+                saved_body = gh.pr['body']
+                retry_state = updates.read_state(gh.pr)
+                retry_state['validation_error'] = 'native source smoke failed'
+                gh.pr['body'] = updates.pr_body(retry_state)
+                self.assertTrue(updates.prepare(root, gh, {}, output))
+                self.assertEqual(json.loads((output / 'context.json').read_text())['validation_error'],
+                                 'native source smoke failed')
+                self.assertEqual(updates.read_state(gh.pr)['attempts'], 2)
+                gh.pr['body'] = saved_body
+                git('checkout', '-q', 'main')
                 state = updates.read_state(gh.pr)
                 state['attempts'] = 3
                 gh.pr['body'] = updates.pr_body(state)
                 gh.builds[0]['conclusion'] = 'failure'
-                updates.update(root, gh, {})
+                self.assertFalse(updates.prepare(root, gh, {}, output))
                 self.assertEqual(len(gh.dispatched), 1)
                 self.assertEqual(git('branch', '--show-current'), 'main')
                 self.assertEqual(updates.read_state(gh.pr)['attempts'], 3)
                 candidate['upstream'] = '99.1'
                 gh.builds[0]['conclusion'] = 'success'
                 gh.close_on_get = True
+                self.assertTrue(updates.prepare(root, gh, {}, output))
                 with self.assertRaisesRegex(ValueError, 'PR changed or closed'):
-                    updates.update(root, gh, {})
+                    updates.finish(root, gh, output / 'plan.json', workspace, report)
                 self.assertEqual(git('rev-parse', 'refs/remotes/origin/automation/upstream-recipes'), sha)
 
 

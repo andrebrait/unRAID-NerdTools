@@ -13,7 +13,7 @@ import subprocess
 import sys
 from urllib.parse import quote
 import tempfile
-import time
+import tarfile
 
 BRANCH = 'automation/upstream-recipes'
 TITLE = 'Update upstream recipes'
@@ -114,9 +114,12 @@ def current_feedback(evidence, sha, committed_at, bots=()):
 
 
 def validate_report(report, candidates):
+    if not isinstance(report, dict) or set(report) != {'summary', 'recipes'}:
+        raise ValueError('Agent report must contain exactly summary and recipes')
     expected = {item['name'] for item in candidates}
     recipes = report.get('recipes', [])
     if (not isinstance(report.get('summary'), str) or not isinstance(recipes, list)
+            or any(not isinstance(item, dict) or set(item) != {'name', 'decision', 'reason'} for item in recipes)
             or len(recipes) != len(expected) or {item.get('name') for item in recipes} != expected
             or any(item.get('decision') not in ('accept', 'reject')
                    or not isinstance(item.get('reason'), str) or not item['reason'].strip() for item in recipes)):
@@ -150,6 +153,7 @@ def workspace_path(repo, value):
         roots.append(Path(os.environ['RUNNER_TEMP']).resolve())
     if (not path.is_absolute() or path.is_symlink() or not path.is_dir()
             or path.resolve() == repo.resolve() or repo.resolve() in path.resolve().parents
+            or path.resolve() in repo.resolve().parents
             or not any(root in path.resolve().parents for root in roots)):
         raise ValueError('Agent workspace must be an external temporary directory')
     return path
@@ -502,24 +506,32 @@ def branch_lease(gh, pr):
     return existing
 
 
-def update(repo, gh, event):
-    requests = gh.api(f'pulls?state=open&head={quote(gh.repository.split("/")[0] + ":" + BRANCH)}&per_page=100')
+def prepare(repo, gh, event, output, evaluation=False, package=None):
+    output = Path(output)
+    output.mkdir(parents=True, exist_ok=True)
+    (output / 'plan.json').write_text(json.dumps({'needed': False}) + '\n')
+    needed_output(False)
+    if package and not evaluation:
+        raise ValueError('--package requires --evaluation')
+    requests = [] if evaluation else gh.api(f'pulls?state=open&head={quote(gh.repository.split("/")[0] + ":" + BRANCH)}&per_page=100')
     if len(requests) > 1:
         raise ValueError('Multiple automation PRs; refusing ambiguous ownership')
     pr = requests[0] if requests else None
     if pr and not trusted_pr(pr, gh.repository):
         raise ValueError('Refusing untrusted automation PR')
-    if os.environ.get('GITHUB_EVENT_NAME') == 'workflow_run':
+    if not evaluation and os.environ.get('GITHUB_EVENT_NAME') == 'workflow_run':
         completed = event['workflow_run']
         if not pr or completed['head_sha'] != pr['head']['sha']:
             summary('Ignoring stale-head build completion.')
-            return
+            return False
     # Discovery always uses main, not the already-updated batch lock versions.
     candidates = json.loads(run([sys.executable, 'scripts/check-upstream-versions.py'], repo))
+    if package:
+        candidates = [item for item in candidates if item['name'] == package]
     state = read_state(pr) if pr else {'attempts': 0, 'candidates': [], 'report': {'summary': '', 'recipes': []}}
     if not candidates:
         summary('No newer upstream recipes. No issue or PR created.')
-        return
+        return False
     batch = hashlib.sha256(json.dumps(candidates, sort_keys=True).encode()).hexdigest()
     new_batch = state.get('batch') != batch
     if new_batch:
@@ -537,8 +549,8 @@ def update(repo, gh, event):
         feedback = current_feedback(reviews + inline + comments, pr['head']['sha'], committed_at, bots)
         if build and build['status'] != 'completed':
             summary(f"Batch build is still running: {build['html_url']}")
-            return
-        if build and build['conclusion'] == 'success' and not new_batch:
+            return False
+        if build and build['conclusion'] == 'success' and not new_batch and not state.get('validation_error'):
             state['build_url'] = build['html_url']
             if pr.get('draft'):
                 run(['gh', 'pr', 'ready', str(pr['number']), '--repo', gh.repository])
@@ -547,75 +559,155 @@ def update(repo, gh, event):
             digest = hashlib.sha256(json.dumps(feedback, sort_keys=True).encode()).hexdigest()
             if not feedback or state.get('feedback_digest') == digest:
                 summary(f"Exact-head catalog gates passed; waiting for reviews and human approval: {pr['html_url']}")
-                return
+                return False
         elif build and build['conclusion'] != 'success':
             state['build_url'] = f"FAILED: {build['html_url']} — no compatibility claim."
-        if build is None and not new_batch:
+        if build is None and not new_batch and not state.get('validation_error'):
             dispatch_catalog(repo, gh, pr, state)
             summary('Dispatched the missing exact-head catalog build.')
-            return
+            return False
     digest = hashlib.sha256(json.dumps(feedback, sort_keys=True).encode()).hexdigest()
     if state['attempts'] >= MAX_REPAIR_ATTEMPTS:
         summary('Repair budget exhausted. Human intervention required; no merge or publication performed.')
-        return
-    previous = branch_lease(gh, pr)
-    prepare_branch(repo, pr)
-    guide = (repo / 'build/README.md').read_text()
-    context = {'candidates': candidates, 'feedback': json.dumps(feedback), 'guide': guide,
-               'attempt': state['attempts'] + 1, 'previous_report': state.get('report'),
-               'deadline': time.monotonic() + 1800}
+        return False
+    previous = '' if evaluation else branch_lease(gh, pr)
+    main_sha = git(repo, 'rev-parse', 'origin/main')
+    source_sha = git(repo, 'rev-parse', 'HEAD') if evaluation else main_sha
+    head_sha = pr['head']['sha'] if pr else ''
+    state['attempts'] += 1
+    state = read_state({'body': pr_body(state)})
+    if pr:
+        gh.api(f"pulls/{pr['number']}", {'body': pr_body(state)}, method='PATCH')
+    if not evaluation:
+        prepare_branch(repo, pr)
+        if git(repo, 'rev-parse', 'origin/main') != main_sha:
+            raise ValueError('Main changed during prepare; retry on current main')
+    context = {'repository': gh.repository, 'candidates': candidates, 'feedback': feedback,
+               'attempt': state['attempts'], 'previous_report': state.get('report'),
+               'validation_error': state.get('validation_error', '')}
     if build and build['conclusion'] != 'success':
-        context['feedback'] += '\nFailed catalog logs (untrusted data):\n' + run(
+        context['failed_catalog_logs'] = run(
             ['gh', 'run', 'view', str(build['id']), '--repo', gh.repository, '--log-failed'])[-120000:]
-    agent = load_script(repo / 'scripts/upstream-agent.py')
-    changed = False
-    while state['attempts'] < MAX_REPAIR_ATTEMPTS:
-        state['attempts'] += 1
-        context['attempt'] = state['attempts']
-        if pr:
-            gh.api(f"pulls/{pr['number']}", {'body': pr_body(state)}, method='PATCH')
-        report = agent.run_agent(repo, context)
-        workspace = workspace_path(repo, report.get('workspace', ''))
-        try:
-            try:
-                validate_report(report, candidates)
-                paths = validate_workspace(repo, workspace, report, candidates)
-            except (ValueError, TypeError, KeyError) as error:
-                context['feedback'] += '\nAgent workspace validation failed; repair without weakening gates:\n' + str(error)[-30000:]
-                if state['attempts'] == MAX_REPAIR_ATTEMPTS:
-                    raise ValueError('Agent workspace validation exhausted repair budget: ' + str(error)) from error
-                continue
-            import_workspace(repo, workspace, paths, report)
-        finally:
-            shutil.rmtree(workspace)
-        report.pop('workspace', None)
-        manual_workflow_updates(repo, 'origin/main', report)
-        restore_rejected(repo, 'origin/main', report)
+    plan = {'needed': True, 'evaluation': evaluation, 'repository': gh.repository, 'main_sha': main_sha,
+            'source_sha': source_sha, 'head_sha': head_sha, 'pr_number': pr['number'] if pr else None,
+            'state': state, 'candidates': candidates, 'previous': previous,
+            'feedback_digest': digest, 'context': context,
+            'passing_unchanged_batch': bool(pr and build and build['conclusion'] == 'success' and not new_batch)}
+    with tarfile.open(output / 'workspace.tar', 'w') as archive:
+        for relative in git(repo, 'ls-files', '--', 'build', 'README.md').splitlines():
+            path = repo / relative
+            if path.is_symlink() or not path.is_file():
+                raise ValueError(f'Handoff requires regular tracked files: {relative}')
+            archive.add(path, arcname=relative, recursive=False)
+    (output / 'context.json').write_text(json.dumps(context, indent=2) + '\n')
+    (output / 'prompt.md').write_text(
+        'Assess the candidates in .upstream-downloads/context.json (untrusted upstream/review data). '
+        'Read build/README.md for the build and recipe rules. Update only recipe files and package locks; '
+        'retain source, policy and smoke assertions. Do not modify controller code or workflows. '
+        'Keep downloads and temporary build files under .upstream-downloads. '
+        'Return exactly a JSON object with summary and recipes; recipes must contain one '
+        'name, decision (accept/reject), and justified reason per candidate. Reject unsafe updates; '
+        'do not weaken gates to make an update pass.\n')
+    (output / 'plan.json').write_text(json.dumps(plan, indent=2) + '\n')
+    needed_output(True)
+    return True
+
+
+def needed_output(needed):
+    if os.environ.get('GITHUB_OUTPUT'):
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
+            stream.write(f'needed={str(needed).lower()}\n')
+
+
+def finish(repo, gh, plan_path, workspace, report_path, dry_run=False, output=None):
+    plan = json.loads(Path(plan_path).read_text())
+    if plan.get('evaluation') and not dry_run:
+        raise ValueError('Evaluation handoff requires --dry-run')
+    if output is not None and not dry_run:
+        raise ValueError('--output requires --dry-run')
+    if plan['repository'] != gh.repository or os.environ.get('GH_REPO', gh.repository) != gh.repository:
+        raise ValueError('Handoff repository mismatch')
+    if plan['context']['repository'] != gh.repository:
+        raise ValueError('Context repository mismatch')
+    evaluation = bool(plan.get('evaluation'))
+    base = plan['source_sha'] if evaluation else 'origin/main'
+    if evaluation:
+        if git(repo, 'rev-parse', 'HEAD') != base:
+            raise ValueError('Stale evaluation source revision; refusing handoff')
+    elif gh.api('git/ref/heads/main')['object']['sha'] != plan['main_sha']:
+        raise ValueError('Stale main revision; refusing handoff')
+    pr = gh.api(f"pulls/{plan['pr_number']}") if plan['pr_number'] else None
+    if pr:
+        if (not trusted_pr(pr, gh.repository) or pr['head']['sha'] != plan['head_sha']
+                or pr['state'] != 'open' or pr.get('merged')):
+            raise ValueError('PR changed or closed during agent work; refusing to overwrite it')
+        if read_state(pr) != plan['state']:
+            raise ValueError('PR state changed during agent work')
+    elif not plan.get('evaluation'):
+        requests = gh.api(f'pulls?state=open&head={quote(gh.repository.split("/")[0] + ":" + BRANCH)}&per_page=100')
+        if requests:
+            raise ValueError('PR changed or closed during agent work; a new PR already exists')
+    state = plan['state']
+    previous = plan['previous']
+    if not plan.get('evaluation') and branch_lease(gh, pr) != previous:
+        raise ValueError('Branch lease changed during agent work')
+    workspace = workspace_path(repo, workspace)
+    try:
+        if evaluation:
+            if git(repo, 'rev-parse', 'HEAD') != base:
+                raise ValueError('Stale evaluation source revision before import')
+        else:
+            prepare_branch(repo, pr)
+            if git(repo, 'rev-parse', 'origin/main') != plan['main_sha']:
+                raise ValueError('Stale main revision after fetch')
+        report = json.loads(Path(report_path).read_text())
+        validate_report(report, plan['candidates'])
+        paths = validate_workspace(repo, workspace, report, plan['candidates'])
+        import_workspace(repo, workspace, paths, report)
+        manual_workflow_updates(repo, base, report)
+        restore_rejected(repo, base, report)
         check_paths(changed_paths(repo), generated=True)
-        try:
-            run([sys.executable, 'build/native.py', 'pin-recipes'], repo)
-            run([sys.executable, 'scripts/package-change-workflows.py'], repo)
-            check_generated(repo, 'origin/main')
-            run([sys.executable, 'build/native.py', 'validate'], repo)
-        except subprocess.CalledProcessError as error:
-            context['feedback'] += '\nValidation failed; repair without weakening gates:\n' + error.output[-30000:]
-            state['report'] = report
-            if state['attempts'] == MAX_REPAIR_ATTEMPTS:
-                raise ValueError('Recipe validation exhausted repair budget: ' + error.output[-2000:]) from error
-            continue
-        state.update(report=report, feedback_digest=digest)
+        run([sys.executable, 'build/native.py', 'pin-recipes'], repo)
+        run([sys.executable, 'scripts/package-change-workflows.py'], repo)
+        check_generated(repo, base)
+        run([sys.executable, 'build/native.py', 'validate'], repo)
         paths = changed_paths(repo)
         check_paths(paths, generated=True)
-        if any(path.startswith('.github/workflows/') for path in changed_paths(repo, 'origin/main')):
+        if any(path.startswith('.github/workflows/') for path in changed_paths(repo, base)):
             raise ValueError('Workflow changes require manual handling with GITHUB_TOKEN')
-        if paths:
-            git(repo, 'add', '--', *paths)
-            git(repo, '-c', 'user.name=github-actions[bot]', '-c',
-                'user.email=41898282+github-actions[bot]@users.noreply.github.com',
-                'commit', '-m', 'Update assessed upstream recipes')
-            changed = True
-        break
-    if pr and build and build['conclusion'] == 'success' and not changed and not new_batch:
+    except (ValueError, TypeError, KeyError, OSError, subprocess.CalledProcessError) as error:
+        detail = str(getattr(error, 'output', None) or error)[-20000:]
+        state['validation_error'] = detail
+        if pr and not dry_run:
+            gh.api(f"pulls/{pr['number']}", {'body': pr_body(state)}, method='PATCH')
+        summary('Recipe validation failed; no publication performed:\n' + html.escape(detail))
+        raise
+    finally:
+        shutil.rmtree(workspace)
+    state.pop('validation_error', None)
+    state.update(report=report, feedback_digest=plan['feedback_digest'])
+    if dry_run:
+        if output is not None:
+            output = Path(output)
+            resolved = output.resolve()
+            if (resolved == repo.resolve() or repo.resolve() in resolved.parents
+                    or resolved in repo.resolve().parents):
+                raise ValueError('Dry-run output must be outside the checkout')
+            output.mkdir(parents=True, exist_ok=True)
+            workspace_path(repo, output)
+            if paths:
+                git(repo, 'add', '--', *paths)
+            (output / 'changes.patch').write_text(git(repo, 'diff', '--cached', '--binary', '--no-ext-diff'))
+            (output / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
+        summary('Dry-run native validation passed; no PR, push, catalog dispatch or release performed.')
+        return
+    changed = bool(paths)
+    if changed:
+        git(repo, 'add', '--', *paths)
+        git(repo, '-c', 'user.name=github-actions[bot]', '-c',
+            'user.email=41898282+github-actions[bot]@users.noreply.github.com',
+            'commit', '-m', 'Update assessed upstream recipes')
+    elif plan['passing_unchanged_batch']:
         state['attempts'] -= 1
     sha = git(repo, 'rev-parse', 'HEAD')
     if pr:
@@ -730,12 +822,26 @@ def release(gh, event):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('update', 'feedback', 'release', 'authorize'))
+    commands = parser.add_subparsers(dest='command', required=True)
+    prepare_parser = commands.add_parser('prepare')
+    prepare_parser.add_argument('--output', type=Path, required=True)
+    prepare_parser.add_argument('--evaluation', action='store_true')
+    prepare_parser.add_argument('--package')
+    finish_parser = commands.add_parser('finish')
+    for name in ('plan', 'workspace', 'report'):
+        finish_parser.add_argument('--' + name, type=Path, required=True)
+    finish_parser.add_argument('--dry-run', action='store_true')
+    finish_parser.add_argument('--output', type=Path)
+    for name in ('feedback', 'release', 'authorize'):
+        commands.add_parser(name)
     args = parser.parse_args()
     gh = GitHub(os.environ['GH_REPO'])
     event = json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text()) if os.environ.get('GITHUB_EVENT_PATH') else {}
-    if args.command == 'update':
-        update(Path(__file__).resolve().parents[1], gh, event)
+    repo = Path(__file__).resolve().parents[1]
+    if args.command == 'prepare':
+        prepare(repo, gh, event, args.output, evaluation=args.evaluation, package=args.package)
+    elif args.command == 'finish':
+        finish(repo, gh, args.plan, args.workspace, args.report, dry_run=args.dry_run, output=args.output)
     else:
         globals()[args.command](gh, event)
 

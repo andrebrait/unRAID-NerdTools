@@ -4,7 +4,8 @@ on:
   pull_request:
     paths:
       - scripts/upstream-*.py
-      - scripts/upstream-*.ts
+      - scripts/upstream-*.sh
+      - scripts/upstream-*.json
       - scripts/check-upstream-versions.py
       - tests/test_upstream*.py
       - .github/workflows/upstream-*.yml
@@ -13,7 +14,8 @@ on:
     branches: [main]
     paths:
       - scripts/upstream-*.py
-      - scripts/upstream-*.ts
+      - scripts/upstream-*.sh
+      - scripts/upstream-*.json
       - scripts/check-upstream-versions.py
       - tests/test_upstream*.py
       - .github/workflows/upstream-*.yml
@@ -30,5 +32,5 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Test OMP adapter and PR trust boundaries without credentials
+      - name: Test vendor handoff and PR trust boundaries without credentials
         run: python3 -m unittest discover -s tests -p 'test_upstream*.py'

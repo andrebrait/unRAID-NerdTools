@@ -4,57 +4,346 @@ on:
   schedule:
     - cron: '43 6 * * *'
   workflow_dispatch:
+    inputs:
+      evaluation:
+        description: Assess one package without opening a PR or publishing
+        type: boolean
+        default: false
+      package:
+        description: Package used only for a read-only evaluation
+        type: string
+        default: sshfs
   workflow_run:
     workflows: ['Build native packages']
     types: [completed]
 
 permissions:
-  contents: write
-  pull-requests: write
-  issues: write
-  actions: write
+  contents: read
 
 concurrency:
   group: upstream-versions
   cancel-in-progress: false
 
 jobs:
-  update:
+  prepare:
     if: >-
       github.event_name != 'workflow_run' || (
       github.event.workflow_run.event == 'workflow_dispatch' &&
       github.event.workflow_run.head_branch == 'automation/upstream-recipes' &&
       github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    environment: Upstream Updates
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      actions: write
+    outputs:
+      needed: ${{ steps.plan.outputs.needed }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: main
           fetch-depth: 0
           persist-credentials: false
-      - name: Test upstream automation
+      - name: Test deterministic controller and artifact boundaries
         run: python3 -m unittest discover -s tests -p 'test_upstream*.py'
-      - name: Install the pinned OMP release and isolated workspace image
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          mkdir -p "$RUNNER_TEMP/omp"
-          gh release download v18.20.0-int.202611150826.g7218b87 \
-            --repo ompweb-dev/oh-my-pi --pattern omp-linux-x64 --dir "$RUNNER_TEMP/omp"
-          echo "46e7aee0b34eb4f01f757b08fd9fd0a6170cfccdd8454816b04a9677d87c9f01  $RUNNER_TEMP/omp/omp-linux-x64" | sha256sum --check -
-          chmod +x "$RUNNER_TEMP/omp/omp-linux-x64"
-          docker pull python@sha256:935c3c5b12357a7e10caa9c1e6ca5692344d97cf229832ef584be2cec9fc03df
-      - name: Update the automation branch and pull request
+      - name: Perform deterministic discovery and prepare only needed agent work
+        id: plan
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          OMP_BINARY: ${{ runner.temp }}/omp/omp-linux-x64
-          OMP_SANDBOX_IMAGE: python@sha256:935c3c5b12357a7e10caa9c1e6ca5692344d97cf229832ef584be2cec9fc03df
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
-          ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL }}
           UPSTREAM_REVIEW_BOTS: ${{ vars.UPSTREAM_REVIEW_BOTS }}
-        run: python3 scripts/upstream-updates.py update
+          EVALUATION: ${{ inputs.evaluation || false }}
+          PACKAGE: ${{ inputs.package }}
+        run: |
+          args=(--output "$RUNNER_TEMP/handoff")
+          if [[ "$EVALUATION" == true ]]; then args+=(--evaluation --package "$PACKAGE"); fi
+          python3 scripts/upstream-updates.py prepare "${args[@]}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: steps.plan.outputs.needed == 'true'
+        with:
+          name: recipe-handoff
+          path: ${{ runner.temp }}/handoff
+          retention-days: 1
+          if-no-files-found: error
+
+  codex:
+    needs: prepare
+    if: needs.prepare.outputs.needed == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: Upstream Updates
+    outputs:
+      outcome: ${{ steps.codex.outcome }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: recipe-handoff
+          path: ${{ runner.temp }}/handoff
+      - name: Prepare isolated agent account and scratch checkout
+        run: scripts/upstream-worker.sh prepare "$RUNNER_TEMP/handoff"
+      - name: Run Codex
+        id: codex
+        continue-on-error: true
+        timeout-minutes: 20
+        uses: openai/codex-action@bdf19a4a223ec2549a3e2274a0cf61556bc07675 # v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          codex-version: 0.169.0
+          model: gpt-6-luna
+          effort: xhigh
+          safety-strategy: unprivileged-user
+          codex-user: nerdtools-agent
+          codex-home: /home/nerdtools-agent/.codex
+          sandbox: workspace-write
+          allow-bots: true
+          working-directory: ${{ runner.temp }}/nerdtools-worker/work
+          prompt-file: ${{ runner.temp }}/nerdtools-worker/control/prompt.md
+          output-schema-file: ${{ runner.temp }}/nerdtools-worker/control/report.schema.json
+          output-file: ${{ runner.temp }}/nerdtools-worker/output/report.json
+          codex-args: '["--json", "--ephemeral", "--search", "--ignore-rules"]'
+      - name: Stop agent processes and collect untrusted results
+        if: always()
+        env:
+          OUTCOME: ${{ steps.codex.outcome }}
+        run: |
+          scripts/upstream-worker.sh stop
+          outcome=failure
+          if [[ "$OUTCOME" == success ]]; then outcome=success; fi
+          python3 /opt/nerdtools-controller/runner.py collect \
+            --workspace "$RUNNER_TEMP/nerdtools-worker/work" \
+            --manifest "$RUNNER_TEMP/nerdtools-worker/control/manifest.json" \
+            --report "$RUNNER_TEMP/nerdtools-worker/output/report.json" \
+            --output "$RUNNER_TEMP/nerdtools-worker/collected" --outcome "$outcome"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: codex-candidate
+          path: ${{ runner.temp }}/nerdtools-worker/collected
+          retention-days: 1
+          if-no-files-found: error
+
+  classify:
+    needs: codex
+    if: ${{ !cancelled() && needs.codex.outputs.outcome == 'failure' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      eligible: ${{ steps.fallback.outputs.eligible }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: codex-candidate
+          path: ${{ runner.temp }}/candidate
+      - name: Classify only structured provider failures on an unchanged workspace
+        id: fallback
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          job=$(gh api "repos/$GH_REPO/actions/runs/$RUN_ID/jobs?per_page=100" --jq '.jobs[] | select(.name == "codex") | .id')
+          test -n "$job"
+          gh api "repos/$GH_REPO/actions/jobs/$job/logs" > "$RUNNER_TEMP/codex.log"
+          python3 scripts/upstream-runner.py fallback --log "$RUNNER_TEMP/codex.log" --status "$RUNNER_TEMP/candidate/status.json"
+
+  claude:
+    needs: [prepare, classify]
+    if: ${{ !cancelled() && needs.prepare.outputs.needed == 'true' && needs.classify.outputs.eligible == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: Upstream Updates
+    outputs:
+      outcome: ${{ steps.claude.outcome }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: recipe-handoff
+          path: ${{ runner.temp }}/handoff
+      - name: Prepare fresh isolated agent account and scratch checkout
+        run: scripts/upstream-worker.sh prepare "$RUNNER_TEMP/handoff"
+      - name: Protect the Anthropic credential outside the agent account
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: scripts/upstream-worker.sh claude-proxy
+      - name: Run Claude Code fallback
+        id: claude
+        continue-on-error: true
+        timeout-minutes: 20
+        uses: anthropics/claude-code-action/base-action@f3b070c88125d33dbae5653df5f143101d4ea9dc # v1
+        env:
+          NODE_VERSION: '24'
+          CLAUDE_WORKING_DIR: ${{ runner.temp }}/nerdtools-worker/work
+          ANTHROPIC_BASE_URL: http://127.0.0.1:4318
+        with:
+          anthropic_api_key: local-proxy-placeholder
+          path_to_claude_code_executable: /opt/nerdtools-controller/claude
+          prompt_file: ${{ runner.temp }}/nerdtools-worker/control/prompt.md
+          show_full_output: false
+          claude_args: >-
+            --bare --model claude-haiku-5-5 --effort medium
+            --permission-mode acceptEdits --allowedTools "Bash,Read,Write,Edit,Glob,Grep,WebFetch"
+            --max-turns 100 --max-budget-usd 2.5
+            --json-schema '{"type":"object","additionalProperties":false,"properties":{"summary":{"type":"string"},"recipes":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"name":{"type":"string"},"decision":{"type":"string","enum":["accept","reject"]},"reason":{"type":"string"}},"required":["name","decision","reason"]}}},"required":["summary","recipes"]}'
+      - name: Stop fallback processes and collect untrusted results
+        if: always()
+        env:
+          OUTCOME: ${{ steps.claude.outcome }}
+          REPORT: ${{ steps.claude.outputs.structured_output }}
+        run: |
+          scripts/upstream-worker.sh stop
+          if [[ "$OUTCOME" == success ]]; then
+            python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          report = json.loads(os.environ['REPORT'])
+          path = Path(os.environ['RUNNER_TEMP']) / 'nerdtools-worker/output/report.json'
+          fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW | os.O_NONBLOCK, 0o644)
+          with os.fdopen(fd, 'w') as stream:
+              json.dump(report, stream)
+          PY
+          fi
+          outcome=failure
+          if [[ "$OUTCOME" == success ]]; then outcome=success; fi
+          python3 /opt/nerdtools-controller/runner.py collect \
+            --workspace "$RUNNER_TEMP/nerdtools-worker/work" \
+            --manifest "$RUNNER_TEMP/nerdtools-worker/control/manifest.json" \
+            --report "$RUNNER_TEMP/nerdtools-worker/output/report.json" \
+            --output "$RUNNER_TEMP/nerdtools-worker/collected" --outcome "$outcome"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: claude-candidate
+          path: ${{ runner.temp }}/nerdtools-worker/collected
+          retention-days: 1
+          if-no-files-found: error
+
+  finish:
+    needs: [prepare, codex, classify, claude]
+    if: ${{ !cancelled() && needs.prepare.outputs.needed == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require a successful provider run
+        id: provider
+        env:
+          CODEX_OUTCOME: ${{ needs.codex.outputs.outcome }}
+          CLAUDE_OUTCOME: ${{ needs.claude.outputs.outcome }}
+        run: |
+          if [[ "$CODEX_OUTCOME" == success ]]; then echo 'artifact=codex-candidate' >> "$GITHUB_OUTPUT"
+          elif [[ "$CLAUDE_OUTCOME" == success ]]; then echo 'artifact=claude-candidate' >> "$GITHUB_OUTPUT"
+          else echo 'No successful assessment; refusing publication' >&2; exit 1; fi
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: recipe-handoff
+          path: ${{ runner.temp }}/handoff
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ steps.provider.outputs.artifact }}
+          path: ${{ runner.temp }}/candidate
+      - name: Validate the artifact before any controller import
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          EVALUATION: ${{ inputs.evaluation || false }}
+        run: |
+          python3 scripts/upstream-runner.py extract --archive "$RUNNER_TEMP/candidate/workspace.tar" \
+            --workspace "$RUNNER_TEMP/candidate-workspace" --manifest "$RUNNER_TEMP/candidate-manifest.json"
+          args=(--plan "$RUNNER_TEMP/handoff/plan.json" --workspace "$RUNNER_TEMP/candidate-workspace" --report "$RUNNER_TEMP/candidate/report.json")
+          if [[ "$EVALUATION" == true ]]; then args+=(--dry-run --output "$RUNNER_TEMP/evaluation"); fi
+          python3 scripts/upstream-updates.py finish "${args[@]}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: inputs.evaluation
+        with:
+          name: validated-evaluation
+          path: ${{ runner.temp }}/evaluation
+          retention-days: 1
+          if-no-files-found: error
+
+  native-evaluation:
+    needs: finish
+    if: inputs.evaluation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    container:
+      image: ghcr.io/andrebrait/unraid-nerdtools-builder@sha256:20d97a9fcf230d08cc68ff1ef9aeff1ded90dca60102d2ffdda6df72be5aff25
+      options: --privileged
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: validated-evaluation
+          path: ${{ runner.temp }}/evaluation
+      - name: Require an accepted update and apply its validated patch
+        env:
+          PACKAGE: ${{ inputs.package }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          folder = Path(os.environ['RUNNER_TEMP']) / 'evaluation'
+          report = json.loads((folder / 'report.json').read_text())
+          assert any(item['name'] == os.environ['PACKAGE'] and item['decision'] == 'accept' for item in report['recipes'])
+          assert (folder / 'changes.patch').stat().st_size > 0, 'No recipe change to evaluate'
+          PY
+          git apply --check "$RUNNER_TEMP/evaluation/changes.patch"
+          git apply "$RUNNER_TEMP/evaluation/changes.patch"
+          python3 build/native.py validate
+      - name: Read exact baseline pins
+        id: baseline
+        run: |
+          python3 - <<'PY'
+          import json, os
+          data = json.load(open('build/baseline.json'))
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              for key, value in {'version':data['version'], 'url':data['image']['url'], 'sha256':data['image']['sha256'], 'bzroot':data['bzroot_sha256']}.items():
+                  output.write(f'{key}={value}\n')
+          PY
+      - uses: ./build/unraid-build-root
+        id: roots
+        with:
+          version: ${{ steps.baseline.outputs.version }}
+          url: ${{ steps.baseline.outputs.url }}
+          sha256: ${{ steps.baseline.outputs.sha256 }}
+          bzroot-sha256: ${{ steps.baseline.outputs.bzroot }}
+          toolchain-lock: build/locks/toolchain.json
+      - name: Build and test the evaluated recipe without publishing
+        env:
+          PACKAGE: ${{ inputs.package }}
+          BASELINE_ROOT: ${{ steps.roots.outputs.baseline-root }}
+          DEVELOPMENT_ROOT: ${{ steps.roots.outputs.development-root }}
+        run: |
+          sudo python3 build/native.py sandbox-check --development-root "$DEVELOPMENT_ROOT" --work /tmp
+          SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
+          export SOURCE_DATE_EPOCH
+          sudo --preserve-env=GITHUB_REPOSITORY,GITHUB_SHA,RUNNER_TEMP,SOURCE_DATE_EPOCH \
+            python3 build/native.py build-one --package "$PACKAGE" --work /tmp \
+            --baseline-root "$BASELINE_ROOT" --development-root "$DEVELOPMENT_ROOT"
