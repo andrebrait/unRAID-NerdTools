@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Regenerate one recipe's offline Go proxy inputs from an extracted source tree."""
 import argparse
+import concurrent.futures
 import hashlib
 import json
 import os
@@ -9,6 +10,7 @@ import re
 import tempfile
 import subprocess
 import sys
+from urllib.request import Request, urlopen
 
 PROXY = "https://proxy.golang.org/"
 FILE = re.compile(r"[A-Za-z0-9._-]+\Z")
@@ -32,6 +34,30 @@ def sha256_file(path):
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def proxy_info_sha256(url):
+    if not url.startswith(PROXY) or not url.endswith(".info"):
+        raise ValueError("invalid Go proxy info URL")
+    digest = hashlib.sha256()
+    total = 0
+    request = Request(url, headers={"User-Agent": "NerdTools-go-lock"})
+    with urlopen(request, timeout=120) as response:
+        for chunk in iter(lambda: response.read(64 * 1024), b""):
+            total += len(chunk)
+            if total > 1024 * 1024:
+                raise ValueError("Go proxy info response exceeds 1 MiB")
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def refresh_info_hashes(generated):
+    info = [(destination, item) for destination, item in generated.items()
+            if destination.endswith(".info")]
+    with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
+        digests = pool.map(proxy_info_sha256, (item[2] for _, item in info))
+        for (destination, item), digest in zip(info, digests):
+            generated[destination] = (*item[:3], digest)
 
 
 def proxy_record(path, download_root):
@@ -166,6 +192,7 @@ def main():
     # Graph loading may fetch older .mod files omitted from the selected build list.
     for path in download_root.rglob("*.mod"):
         add(path)
+    refresh_info_hashes(generated)
 
     if not generated:
         raise ValueError("Go produced no module proxy inputs")

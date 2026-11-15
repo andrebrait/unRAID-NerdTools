@@ -2,6 +2,7 @@
 """Offline regression tests for deterministic Go module lock regeneration."""
 import importlib.util
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -61,10 +62,12 @@ assert os.environ['GOWORK'] == os.environ['GOENV'] == 'off'
 cache = Path(os.environ['GOMODCACHE']) / 'cache/download'
 records = []
 for module, version, contents in [
-        ('example.com/mod', 'v1.2.3', [('info', b'info'), ('mod', b'module example.com/mod\\n'), ('zip', b'zip')]),
+        ('example.com/mod', 'v1.2.3', [('mod', b'module example.com/mod\\n'), ('zip', b'zip')]),
         ('example.com/transitive', 'v2.0.0', [('mod', b'module example.com/transitive\\n')])]:
     folder = cache / module / '@v'
     folder.mkdir(parents=True)
+    if module == 'example.com/mod' and os.environ.get('FAKE_GO_INFO') == '1':
+        contents.insert(0, ('info', b'cache-info'))
     record = {'Path': module, 'Version': version}
     for suffix, data in contents:
         path = folder / (version + '.' + suffix)
@@ -96,7 +99,7 @@ print(''.join(json.dumps(record) for record in records))
         first = self.run_helper()
         self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
         expected = []
-        for suffix, data in (("info", b"info"), ("mod", b"module example.com/mod\n"), ("zip", b"zip")):
+        for suffix, data in (("mod", b"module example.com/mod\n"), ("zip", b"zip")):
             url = f"https://proxy.golang.org/example.com/mod/@v/v1.2.3.{suffix}"
             name = hashlib.sha256(url.encode()).hexdigest()[:24] + "." + suffix
             expected.append((name, f"example.com/mod/@v/v1.2.3.{suffix}", url,
@@ -161,8 +164,8 @@ print(''.join(json.dumps(record) for record in records))
         self.assertEqual(self.lock.read_bytes(), lock)
 
     def test_generated_and_retained_filenames_cannot_collide(self):
-        url = "https://proxy.golang.org/example.com/mod/@v/v1.2.3.info"
-        collision = hashlib.sha256(url.encode()).hexdigest()[:24] + ".info"
+        url = "https://proxy.golang.org/example.com/mod/@v/v1.2.3.mod"
+        collision = hashlib.sha256(url.encode()).hexdigest()[:24] + ".mod"
         entries = json.loads(self.lock.read_text())
         entries[0]["inputs"][-1]["file"] = collision
         self.lock.write_text(json.dumps(entries, indent=2) + "\n")
@@ -171,6 +174,61 @@ print(''.join(json.dumps(record) for record in records))
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual((self.recipe / "go-modules.tsv").read_bytes(), manifest)
         self.assertEqual(self.lock.read_bytes(), lock)
+
+    def test_info_hash_uses_exact_proxy_response_bytes(self):
+        if not hasattr(locker, "proxy_info_sha256"):
+            self.fail("proxy_info_sha256 is missing")
+        remote = b'{"Version":"v1.0.0","Origin":{"Ref":"tag","Hash":"abc"}}'
+
+        class Response(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                self.close()
+
+        with mock.patch.object(locker, "urlopen", return_value=Response(remote)):
+            digest = locker.proxy_info_sha256(
+                "https://proxy.golang.org/example.com/mod/@v/v1.0.0.info")
+        self.assertEqual(digest, hashlib.sha256(remote).hexdigest())
+
+
+    def test_remote_info_hash_replaces_only_cached_info_digest(self):
+        if not hasattr(locker, "refresh_info_hashes"):
+            self.fail("refresh_info_hashes is missing")
+        generated = {
+            "example.com/mod/@v/v1.info": (
+                "info.info", "example.com/mod/@v/v1.info",
+                "https://proxy.golang.org/example.com/mod/@v/v1.info", "cache-info"),
+            "example.com/mod/@v/v1.mod": (
+                "mod.mod", "example.com/mod/@v/v1.mod",
+                "https://proxy.golang.org/example.com/mod/@v/v1.mod", "cache-mod"),
+        }
+        with mock.patch.object(locker, "proxy_info_sha256", return_value="remote-info"):
+            locker.refresh_info_hashes(generated)
+        self.assertEqual(generated["example.com/mod/@v/v1.info"][3], "remote-info")
+        self.assertEqual(generated["example.com/mod/@v/v1.mod"][3], "cache-mod")
+
+
+    def test_main_writes_remote_info_digest_not_cached_digest(self):
+        remote_digest = "f" * 64
+        argv = [
+            str(SCRIPT), "--source", str(self.source), "--recipe", str(self.recipe),
+            "--lock", str(self.lock), "--package", "example", "--work", str(self.work),
+        ]
+        environment = {
+            "PATH": str(self.bin) + os.pathsep + os.environ["PATH"],
+            "FAKE_GO_INFO": "1",
+        }
+        with mock.patch.object(sys, "argv", argv), mock.patch.dict(
+                os.environ, environment), mock.patch.object(
+                locker, "proxy_info_sha256", return_value=remote_digest) as remote:
+            locker.main()
+        entry = json.loads(self.lock.read_text())[0]
+        info = next(item for item in entry["inputs"] if item["url"].endswith(".info"))
+        self.assertEqual(info["sha256"], remote_digest)
+        remote.assert_called_once_with(info["url"])
+
 
     def test_manifest_symlink_is_rejected_without_touching_target(self):
         manifest = self.recipe / "go-modules.tsv"
