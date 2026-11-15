@@ -40,7 +40,7 @@ PERLINTERP=${PERLINTERP:-dynamic}
 # The possible settings for this are yes/no/dynamic.
 LUAINTERP=${LUAINTERP:-dynamic}
 
-VERSION=9.2.1252
+VERSION=9.2.1342
 
 # Automatically determine the architecture we're building on:
 if [ -z "$ARCH" ]; then
