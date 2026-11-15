@@ -101,24 +101,36 @@ def stale_failure(gh, run, target):
     return latest_success(gh, run, target) >= run_order(run)
 
 
+def close_stale_issue(gh, number, run, target):
+    issue = gh.api(f'issues/{number}')
+    latest_id, latest_attempt, _ = latest_result(issue.get('body'))
+    if ((latest_id, latest_attempt) > (0, 0)
+            and latest_success(gh, run, target) >= (latest_id, latest_attempt)
+            and issue.get('state') == 'open'):
+        gh.api(f'issues/{number}', {'state': 'closed'}, method='PATCH')
+
+
 def terminal(gh, run, success, target):
     if success:
         record_success(gh, run, target)
     _, tag, issue = failure_issue(gh, run, target)
+    issue = gh.api(f"issues/{issue['number']}") if issue else None
     current = run_order(run)
     latest_id, latest_attempt, _ = latest_result((issue or {}).get('body'))
-    if current < (latest_id, latest_attempt):
+    latest_order = (latest_id, latest_attempt)
+    if current < latest_order:
         return False
     if success:
-        if issue and (issue.get('state') == 'open' or current > (latest_id, latest_attempt)):
+        if issue and (issue.get('state') == 'open' or current > latest_order):
             body = (issue.get('body') or '') + '\n' + result_marker(run, 'success')
             gh.api(f"issues/{issue['number']}", {'state': 'closed', 'body': body}, method='PATCH')
         return False
     if stale_failure(gh, run, target):
         return False
     if issue:
-        previous = latest_result(issue.get('body'))
-        if previous[:2] == current:
+        if latest_order == current:
+            if issue.get('state') == 'closed' and latest_result(issue.get('body'))[2] == 'failure':
+                gh.api(f"issues/{issue['number']}", {'state': 'open'}, method='PATCH')
             return False
         body = (issue.get('body') or '') + '\n' + result_marker(run, 'failure')
         body += f'\n\nFailure run: {run["html_url"]}'
@@ -127,7 +139,7 @@ def terminal(gh, run, success, target):
             data['state'] = 'open'
         gh.api(f"issues/{issue['number']}", data, method='PATCH')
         if stale_failure(gh, run, target):
-            gh.api(f"issues/{issue['number']}", {'state': 'closed'}, method='PATCH')
+            close_stale_issue(gh, issue['number'], run, target)
             return False
         return True
     title = f"Automation failure: {run['name']} ({run['head_sha'][:12]})"
@@ -138,9 +150,10 @@ def terminal(gh, run, success, target):
     created = gh.api('issues', {'title': title, 'body': body}, method='POST')
     if stale_failure(gh, run, target):
         if isinstance(created, dict) and isinstance(created.get('number'), int):
-            gh.api(f"issues/{created['number']}", {'state': 'closed'}, method='PATCH')
+            close_stale_issue(gh, created['number'], run, target)
         return False
     return True
+
 
 
 def relevant_pr(gh, source_sha):

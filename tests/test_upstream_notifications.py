@@ -68,6 +68,8 @@ class FakeGitHub:
             number = int(path.split('/')[1])
             self.comments.setdefault(number, []).append({'body': data['body'], 'user': {'login': 'github-actions[bot]'}})
             return {}
+        if method is None and path.startswith('issues/') and path[7:].isdigit():
+            return next((item for item in self.issues if item['number'] == int(path[7:])), {})
         if method == 'PATCH' and path.startswith('issues/'):
             number = int(path.split('/')[1])
             issue = next((item for item in self.issues if item['number'] == number), None)
@@ -149,6 +151,48 @@ class NotificationTests(unittest.TestCase):
         gh = RacingGitHub()
         self.assertFalse(notify.terminal(gh, older, False, SHA))
         self.assertEqual(gh.issues[0]['state'], 'closed')
+
+    def test_stale_failure_cleanup_preserves_newer_reopened_failure(self):
+        baseline = event('Discover Unraid releases', id=122)['workflow_run']
+        older = dict(baseline, id=123)
+        newer_success = dict(baseline, id=124, conclusion='success')
+        newest_failure = dict(baseline, id=125)
+
+        class RacingGitHub(FakeGitHub):
+            racing = False
+
+            def api(self, path, data=None, method=None):
+                result = super().api(path, data, method)
+                if (path == 'issues/900' and method == 'PATCH' and not self.racing
+                        and '<!-- upstream-notify: result:123:1:failure -->' in (data or {}).get('body', '')):
+                    self.racing = True
+                    _, context = notify.success_context(newer_success, SHA)
+                    self.statuses.append({
+                        'context': context, 'state': 'success',
+                        'description': 'Successful run 124:1',
+                        'creator': {'login': 'github-actions[bot]'},
+                    })
+                    notify.terminal(self, newer_success, True, SHA)
+                    notify.terminal(self, newest_failure, False, SHA)
+                return result
+
+        gh = RacingGitHub()
+        notify.terminal(gh, baseline, False, SHA)
+        notify.terminal(gh, older, False, SHA)
+        issue = gh.issues[0]
+        self.assertEqual(notify.latest_result(issue['body']), (125, 1, 'failure'))
+        self.assertEqual(issue['state'], 'open')
+
+    def test_duplicate_failure_reopens_closed_canonical_newer_failure(self):
+        gh = FakeGitHub()
+        run = event('Discover Unraid releases')['workflow_run']
+        notify.terminal(gh, run, False, SHA)
+        newer = dict(run, id=125)
+        notify.terminal(gh, newer, False, SHA)
+        gh.issues[0]['state'] = 'closed'
+        self.assertFalse(notify.terminal(gh, newer, False, SHA))
+        self.assertEqual(gh.issues[0]['state'], 'open')
+
 
     def test_manual_update_is_not_rejected_for_skipped_eval_job(self):
         gh = FakeGitHub()

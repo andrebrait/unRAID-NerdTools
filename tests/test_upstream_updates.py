@@ -454,7 +454,7 @@ class ControllerIntegrationTests(unittest.TestCase):
 
 
 class PartialReportFinishTests(unittest.TestCase):
-    def test_ordinary_partial_plan_retains_live_decisions_and_rejects_closed_issues(self):
+    def test_ordinary_partial_plan_retains_live_decisions_and_accepts_unchanged_closed_issues(self):
         updates = module()
         vim = {'name': 'vim', 'ours': '1.0', 'upstream': '2.0',
                'source': 'Slackware-current', 'url': 'https://example.invalid/vim'}
@@ -465,15 +465,20 @@ class PartialReportFinishTests(unittest.TestCase):
         nano = {'name': 'nano', 'ours': '7.0', 'upstream': '8.0',
                 'source': 'Slackware-current', 'url': 'https://example.invalid/nano'}
         candidates = [vim, tmux, zsh, nano]
+        gh = GitHubFixture(None)
+        records = updates.sync_candidate_issues(gh, candidates)
+        for candidate, status, attempts, decision in (
+                (vim, 'assessing', 2, None), (tmux, 'building', 1, 'accept'),
+                (zsh, 'rejected', 1, 'reject'), (nano, 'rejected', 1, 'reject')):
+            record = updates.issue_record_for(records, candidate)
+            updates.set_issue_status(gh, record, status, attempts=attempts, decision=decision)
+        nano_record = updates.issue_record_for(records, nano)
+        gh.issues[nano_record['number'] - 1]['state'] = 'closed'
+        nano_record['status'] = 'closed'
         state = {
             'attempts': 2,
             'candidates': candidates,
-            'candidate_issues': [
-                {'candidate': updates.candidate_identity(vim), 'status': 'assessing', 'attempts': 2},
-                {'candidate': updates.candidate_identity(tmux), 'status': 'building', 'attempts': 1},
-                {'candidate': updates.candidate_identity(zsh), 'status': 'rejected', 'attempts': 1},
-                {'candidate': updates.candidate_identity(nano), 'status': 'closed', 'attempts': 1},
-            ],
+            'candidate_issues': records,
             'report': {'summary': 'Prior batch', 'recipes': [
                 {'name': name, 'decision': 'accept', 'reason': 'Prior validated assessment'}
                 for name in ('vim', 'tmux', 'zsh', 'nano')]},
@@ -494,20 +499,20 @@ class PartialReportFinishTests(unittest.TestCase):
             plan_path.write_text(json.dumps(plan))
             report_path.write_text(json.dumps(report))
 
-            class Service:
-                repository = 'owner/tools'
+            class Service(GitHubFixture):
+                def __init__(self):
+                    super().__init__(None)
+                    self.issues = gh.issues
 
                 def api(self, path, data=None, method=None):
                     if path == 'git/ref/heads/main':
                         return {'object': {'sha': 'main'}}
                     if path.startswith('pulls?state=open'):
                         return []
-                    raise AssertionError(f'Unexpected API request: {path}')
+                    return super().api(path, data, method)
 
-            validated, restored, verified = [], [], []
+            validated, restored = [], []
             with patch.object(
-                    updates, 'verify_issue_attempts',
-                    side_effect=lambda gh, records, candidates: verified.append(candidates)), patch.object(
                     updates, 'prepare_branch'), patch.object(
                     updates, 'branch_lease', return_value=''), patch.object(
                     updates, 'git', side_effect=lambda repo, *args: 'main' if args == ('rev-parse', 'origin/main') else ''), patch.object(
@@ -523,11 +528,73 @@ class PartialReportFinishTests(unittest.TestCase):
                 updates.finish(repo, Service(), plan_path, workspace, report_path, dry_run=True)
 
         self.assertEqual([item['name'] for item in validated[0]['recipes']], ['vim'])
-        self.assertEqual([item['name'] for item in verified[0]], [item['name'] for item in candidates])
         self.assertEqual(
             [(item['name'], item['decision']) for item in restored[0]['recipes']],
             [('vim', 'reject'), ('tmux', 'accept'), ('zsh', 'reject'), ('nano', 'reject')])
 
+
+    def test_retry_during_failed_finish_pr_creation_is_not_overwritten(self):
+        updates = module()
+        candidate = {'name': 'vim', 'ours': '1.0', 'upstream': '2.0',
+                     'source': 'Slackware-current', 'url': 'https://example.invalid/vim'}
+        gh = GitHubFixture(None)
+        records = updates.sync_candidate_issues(gh, [candidate])
+        record = records[0]
+        updates.set_issue_status(gh, record, 'building', attempts=1, decision='accept')
+        state = {'attempts': 1, 'candidates': [candidate], 'candidate_issues': records,
+                 'issue_closures': [], 'status': 'building'}
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repo, workspace = root / 'repo', root / 'workspace'
+            (repo / 'build/locks').mkdir(parents=True)
+            workspace.mkdir()
+            (repo / 'build/locks/slackware.json').write_text(json.dumps([
+                {'name': 'vim', 'version': '2.0'}]))
+            (repo / 'build/locks/slackbuilds.json').write_text('[]')
+            plan_path, report_path = root / 'plan.json', root / 'report.json'
+            plan = {'repository': gh.repository, 'context': {'repository': gh.repository},
+                    'evaluation': False, 'main_sha': 'main', 'pr_number': None,
+                    'head_sha': '', 'previous': '', 'feedback_digest': 'digest',
+                    'state': state, 'candidates': [candidate]}
+            report = {'summary': 'Accepted vim', 'recipes': [
+                {'name': 'vim', 'decision': 'accept', 'reason': 'Pinned upstream source'}]}
+            plan_path.write_text(json.dumps(plan))
+            report_path.write_text(json.dumps(report))
+            original_api = gh.api
+
+            def api(path, data=None, method=None):
+                if path == 'git/ref/heads/main':
+                    return {'object': {'sha': 'main'}}
+                if path.startswith('pulls?state=open'):
+                    return []
+                if path == 'pulls':
+                    retry_record = dict(record)
+                    updates.set_issue_status(
+                        gh, retry_record, 'queued', attempts=0, decision=None, failure=None)
+                    raise RuntimeError('PR creation failed')
+                return original_api(path, data, method)
+
+            gh.api = api
+            with patch.object(updates, 'branch_lease', return_value=''), patch.object(
+                    updates, 'prepare_branch'), patch.object(
+                    updates, 'git', side_effect=lambda repo, *args:
+                        {'rev-parse': 'main', 'diff': 'build/locks/slackware.json'}.get(args[0], 'head')), patch.object(
+                    updates, 'validate_workspace', return_value=['build/locks/slackware.json']), patch.object(
+                    updates, 'import_workspace'), patch.object(
+                    updates, 'manual_workflow_updates'), patch.object(
+                    updates, 'restore_rejected'), patch.object(
+                    updates, 'changed_paths', return_value=['build/locks/slackware.json']), patch.object(
+                    updates, 'check_paths'), patch.object(
+                    updates, 'check_generated'), patch.object(
+                    updates, 'run', return_value=''), patch.object(
+                    updates, 'push'):
+                with self.assertRaisesRegex(RuntimeError, 'PR creation failed'):
+                    updates.finish(repo, gh, plan_path, workspace, report_path)
+
+        current = updates.read_issue_state(gh.issues[0])
+        self.assertEqual((current['status'], current['attempts'], current['decision']),
+                         ('queued', 0, None))
 
     def test_non_target_issue_change_or_close_invalidates_frozen_metadata(self):
         updates = module()
@@ -537,17 +604,22 @@ class PartialReportFinishTests(unittest.TestCase):
                 'source': 'SlackBuilds.org 15.0', 'url': 'https://example.invalid/tmux'}
         candidates = [vim, tmux]
 
-        for change in ('status', 'closed'):
+        for change in ('status', 'closed', 'decision', 'untrusted'):
             gh = GitHubFixture(None)
             records = updates.sync_candidate_issues(gh, candidates)
             for record in records:
                 updates.set_issue_status(gh, record, 'building', attempts=1, decision='accept')
             frozen_records = [dict(record) for record in records]
             tmux_record = next(item for item in records if item['candidate']['name'] == 'tmux')
+            issue = gh.issues[tmux_record['number'] - 1]
             if change == 'status':
                 updates.set_issue_status(gh, tmux_record, 'queued', attempts=2)
+            elif change == 'closed':
+                issue['state'] = 'closed'
+            elif change == 'decision':
+                updates.set_issue_status(gh, tmux_record, 'building', decision='reject')
             else:
-                gh.issues[tmux_record['number'] - 1]['state'] = 'closed'
+                issue['user']['login'] = 'untrusted-user'
 
             with self.assertRaisesRegex(ValueError, 'changed during agent work'):
                 updates.verify_issue_attempts(gh, frozen_records, candidates)
@@ -630,6 +702,32 @@ class OrphanedPublicationRaceTests(unittest.TestCase):
         self.gh.api = api
         with patch.object(self.updates, 'branch_lease', return_value=self.LEASE), self.assertRaisesRegex(
                 ValueError, 'issue changed'):
+            self.updates.recover_orphaned_publication(
+                Path(tempfile.gettempdir()), self.gh, [frozen], [self.candidate])
+        current = self.updates.read_issue_state(self.gh.issues[0])
+        self.assertEqual((current['status'], current['attempts'], current['decision']),
+                         ('queued', 0, None))
+
+    def test_retry_during_failed_pr_creation_is_not_overwritten(self):
+        frozen = dict(self.record)
+        original_api = self.gh.api
+
+        def api(path, data=None, method=None):
+            if path.startswith('compare/main...'):
+                return self.comparison()
+            if path.startswith('git/matching-refs/heads/'):
+                return [{'ref': 'refs/heads/automation/upstream-recipes',
+                         'object': {'sha': self.LEASE}}]
+            if path == 'pulls':
+                retry_record = dict(frozen)
+                self.updates.set_issue_status(
+                    self.gh, retry_record, 'queued', attempts=0, decision=None, failure=None)
+                raise RuntimeError('PR creation failed')
+            return original_api(path, data, method)
+
+        self.gh.api = api
+        with patch.object(self.updates, 'branch_lease', return_value=self.LEASE), self.assertRaisesRegex(
+                RuntimeError, 'PR creation failed'):
             self.updates.recover_orphaned_publication(
                 Path(tempfile.gettempdir()), self.gh, [frozen], [self.candidate])
         current = self.updates.read_issue_state(self.gh.issues[0])

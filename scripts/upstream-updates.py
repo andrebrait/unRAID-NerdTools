@@ -258,17 +258,25 @@ def sync_candidate_issues(gh, candidates, run_url=None, prior_records=()):
 
 
 def set_issue_status(gh, record, status, attempts=None, decision=_UNSET, failure=_UNSET,
-                     run_url=_UNSET, build_url=_UNSET):
+                     run_url=_UNSET, build_url=_UNSET, expected=None):
     if status not in ISSUE_STATUSES:
         raise ValueError('Invalid upstream issue status')
     number = record.get('number')
     if not isinstance(number, int) or isinstance(number, bool) or number < 1:
         raise ValueError('Invalid upstream issue number')
     issue = gh.api(f"issues/{number}")
+    state = read_issue_state(issue) if expected is not None else None
+    if expected is not None and (
+            not state or state['candidate'] != expected.get('candidate')
+            or state['status'] != expected.get('status')
+            or state['attempts'] != expected.get('attempts')
+            or state['decision'] != expected.get('decision')):
+        return record
     if issue.get('state') == 'closed':
         record['status'] = 'closed'
         return record
-    state = read_issue_state(issue)
+    if state is None:
+        state = read_issue_state(issue)
     if not state or state['candidate'] != record['candidate']:
         raise ValueError('Upstream issue state changed or is untrusted')
     state['status'] = status
@@ -340,10 +348,19 @@ def verify_issue_attempts(gh, records, candidates):
         if not isinstance(number, int) or isinstance(number, bool) or number < 1:
             raise ValueError('Invalid upstream issue number')
         issue = gh.api(f"issues/{number}")
-        current = read_issue_state(issue) if issue.get('state') == 'open' else None
-        if (not current or current['candidate'] != record['candidate']
-                or current['attempts'] != record['attempts'] or current['status'] != record['status']
-                or current['decision'] != record.get('decision')):
+        current = read_issue_state(issue)
+        unchanged_closed = (
+            record.get('status') == 'closed' and issue.get('state') == 'closed' and current
+            and current['candidate'] == record['candidate']
+            and current['attempts'] == record['attempts']
+            and current['decision'] == record.get('decision'))
+        unchanged_open = (
+            issue.get('state') == 'open' and current
+            and current['candidate'] == record['candidate']
+            and current['attempts'] == record['attempts']
+            and current['status'] == record['status']
+            and current['decision'] == record.get('decision'))
+        if not (unchanged_closed or unchanged_open):
             raise ValueError('Upstream issue changed during agent work; refusing stale update')
 
 
@@ -936,7 +953,10 @@ def recover_orphaned_publication(repo, gh, records, discovered):
         for candidate in candidates:
             record = issue_record_for(records, candidate)
             if record.get('status') != 'closed':
-                set_issue_status(gh, record, 'building', failure=detail)
+                try:
+                    set_issue_status(gh, record, 'building', failure=detail, expected=record)
+                except Exception:
+                    pass
         raise
     summary(f"Recovered assessed branch as batch PR {pr['html_url']}.")
     return True
@@ -1348,7 +1368,10 @@ def finish(repo, gh, plan_path, workspace, report_path, dry_run=False, output=No
         for candidate in plan['candidates']:
             record = issue_record_for(records, candidate)
             if record and record.get('status') == 'building':
-                set_issue_status(gh, record, 'building', failure=detail)
+                try:
+                    set_issue_status(gh, record, 'building', failure=detail, expected=record)
+                except Exception:
+                    pass
         state['candidate_issues'] = records
         raise
     summary(f"Batch PR: {pr['html_url']}. Catalog verification pending; human approval required.")
