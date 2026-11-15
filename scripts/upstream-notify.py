@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Notify maintainers about terminal automation workflow outcomes."""
+import hashlib
 import html
 import importlib.util
 import json
@@ -68,7 +69,41 @@ def latest_result(body):
                default=(0, 0, ''))
 
 
+def success_context(run, target):
+    source = run.get('_verified_source_sha') or run.get('source_head_sha') or run['head_sha']
+    identity = f'{source}:{run["name"]}:{target}'
+    return source, 'nerdtools/upstream-success-' + hashlib.sha256(identity.encode()).hexdigest()[:24]
+
+
+def latest_success(gh, run, target):
+    source, context = success_context(run, target)
+    orders = []
+    for status in gh.pages(f'commits/{source}/statuses?per_page=100'):
+        match = re.fullmatch(r'Successful run (\d+):(\d+)', status.get('description') or '')
+        if (status.get('context') == context and status.get('state') == 'success'
+                and status.get('creator', {}).get('login') == BOT and match):
+            orders.append((int(match.group(1)), int(match.group(2))))
+    return max(orders, default=(0, 0))
+
+
+def record_success(gh, run, target):
+    source, context = success_context(run, target)
+    if run_order(run) > latest_success(gh, run, target):
+        run_id, attempt = run_order(run)
+        gh.api(f'statuses/{source}', {
+            'context': context, 'state': 'success',
+            'description': f'Successful run {run_id}:{attempt}',
+            'target_url': run['html_url'],
+        }, method='POST')
+
+
+def stale_failure(gh, run, target):
+    return latest_success(gh, run, target) >= run_order(run)
+
+
 def terminal(gh, run, success, target):
+    if success:
+        record_success(gh, run, target)
     _, tag, issue = failure_issue(gh, run, target)
     current = run_order(run)
     latest_id, latest_attempt, _ = latest_result((issue or {}).get('body'))
@@ -79,23 +114,32 @@ def terminal(gh, run, success, target):
             body = (issue.get('body') or '') + '\n' + result_marker(run, 'success')
             gh.api(f"issues/{issue['number']}", {'state': 'closed', 'body': body}, method='PATCH')
         return False
+    if stale_failure(gh, run, target):
+        return False
     if issue:
         previous = latest_result(issue.get('body'))
         if previous[:2] == current:
             return False
         body = (issue.get('body') or '') + '\n' + result_marker(run, 'failure')
         body += f'\n\nFailure run: {run["html_url"]}'
+        data = {'body': body}
         if issue.get('state') == 'closed':
-            gh.api(f"issues/{issue['number']}", {'state': 'open', 'body': body}, method='PATCH')
-        else:
-            gh.api(f"issues/{issue['number']}", {'body': body}, method='PATCH')
+            data['state'] = 'open'
+        gh.api(f"issues/{issue['number']}", data, method='PATCH')
+        if stale_failure(gh, run, target):
+            gh.api(f"issues/{issue['number']}", {'state': 'closed'}, method='PATCH')
+            return False
         return True
     title = f"Automation failure: {run['name']} ({run['head_sha'][:12]})"
     body = (f'{tag}\n{result_marker(run, "failure")}\n\n'
             f'Workflow **{safe_text(run["name"])}** failed for `{run["head_sha"]}`. '
             f'Target: {safe_text(target)}.\n\n[Workflow run]({run["html_url"]})\n\n'
             'This tracks automation failure separately from upstream recipe issues.')
-    gh.api('issues', {'title': title, 'body': body}, method='POST')
+    created = gh.api('issues', {'title': title, 'body': body}, method='POST')
+    if stale_failure(gh, run, target):
+        if isinstance(created, dict) and isinstance(created.get('number'), int):
+            gh.api(f"issues/{created['number']}", {'state': 'closed'}, method='PATCH')
+        return False
     return True
 
 
@@ -164,7 +208,11 @@ def process(event, gh):
                 or not re.fullmatch(r'Unraid compatibility [0-9][A-Za-z0-9.+_-]* [0-9a-f]{64} publish=true',
                                     run.get('display_title', ''))):
             return False
-        jobs = gh.pages(f'actions/runs/{run.get("id")}/jobs?per_page=100')
+        if not success and stale_failure(gh, run, run['display_title']):
+            return False
+        jobs = gh.pages(
+            f'actions/runs/{run["id"]}/attempts/{run.get("run_attempt", 1)}/jobs?per_page=100',
+            field='jobs')
         published = any(job.get('name') == 'publish' and job.get('conclusion') == 'success' for job in jobs)
         if success and not published:
             note = 'Build checks succeeded; publication was skipped, so no release is reported.'
@@ -175,46 +223,20 @@ def process(event, gh):
         result = terminal(gh, run, True, run['display_title']) if success and published else (
             terminal(gh, run, False, run['display_title']) if not success else False)
         pr = relevant_pr(gh, run['head_sha'])
-        if pr:
+        if pr and success:
             run_identity = f'{run["id"]}:{run.get("run_attempt", 1)}'
             tag = marker('run', run_identity)
             result = comment(gh, pr['number'],
                              f'{tag}\n\n{note} Workflow run: {run["html_url"]}', tag) or result
         return result
-    run_identity = f"{run['id']}:{run.get('run_attempt', 1)}"
     if name == 'Update upstream recipes':
         if success:
             return terminal(gh, run, True, run['head_sha'])
         if run.get('event') == 'workflow_run' and run.get('head_branch') != 'main':
             return False
-        # Prefer API-verified open automation PRs; never trust the event's PR payload.
-        active = gh.pages(f'pulls?state=open&head={quote(gh.repository.split("/")[0] + ":" + BRANCH)}&per_page=100')
-        trusted = [pr for pr in active if trusted_pr(pr, gh.repository) and not pr.get('merged')]
-        if trusted:
-            return comment(gh, trusted[0]['number'],
-                           f'{marker("run", run_identity)}\n\n**Blocked—maintainer action required.** '
-                           f'Workflow run: {run["html_url"]}', marker('run', run_identity))
-        # Preserve recipe metadata as-is; do not infer a package or source version.
-        issues = gh.pages('issues?state=open&per_page=100')
-        matched = False
-        for issue in issues:
-            labels = {item.get('name') for item in issue.get('labels', [])}
-            if (issue.get('user', {}).get('login') == BOT and 'upstream-update' in labels
-                    and run['html_url'] in (issue.get('body') or '')):
-                matched = True
-                comment(gh, issue['number'], f'{marker("run", run_identity)}\n\n'
-                        f'**Blocked—maintainer action required.** Workflow run: {run["html_url"]}',
-                        marker('run', run_identity))
-        return matched or terminal(gh, run, False, run['head_sha'])
-    # Release failures are attached only to an API-verified merged automation PR whose head is the source.
+        return terminal(gh, run, False, run['head_sha'])
     source = run.get('_verified_source_sha') or run.get('source_head_sha') or run.get('head_sha')
-    pr = run.get('_verified_pr') or relevant_pr(gh, source)
-    target = source
-    created = terminal(gh, run, success, target)
-    if pr and not success:
-        comment(gh, pr['number'], f'{marker("run", run_identity)}\n\n**Blocked—maintainer action required.** '
-                f'{safe_text(name)} failed. Workflow run: {run["html_url"]}', marker('run', run_identity))
-    return created
+    return terminal(gh, run, success, source)
 
 
 def main():
