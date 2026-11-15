@@ -42,6 +42,53 @@ check(nt_preference(['tool-extra-1__1'=>'yes'], 'tool') === 'no', 'No package pr
 check(nt_next_check(1000, 24, false, 0) === 87400, 'Daily default interval');
 check(nt_next_check(1000, 24, true, 0) === 4600, 'Hourly failure retry');
 check(nt_next_check(1000, 24, true, 9000) === 9000, 'Rate limit reset wins');
+check(nt_package_version('nerdtools-tool-1.2.3-x86_64-1', 'nerdtools-tool') === '1.2.3', 'Installed version extracted');
+check(nt_package_version('other-1.2.3-x86_64-1', 'nerdtools-tool') === null, 'Mismatched package version refused');
+$planPackage = function($name, $version, $dependencies = []) {
+    return ['name'=>$name, 'tool'=>$name, 'version'=>$version,
+        'file'=>$name.'-'.$version.'-x86_64-1.txz', 'dependencies'=>$dependencies];
+};
+$planPackages = [
+    'dep'=>$planPackage('dep','2.0'),
+    'app'=>$planPackage('app','1.0',['dep']),
+    'consumer'=>$planPackage('consumer','2.0',['dep']),
+    'other'=>$planPackage('other','2.0'),
+    'fresh'=>$planPackage('fresh','1.0'),
+    'newapp'=>$planPackage('newapp','1.0',['fresh']),
+];
+$planOwned = [
+    'dep'=>['record'=>'dep-1.0-x86_64-1','dependencies'=>[]],
+    'consumer'=>['record'=>'consumer-1.0-x86_64-1','dependencies'=>['dep']],
+    'other'=>['record'=>'other-1.0-x86_64-1','dependencies'=>[]],
+];
+$planInstalled = array_column($planOwned, 'record');
+$planConfig = ['dep'=>'yes','consumer'=>'yes','other'=>'yes','update_check_hours'=>'24'];
+$plan = nt_plan($planPackages,$planOwned,$planInstalled,$planConfig,[],24);
+check($plan['changes'] === [] && preg_match('/^[a-f0-9]{64}$/D',$plan['id']), 'Outdated selected packages remain unchanged');
+$plan = nt_plan($planPackages,$planOwned,$planInstalled,$planConfig,['other'=>'upgrade'],24);
+check(array_column($plan['changes'],'package') === ['other'] && $plan['changes'][0]['change'] === 'upgrade', 'Explicit upgrade changes only its package');
+$plan = nt_plan($planPackages,$planOwned,$planInstalled,$planConfig,['app'=>'install'],24);
+check(array_column($plan['changes'],'package') === ['dep','app','consumer'], 'New install upgrades stale dependency and installed dependents only');
+check($plan['rows']['dep']['automatic'] && $plan['rows']['dep']['reason'] === 'Required by app', 'Required dependency upgrade is explained');
+check(!in_array('other',array_column($plan['changes'],'package'),true), 'Unrelated update is excluded');
+$plan = nt_plan($planPackages,$planOwned,$planInstalled,$planConfig,['newapp'=>'install'],24);
+check(array_column($plan['changes'],'package') === ['fresh','newapp'], 'Missing dependency installs before requested package');
+$removeOwned = [
+    'dep'=>['record'=>'dep-1.0-x86_64-1','dependencies'=>[]],
+    'app'=>['record'=>'app-1.0-x86_64-1','dependencies'=>['dep']],
+];
+$removeInstalled = array_column($removeOwned,'record');
+$removeConfig = ['dep'=>'yes','app'=>'yes','update_check_hours'=>'24'];
+rejects(function() use ($planPackages,$removeOwned,$removeInstalled,$removeConfig) {
+    nt_plan($planPackages,$removeOwned,$removeInstalled,$removeConfig,['dep'=>'remove'],24);
+});
+$plan = nt_plan($planPackages,$removeOwned,$removeInstalled,$removeConfig,['dep'=>'remove','app'=>'remove'],24);
+check(array_column($plan['changes'],'package') === ['app','dep'], 'Dependents are removed before dependencies');
+$plan = nt_plan($planPackages,$planOwned,$planInstalled,$planConfig,[],168);
+check(count($plan['changes']) === 1 && $plan['changes'][0]['change'] === 'settings', 'Settings-only change is planned');
+rejects(function() use ($planPackages,$planOwned,$planInstalled,$planConfig) {
+    nt_plan($planPackages,$planOwned,$planInstalled,$planConfig,['other'=>'surprise'],24);
+});
 file_put_contents($root.'/cache.json', '{"old":true}');
 nt_atomic_write($root.'/cache.json', '{"new":true}');
 check(json_decode(file_get_contents($root.'/cache.json'),true)['new'], 'Atomic cache replacement');

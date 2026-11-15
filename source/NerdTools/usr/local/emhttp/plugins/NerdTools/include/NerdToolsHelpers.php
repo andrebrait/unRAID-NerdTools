@@ -143,6 +143,205 @@ function nt_package_name($record) {
 }
 function nt_record($file) { return substr($file, 0, -4); }
 function nt_tool_name($name) { return strpos($name, 'nerdtools-') === 0 ? substr($name, 10) : $name; }
+function nt_package_version($record, $name) {
+    return is_string($record) && is_string($name)
+        && preg_match('/^'.preg_quote($name, '/').'-([A-Za-z0-9][A-Za-z0-9+_.]*)-(?:x86_64|noarch|i[3-6]86)-[^-]+$/D', $record, $match)
+        ? $match[1] : null;
+}
+function nt_canonical($value) {
+    if (!is_array($value)) return $value;
+    if (!array_is_list($value)) ksort($value, SORT_STRING);
+    foreach ($value as $key => $item) $value[$key] = nt_canonical($item);
+    return $value;
+}
+function nt_plan($packages, $owned, $installed, $config, $actions, $hours) {
+    if (!is_array($packages) || !is_array($owned) || !is_array($installed) || !is_array($config)
+        || !is_array($actions) || !is_int($hours) || $hours < 0 || $hours > 8760) {
+        throw new RuntimeException('Invalid package plan');
+    }
+    $records = [];
+    foreach ($installed as $record) {
+        $name = nt_package_name($record);
+        if ($name) $records[$name][] = $record;
+    }
+    $migrated = []; $states = [];
+    foreach ($packages as $name => $package) {
+        $ownedName = $name;
+        if (!isset($owned[$name]) && $package['tool'] !== $name && isset($owned[$package['tool']])) {
+            $ownedName = $package['tool']; $migrated[$ownedName] = true;
+        }
+        $entry = $owned[$ownedName] ?? null;
+        $record = $entry && in_array($entry['record'], $installed, true) ? $entry['record'] : null;
+        if ($record === null && !empty($records[$name])) $record = end($records[$name]);
+        $external = $record !== null && (!$entry || $record !== $entry['record']);
+        $states[$name] = [
+            'package'=>$package, 'owned'=>$entry, 'owned_name'=>$ownedName, 'record'=>$record,
+            'installed'=>$record !== null, 'external'=>$external,
+            'selected'=>nt_preference($config, $name) === 'yes',
+        ];
+    }
+    foreach ($owned as $name => $entry) {
+        if (isset($states[$name]) || isset($migrated[$name])) continue;
+        $record = in_array($entry['record'], $installed, true) ? $entry['record'] : null;
+        $states[$name] = [
+            'package'=>null, 'owned'=>$entry, 'owned_name'=>$name, 'record'=>$record,
+            'installed'=>$record !== null, 'external'=>false,
+            'selected'=>nt_preference($config, $name) === 'yes',
+        ];
+    }
+    foreach ($actions as $name => $intent) {
+        if (!isset($states[$name]) || !in_array($intent, ['keep','install','upgrade','downgrade','remove'], true)) {
+            throw new RuntimeException('Invalid package action');
+        }
+    }
+    $preferences = []; $intents = [];
+    foreach ($states as $name => $state) {
+        $intent = $actions[$name] ?? 'keep';
+        $package = $state['package']; $current = nt_package_version($state['record'], $state['owned_name']);
+        if ($current === null && $state['record'] !== null) $current = nt_package_version($state['record'], $name);
+        $target = $package['version'] ?? null;
+        if ($state['external'] && $intent !== 'keep') throw new RuntimeException('Externally managed packages cannot be changed');
+        if ($intent === 'install' && (!$package || $state['installed'])) throw new RuntimeException('Package cannot be installed');
+        if (in_array($intent, ['upgrade','downgrade'], true)) {
+            if (!$package || !$state['installed'] || !$state['owned'] || $current === null || $current === $target) {
+                throw new RuntimeException('Package cannot be updated');
+            }
+            $direction = version_compare($target, $current) > 0 ? 'upgrade' : 'downgrade';
+            if ($intent !== $direction) throw new RuntimeException('Package update direction changed');
+        }
+        if ($intent === 'remove' && !$state['owned']) throw new RuntimeException('Package cannot be removed');
+        $preferences[$name] = $state['selected'] ? 'yes' : 'no';
+        if (in_array($intent, ['install','upgrade','downgrade'], true)) $preferences[$name] = 'yes';
+        elseif ($intent === 'remove') $preferences[$name] = 'no';
+        $intents[$name] = $intent;
+    }
+    $graph = $packages;
+    foreach ($states as $name => $state) {
+        if (!isset($graph[$name])) $graph[$name] = ['dependencies'=>$state['owned']['dependencies'] ?? []];
+    }
+    $selected = [];
+    foreach ($preferences as $name => $value) if ($value === 'yes') $selected[] = $name;
+    $required = nt_resolve($selected, $graph);
+    $requiredSet = array_fill_keys($required, true);
+    foreach ($intents as $name => $intent) {
+        if ($intent === 'remove' && isset($requiredSet[$name])) {
+            throw new RuntimeException('Package is required by a selected package: '.$name);
+        }
+    }
+    foreach ($required as $name) $preferences[$name] = 'yes';
+
+    $operations = []; $requestedRoots = []; $installRoots = [];
+    foreach ($intents as $name => $intent) {
+        if (in_array($intent, ['install','upgrade','downgrade'], true)) {
+            $requestedRoots[$name] = $name;
+            if ($intent === 'install') $installRoots[$name] = $name;
+        }
+    }
+    foreach ($requestedRoots as $root) {
+        foreach (nt_resolve([$root], $packages) as $name) {
+            if (!$states[$name]['installed']) {
+                $operations[$name] = ['change'=>'install','automatic'=>$name !== $root,'reason'=>$name === $root ? '' : 'Required by '.$root];
+            }
+        }
+    }
+    foreach ($intents as $name => $intent) {
+        if (in_array($intent, ['upgrade','downgrade'], true)) {
+            $operations[$name] = ['change'=>$intent,'automatic'=>false,'reason'=>''];
+        }
+    }
+    $reverse = [];
+    foreach ($packages as $name => $package) {
+        foreach ($package['dependencies'] as $dependency) $reverse[$dependency][] = $name;
+    }
+    foreach ($installRoots as $root) {
+        $closure = nt_resolve([$root], $packages); $queue = [];
+        foreach ($closure as $name) {
+            if ($name === $root || !$states[$name]['installed'] || !$states[$name]['owned']) continue;
+            $current = nt_package_version($states[$name]['record'], $states[$name]['owned_name']);
+            if ($current !== $packages[$name]['version']) {
+                $change = version_compare($packages[$name]['version'], $current) > 0 ? 'upgrade' : 'downgrade';
+                $operations[$name] = ['change'=>$change,'automatic'=>true,'reason'=>'Required by '.$root];
+                $queue[] = $name;
+            }
+        }
+        $seen = array_fill_keys($queue, true);
+        while ($queue) {
+            $dependency = array_shift($queue);
+            foreach ($reverse[$dependency] ?? [] as $dependent) {
+                if (isset($seen[$dependent]) || empty($states[$dependent]['installed']) || empty($states[$dependent]['owned'])) continue;
+                $seen[$dependent] = true; $queue[] = $dependent;
+                $current = nt_package_version($states[$dependent]['record'], $states[$dependent]['owned_name']);
+                if ($current === $packages[$dependent]['version']) continue;
+                $change = version_compare($packages[$dependent]['version'], $current) > 0 ? 'upgrade' : 'downgrade';
+                $operations[$dependent] = ['change'=>$change,'automatic'=>true,'reason'=>'Required by '.$root];
+            }
+        }
+    }
+    foreach ($intents as $name => $intent) {
+        if ($intent === 'remove') $operations[$name] = ['change'=>'remove','automatic'=>false,'reason'=>''];
+    }
+
+    $installNames = [];
+    foreach ($operations as $name => $operation) if ($operation['change'] !== 'remove') $installNames[] = $name;
+    $installOrder = $installNames ? nt_resolve($installNames, $packages) : [];
+    $installOrder = array_values(array_filter($installOrder, function($name) use ($operations) {
+        return isset($operations[$name]) && $operations[$name]['change'] !== 'remove';
+    }));
+    $removeNames = [];
+    foreach ($operations as $name => $operation) if ($operation['change'] === 'remove') $removeNames[] = $name;
+    $removeOrder = []; $visited = [];
+    $visitRemove = function($name) use (&$visitRemove, &$removeOrder, &$visited, $states, $removeNames) {
+        if (isset($visited[$name])) return;
+        $visited[$name] = true;
+        foreach (($states[$name]['owned']['dependencies'] ?? []) as $dependency) {
+            if (in_array($dependency, $removeNames, true)) $visitRemove($dependency);
+        }
+        $removeOrder[] = $name;
+    };
+    foreach ($removeNames as $name) $visitRemove($name);
+    $order = array_merge($installOrder, array_reverse($removeOrder));
+
+    $rows = []; $changes = [];
+    foreach ($states as $name => $state) {
+        $current = nt_package_version($state['record'], $state['owned_name']);
+        if ($current === null && $state['record'] !== null) $current = nt_package_version($state['record'], $name);
+        $target = $state['package']['version'] ?? null; $operation = $operations[$name] ?? null;
+        if ($operation) $change = $operation['change'];
+        elseif ($state['external']) $change = 'external';
+        elseif (!$state['package']) $change = 'unavailable';
+        elseif ($state['installed'] && $current !== $target) {
+            $change = version_compare($target, $current) > 0 ? 'update-available' : 'downgrade-available';
+        } else $change = 'no-change';
+        $rows[$name] = [
+            'intent'=>$intents[$name], 'change'=>$change, 'from'=>$current, 'to'=>$target,
+            'automatic'=>$operation['automatic'] ?? false, 'reason'=>$operation['reason'] ?? '',
+        ];
+    }
+    foreach ($order as $name) $changes[] = ['package'=>$name] + $rows[$name];
+    $currentHours = isset($config['update_check_hours']) && ctype_digit((string)$config['update_check_hours'])
+        ? (int)$config['update_check_hours'] : 24;
+    if ($hours !== $currentHours) {
+        $changes[] = ['package'=>null, 'intent'=>'keep', 'change'=>'settings', 'from'=>(string)$currentHours,
+            'to'=>(string)$hours, 'automatic'=>false, 'reason'=>'Automatic catalog checks'];
+    }
+    ksort($rows, SORT_STRING); ksort($preferences, SORT_STRING); ksort($intents, SORT_STRING);
+    $state = [
+        'packages'=>array_map(function($package) {
+            return ['file'=>$package['file'] ?? null, 'sha256'=>$package['sha256'] ?? null,
+                'dependencies'=>$package['dependencies'], 'tool'=>$package['tool'] ?? null];
+        }, $packages),
+        'owned'=>array_map(function($entry) {
+            return ['record'=>$entry['record'], 'sha256'=>$entry['sha256'] ?? null,
+                'dependencies'=>$entry['dependencies'] ?? []];
+        }, $owned),
+        'installed'=>array_values($installed), 'preferences'=>$preferences, 'hours'=>$currentHours,
+    ];
+    sort($state['installed'], SORT_STRING);
+    $plan = ['rows'=>$rows, 'changes'=>$changes, 'preferences'=>$preferences, 'hours'=>$hours,
+        'actions'=>$intents, 'state'=>nt_canonical($state)];
+    $plan['id'] = hash('sha256', json_encode(nt_canonical($plan), JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
+    return $plan;
+}
 function nt_log($message, $quiet = false) {
     openlog('NerdTools', LOG_PID, LOG_USER); syslog(LOG_INFO, $message); closelog();
     if (!$quiet) echo $message."\n";
