@@ -309,6 +309,15 @@ def all_candidates_decided(state):
         for candidate in candidates)
 
 
+def candidate_failures(records, candidates):
+    failures = {}
+    for candidate in candidates:
+        record = issue_record_for(records, candidate)
+        if record and isinstance(record.get('failure'), str) and record['failure']:
+            failures[candidate['name']] = record['failure']
+    return failures
+
+
 def update_candidate_issues(gh, records, candidates, status, **changes):
     for candidate in candidates:
         record = issue_record_for(records, candidate)
@@ -1041,7 +1050,8 @@ def prepare(repo, gh, event, output, evaluation=False, package=None):
                 raise ValueError('Main changed during prepare; retry on current main')
         context = {'repository': gh.repository, 'candidates': included, 'feedback': feedback,
                    'attempt': state['attempts'], 'previous_report': state.get('report'),
-                   'validation_error': state.get('validation_error', '')}
+                   'validation_error': state.get('validation_error', ''),
+                   'previous_failures': candidate_failures(records, included)}
         if build and build['conclusion'] != 'success':
             context['failed_catalog_logs'] = run(
                 ['gh', 'run', 'view', str(build['id']), '--repo', gh.repository, '--log-failed'])[-120000:]

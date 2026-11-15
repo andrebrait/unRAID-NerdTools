@@ -226,6 +226,16 @@ class IssueLifecycleTests(unittest.TestCase):
         self.assertIn('https://example.invalid/build/4', gh.issues[0]['body'])
         self.assertIn('catalog validation failed', gh.issues[0]['body'])
 
+    def test_saved_no_pr_failure_is_returned_for_next_provider_context(self):
+        candidate = self.candidate()
+        gh = GitHubFixture(None)
+        record = self.updates.sync_candidate_issues(gh, [candidate])[0]
+        self.updates.set_issue_status(
+            gh, record, 'queued', attempts=1, failure='source smoke drift')
+        self.assertEqual(
+            self.updates.candidate_failures([record], [candidate]),
+            {'vim': 'source smoke drift'})
+
     def test_closure_refs_require_accepted_version_and_retain_prior_batch_accepts(self):
         candidate = self.candidate()
         retained = {'name': 'tmux', 'ours': '3.0', 'upstream': '4.0',
