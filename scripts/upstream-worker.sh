@@ -11,6 +11,12 @@ case "${1:-}" in
       exit 1
     fi
     sudo useradd --system --user-group --create-home --home-dir /home/nerdtools-agent --shell /bin/bash "$actor"
+    # Traverse private runner ancestors without exposing their directory listings.
+    directory="$(dirname "$root")"
+    while [[ "$directory" != / ]]; do
+      sudo setfacl -m "u:$actor:--x" "$directory"
+      directory="$(dirname "$directory")"
+    done
     mkdir -p "$root/control" "$root/output" "$root/collected"
     python3 scripts/upstream-runner.py extract --archive "$plan/workspace.tar" \
       --workspace "$root/work" --manifest "$root/control/manifest.json"
