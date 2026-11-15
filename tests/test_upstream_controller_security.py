@@ -147,6 +147,23 @@ class ScratchPolicyTests(unittest.TestCase):
     def validate(self):
         return self.updates.validate_workspace(self.repo, self.scratch, self.report, self.candidates)
 
+    def test_unassessed_sidecar_change_is_rejected_even_when_its_lock_is_unchanged(self):
+        beta = self.entry | {'name': 'beta', 'recipe': 'build/recipes/beta/build'}
+        for root in (self.repo, self.scratch):
+            (root / 'build/locks/slackware.json').write_text(json.dumps([self.entry, beta]))
+            (root / 'build/recipes/beta').mkdir()
+            (root / beta['recipe']).write_text('beta source')
+            (root / 'build/recipes/beta/rc.beta').write_text('unchanged service')
+        subprocess.check_call(['git', '-C', str(self.repo), 'add', 'build'])
+        (self.scratch / 'build/locks/slackware.json').write_text(json.dumps([self.entry | {'version': '2.0'}, beta]))
+        sidecar = self.scratch / 'build/recipes/beta/rc.beta'
+        sidecar.write_text('unassessed service change')
+        with self.assertRaisesRegex(ValueError, 'accepted'):
+            self.validate()
+        self.assertEqual((self.repo / 'build/recipes/beta/rc.beta').read_text(), 'unchanged service')
+        sidecar.write_text('unchanged service')
+        self.assertEqual(self.validate(), ['build/locks/slackware.json'])
+
     def test_only_bounded_version_substitution_preserves_smoke(self):
         self.write_entry(version='2.0', smoke=[['alpha', '--expected=2.0', '--minimum=1.0.14']])
         self.assertIn('build/locks/slackware.json', self.validate())
@@ -234,7 +251,7 @@ class ScratchPolicyTests(unittest.TestCase):
 
     def test_new_dependency_recipe_hash_is_controller_computed(self):
         import hashlib
-        self.write_entry(version='2.0')
+        self.write_entry(version='2.0', dependencies=['dep'])
         dependency = {'name': 'dep', 'version': '1', 'internal': True,
                       'recipe': 'build/recipes/dep/build',
                       'provenance': {'kind': 'source', 'revision': 'pinned'},

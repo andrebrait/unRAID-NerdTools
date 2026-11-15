@@ -235,6 +235,11 @@ def validate_workspace(repo, workspace, report, candidates):
         if decision['decision'] == 'accept' and after[decision['name']]['version'] != versions[decision['name']]:
             raise ValueError('Accepted version differs from discovered upstream')
     accepted = {item['name'] for item in report['recipes'] if item['decision'] == 'accept'}
+    permitted = dependency_closure(after, accepted)
+    for relative in changed:
+        parts = PurePosixPath(relative).parts
+        if parts[:2] == ('build', 'recipes') and parts[2] not in permitted:
+            raise ValueError(f'Recipe change is outside the accepted dependency closure: {relative}')
     for name, item in after.items():
         recipe = item.get('recipe')
         if name not in before or name in accepted or recipe in changed:

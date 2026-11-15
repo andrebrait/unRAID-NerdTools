@@ -234,10 +234,32 @@ class OmpTests(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which('docker') and os.environ.get('OMP_SANDBOX_IMAGE'), 'requires pinned Docker image')
     def test_real_workspace_command_is_offline_and_unprivileged(self):
-        result = bridge.workspace(self.config, "python -c 'import os; print(os.getuid()); print(os.path.exists(\"/work/.git\")); open(\"/work/result\", \"w\").write(\"ok\")'")
+        command = """python - <<'PY'
+import os, socket
+from pathlib import Path
+assert not any(name in os.environ for name in ('GH_TOKEN', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY'))
+assert not Path('/work/.git').exists()
+assert not Path('/var/run/docker.sock').exists()
+assert not Path('/root/.omp').exists()
+assert 'CapEff:\\t0000000000000000' in Path('/proc/self/status').read_text()
+try:
+    Path('/etc/nerdtools-isolation-probe').write_text('bad')
+except OSError:
+    pass
+else:
+    raise AssertionError('Container root filesystem is writable')
+try:
+    socket.create_connection(('1.1.1.1', 443), timeout=0.2)
+except OSError:
+    pass
+else:
+    raise AssertionError('Workspace can access the network')
+Path('/work/result').write_text('isolated')
+PY"""
+        with patch.dict(os.environ, {'GH_TOKEN': 'host-secret', 'OPENAI_API_KEY': 'host-key'}):
+            result = bridge.workspace(self.config, command)
         self.assertEqual(result['exit_code'], 0, result)
-        self.assertIn('False', result['output'])
-        self.assertEqual((self.work / 'result').read_text(), 'ok')
+        self.assertEqual((self.work / 'result').read_text(), 'isolated')
 
 
 if __name__ == '__main__':
