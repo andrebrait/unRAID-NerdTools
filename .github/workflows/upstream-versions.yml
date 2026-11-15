@@ -104,7 +104,7 @@ jobs:
           prompt-file: ${{ runner.temp }}/nerdtools-worker/control/prompt.md
           output-schema-file: ${{ runner.temp }}/nerdtools-worker/control/report.schema.json
           output-file: ${{ runner.temp }}/nerdtools-worker/output/report.json
-          codex-args: '["--json", "--ephemeral", "--search", "--ignore-rules"]'
+          codex-args: '["--json", "--ephemeral"]'
       - name: Stop agent processes and collect untrusted results
         if: always()
         env:
