@@ -62,7 +62,7 @@ cache = Path(os.environ['GOMODCACHE']) / 'cache/download'
 records = []
 for module, version, contents in [
         ('example.com/mod', 'v1.2.3', [('info', b'info'), ('mod', b'module example.com/mod\\n'), ('zip', b'zip')]),
-        ('example.com/other', 'v2.0.0', [('mod', b'module example.com/other\\n')])]:
+        ('example.com/transitive', 'v2.0.0', [('mod', b'module example.com/transitive\\n')])]:
     folder = cache / module / '@v'
     folder.mkdir(parents=True)
     record = {'Path': module, 'Version': version}
@@ -72,7 +72,7 @@ for module, version, contents in [
         record[{'info':'Info', 'mod':'GoMod', 'zip':'Zip'}[suffix]] = str(path)
     records.append(record)
 extra = cache / 'example.com/transitive/@v/v1.0.0.mod'
-extra.parent.mkdir(parents=True)
+extra.parent.mkdir(parents=True, exist_ok=True)
 extra.write_bytes(b'module example.com/transitive\\n')
 toolchain = cache / 'golang.org/toolchain/@v/v0.0.1-go1.26.11.linux-amd64.mod'
 toolchain.parent.mkdir(parents=True)
@@ -102,17 +102,18 @@ print(''.join(json.dumps(record) for record in records))
             expected.append((name, f"example.com/mod/@v/v1.2.3.{suffix}", url,
                              hashlib.sha256(data).hexdigest()))
             self.assertFalse((self.recipe / name).exists())
-        other_url = "https://proxy.golang.org/example.com/other/@v/v2.0.0.mod"
-        other_name = hashlib.sha256(other_url.encode()).hexdigest()[:24] + ".mod"
-        expected.append((other_name, "example.com/other/@v/v2.0.0.mod", other_url,
-                         hashlib.sha256(b"module example.com/other\n").hexdigest()))
-        self.assertFalse((self.recipe / other_name).exists())
+        selected_url = "https://proxy.golang.org/example.com/transitive/@v/v2.0.0.mod"
+        selected_name = hashlib.sha256(selected_url.encode()).hexdigest()[:24] + ".mod"
+        expected.append((selected_name, "example.com/transitive/@v/v2.0.0.mod", selected_url,
+                         hashlib.sha256(b"module example.com/transitive\n").hexdigest()))
+        self.assertFalse((self.recipe / selected_name).exists())
         transitive_url = "https://proxy.golang.org/example.com/transitive/@v/v1.0.0.mod"
         transitive_name = hashlib.sha256(transitive_url.encode()).hexdigest()[:24] + ".mod"
         expected.append((
             transitive_name, "example.com/transitive/@v/v1.0.0.mod", transitive_url,
             hashlib.sha256(b"module example.com/transitive\n").hexdigest()))
         self.assertFalse((self.recipe / transitive_name).exists())
+        expected.sort(key=lambda item: item[1])
         self.assertEqual((self.recipe / "go-modules.tsv").read_text(),
                          "".join(f"{name}\t{destination}\n" for name, destination, _, _ in expected))
         self.assertNotIn("golang.org/toolchain/@v/", (self.recipe / "go-modules.tsv").read_text())
