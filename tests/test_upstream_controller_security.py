@@ -371,6 +371,25 @@ class ScratchPolicyTests(unittest.TestCase):
         self.assertEqual(entry['recipe_sha256'], hashlib.sha256(b'updated source build').hexdigest())
         self.assertTrue((self.repo / 'build/recipes/alpha/slack-desc').is_symlink())
 
+    def test_import_applies_directory_to_file_replacement_exactly(self):
+        import shutil
+        self.write_entry(version='2.0')
+        repository_path = self.repo / 'build/recipes/alpha/data'
+        scratch_path = self.scratch / 'build/recipes/alpha/data'
+        repository_path.mkdir()
+        scratch_path.mkdir()
+        (repository_path / 'old').write_text('old')
+        (scratch_path / 'old').write_text('old')
+        shutil.rmtree(scratch_path)
+        scratch_path.write_text('replacement')
+        self.updates.import_workspace(
+            self.repo, self.scratch,
+            ['build/locks/slackware.json', 'build/recipes/alpha/data',
+             'build/recipes/alpha/data/old'],
+            self.report)
+        self.assertTrue(repository_path.is_file())
+        self.assertEqual(repository_path.read_text(), 'replacement')
+
     def test_generated_inventory_change_is_ignored_until_controller_regenerates_it(self):
         self.write_entry(version='2.0')
         (self.repo / 'build/recipe-files.json').write_text('{"trusted":"controller output"}\n')

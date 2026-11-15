@@ -535,13 +535,22 @@ def validate_workspace(repo, workspace, report, candidates):
 
 def import_workspace(repo, workspace, paths, report):
     before = {item['name']: item for lock in LOCKS for item in json.loads((repo / lock).read_text())}
-    for relative in paths:
-        source, destination = workspace / relative, repo / relative
-        if source.exists():
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, destination)
+    deleted = [relative for relative in paths if not (workspace / relative).exists()]
+    for relative in sorted(deleted, key=lambda value: len(PurePosixPath(value).parts), reverse=True):
+        destination = repo / relative
+        if destination.is_dir() and not destination.is_symlink():
+            destination.rmdir()
         else:
-            destination.unlink()
+            destination.unlink(missing_ok=True)
+    for relative in (item for item in paths if item not in deleted):
+        source, destination = workspace / relative, repo / relative
+        if destination.is_dir() and not destination.is_symlink():
+            try:
+                destination.rmdir()
+            except OSError as error:
+                raise ValueError(f'Cannot replace non-empty directory: {relative}') from error
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
     accepted = {item['name'] for item in report['recipes'] if item['decision'] == 'accept'}
     for lock in LOCKS:
         text = (repo / lock).read_text()
