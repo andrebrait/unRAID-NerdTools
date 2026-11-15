@@ -9,6 +9,7 @@ permissions:
   contents: read
   actions: write
   pull-requests: read
+  statuses: read
 
 concurrency:
   group: unraid-release-discovery

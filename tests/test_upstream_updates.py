@@ -28,6 +28,7 @@ class ControllerTests(unittest.TestCase):
                 'head': {'ref': 'automation/upstream-recipes', 'sha': 'a' * 40,
                          'repo': {'full_name': 'owner/tools'}},
                 'base': {'ref': 'main', 'repo': {'full_name': 'owner/tools'}},
+                'merge_commit_sha': 'merge12', 'html_url': 'https://github.com/owner/tools/pull/12',
                 'user': {'login': 'github-actions[bot]', 'type': 'Bot'}}
 
     def test_foreign_or_wrong_branch_pr_cannot_trigger_privileged_work(self):
@@ -114,6 +115,7 @@ class GitHubFixture:
         self.reviews = list(reviews)
         self.dispatched = []
         self.edits = []
+        self.statuses = []
 
     def api(self, path, data=None, method=None):
         if path == 'collaborators/maintainer/permission':
@@ -122,11 +124,16 @@ class GitHubFixture:
             if data:
                 self.edits.append(data)
             return self.pr
+        if path == 'statuses/merge12' and data:
+            self.statuses.append(data | {'creator': {'login': 'github-actions[bot]'}})
+            return self.statuses[-1]
         raise AssertionError(f'Unexpected API request: {path}')
 
     def pages(self, path):
         if path == 'pulls/12/reviews?per_page=100':
             return self.reviews
+        if path == 'commits/merge12/statuses?per_page=100':
+            return self.statuses
         raise AssertionError(f'Unexpected pagination: {path}')
 
     def dispatch(self, workflow, ref='main', inputs=None):
@@ -216,16 +223,19 @@ class BatchLifecycleTests(unittest.TestCase):
             # Only the external model/discovery/GitHub boundaries are fixtures. Validation,
             # inventory generation, commits, remote pushes and branch selection are real.
             (root / 'scripts/upstream-agent.py').write_text(
-                'import json\n'
+                'import json, shutil, tempfile\n'
+                'from pathlib import Path\n'
                 'def run_agent(repo, context):\n'
-                '    path = repo / \"build/locks/slackware.json\"\n'
+                '    workspace = Path(tempfile.mkdtemp())\n'
+                '    shutil.copytree(repo, workspace, dirs_exist_ok=True, symlinks=True, ignore=shutil.ignore_patterns(".git", "__pycache__"))\n'
+                '    path = workspace / "build/locks/slackware.json"\n'
                 '    entries = json.loads(path.read_text())\n'
                 '    candidate = context[\"candidates\"][0]\n'
                 '    for entry in entries:\n'
                 '        if entry[\"name\"] == \"vim\": entry[\"version\"] = candidate[\"upstream\"]\n'
                 '    path.write_text(json.dumps(entries, indent=2) + \"\\n\")\n'
-                '    return {\"summary\":\"Reviewed source\", \"recipes\":[{\"name\":\"vim\",'
-                '\"decision\":\"accept\",\"reason\":\"Pinned licensed source\"}]}\n')
+                '    return {"workspace":str(workspace), "summary":"Reviewed source", "recipes":[{"name":"vim",'
+                '"decision":"accept","reason":"Pinned licensed source"}]}\n')
             git('add', '.')
             git('commit', '-qm', 'baseline')
             remote = Path(folder) / 'remote.git'

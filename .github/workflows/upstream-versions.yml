@@ -36,10 +36,22 @@ jobs:
           persist-credentials: false
       - name: Test upstream automation
         run: python3 -m unittest discover -s tests -p 'test_upstream*.py'
+      - name: Install the pinned OMP release and isolated workspace image
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/omp"
+          gh release download v18.20.0-int.202611150826.g7218b87 \
+            --repo ompweb-dev/oh-my-pi --pattern omp-linux-x64 --dir "$RUNNER_TEMP/omp"
+          echo "46e7aee0b34eb4f01f757b08fd9fd0a6170cfccdd8454816b04a9677d87c9f01  $RUNNER_TEMP/omp/omp-linux-x64" | sha256sum --check -
+          chmod +x "$RUNNER_TEMP/omp/omp-linux-x64"
+          docker pull python@sha256:935c3c5b12357a7e10caa9c1e6ca5692344d97cf229832ef584be2cec9fc03df
       - name: Update the automation branch and pull request
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          OMP_BINARY: ${{ runner.temp }}/omp/omp-linux-x64
+          OMP_SANDBOX_IMAGE: python@sha256:935c3c5b12357a7e10caa9c1e6ca5692344d97cf229832ef584be2cec9fc03df
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}

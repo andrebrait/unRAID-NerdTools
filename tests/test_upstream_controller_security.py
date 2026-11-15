@@ -6,7 +6,6 @@ import subprocess
 import tempfile
 from unittest import mock
 import test_upstream_updates as controller
-import test_upstream_agent as provider
 
 
 class StateAndFeedbackTests(unittest.TestCase):
@@ -62,10 +61,10 @@ class StateAndFeedbackTests(unittest.TestCase):
             self.updates.branch_lease(gh, None)
 
     def test_daily_release_gate_blocks_unapproved_batch_even_after_later_commits(self):
-        pr = controller.ControllerTests.pr(self) | {'merged_at': '2026-11-14T00:00:00Z', 'merge_commit_sha': 'oldmerge'}
+        pr = controller.ControllerTests.pr(self) | {'merged_at': '2026-11-14T00:00:00Z'}
         class Service(controller.GitHubFixture):
             def api(self, path, data=None, method=None):
-                if path == 'compare/oldmerge...laterdocscommit':
+                if path == 'compare/merge12...laterdocscommit':
                     return {'status': 'ahead'}
                 return super().api(path, data, method)
             def pages(self, path):
@@ -114,49 +113,224 @@ class StateAndFeedbackTests(unittest.TestCase):
             self.assertIn('manual', report['recipes'][0]['reason'])
 
 
-class ProviderPolicyTests(provider.Base):
-    def test_version_bearing_smoke_keeps_assertions_while_updating_expected_versions(self):
-        entries = self.lock()
-        entries[0]['smoke'] = [['alpha', '--expected=1.0', '--runtime=10.0.14']]
-        (self.repo / 'build/locks/slackware.json').write_text(json.dumps(entries))
-        session = self.session()
-        with self.assertRaises(provider.agent.ToolError):
-            session.call('patch_package', {'name': 'alpha', 'changes': {'version': '2.0',
-                         'smoke': [['alpha', '--expected=2.0', '--runtime=0.0.0']]}})
-        session.call('patch_package', {'name': 'alpha', 'changes': {'version': '2.0',
-                     'smoke': [['alpha', '--expected=2.0', '--runtime=10.0.14']]}})
-        self.assertEqual(self.lock()[0]['smoke'], [['alpha', '--expected=2.0', '--runtime=10.0.14']])
-        with self.assertRaises(provider.agent.ToolError):
-            session.call('patch_package', {'name': 'alpha', 'changes': {'smoke': [['true']]}})
+class ScratchPolicyTests(unittest.TestCase):
+    def setUp(self):
+        self.updates = controller.module()
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.repo = Path(self.temp.name) / 'repo'
+        self.scratch = Path(self.temp.name) / 'scratch'
+        self.repo.mkdir()
+        (self.repo / 'build/locks').mkdir(parents=True)
+        self.entry = {'name': 'alpha', 'version': '1.0', 'recipe': 'build/recipes/alpha/build',
+                      'provenance': {'kind': 'source'}, 'catalog': True,
+                      'smoke': [['alpha', '--expected=1.0', '--minimum=1.0.14']]}
+        (self.repo / self.entry['recipe']).parent.mkdir(parents=True)
+        (self.repo / self.entry['recipe']).write_text('source build')
+        (self.repo / 'build/locks/slackware.json').write_text(json.dumps([self.entry]))
+        (self.repo / 'build/locks/slackbuilds.json').write_text('[]')
+        (self.repo / 'build/policy').write_text('trusted')
+        (self.repo / 'build/recipes/alpha/slack-desc').symlink_to('build')
+        def git(*args):
+            return subprocess.check_output(['git', '-C', str(self.repo), *args], text=True)
+        git('init', '-q')
+        git('add', '.')
+        git('-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'base')
+        import shutil
+        shutil.copytree(self.repo, self.scratch, symlinks=True, ignore=shutil.ignore_patterns('.git'))
+        self.report = {'summary': 'update', 'recipes': [{'name': 'alpha', 'decision': 'accept', 'reason': 'source'}]}
+        self.candidates = [{'name': 'alpha', 'upstream': '2.0'}]
 
-    def test_package_version_substitution_does_not_rewrite_a_longer_dependency_version(self):
-        entries = self.lock()
-        entries[0]['smoke'] = [['alpha', '--expected=1.0', '--minimum=1.0.14']]
-        (self.repo / 'build/locks/slackware.json').write_text(json.dumps(entries))
-        session = self.session()
-        with self.assertRaises(provider.agent.ToolError):
-            session.call('patch_package', {'name': 'alpha', 'changes': {'version': '2.0',
-                         'smoke': [['alpha', '--expected=2.0', '--minimum=2.0.14']]}})
-        session.call('patch_package', {'name': 'alpha', 'changes': {'version': '2.0',
-                     'smoke': [['alpha', '--expected=2.0', '--minimum=1.0.14']]}})
-        self.assertEqual(self.lock()[0]['smoke'], [['alpha', '--expected=2.0', '--minimum=1.0.14']])
+    def write_entry(self, **changes):
+        (self.scratch / 'build/locks/slackware.json').write_text(json.dumps([self.entry | changes]))
 
-    def test_unchanged_legacy_provenance_does_not_block_a_version_update(self):
-        entries = self.lock()
-        entries[0]['provenance']['revision'] = 'GTK 3.24.52; GLib 2.90.1; pinned component revisions'
-        (self.repo / 'build/locks/slackware.json').write_text(json.dumps(entries))
-        session = self.session()
-        session.call('patch_package', {'name': 'alpha', 'changes': {'version': '2.0'}})
-        self.assertEqual(self.lock()[0]['version'], '2.0')
+    def validate(self):
+        return self.updates.validate_workspace(self.repo, self.scratch, self.report, self.candidates)
 
-    def test_latest_validation_error_is_not_clipped_out_of_long_feedback(self):
-        session = self.session(feedback='old output' * 20000 + '\nLATEST VALIDATION ERROR: bad hash')
-        self.assertIn('LATEST VALIDATION ERROR: bad hash', session.prompt())
+    def test_only_bounded_version_substitution_preserves_smoke(self):
+        self.write_entry(version='2.0', smoke=[['alpha', '--expected=2.0', '--minimum=1.0.14']])
+        self.assertIn('build/locks/slackware.json', self.validate())
+        for smoke in ([['true']], [['alpha', '--expected=2.0', '--minimum=2.0.14']]):
+            self.write_entry(version='2.0', smoke=smoke)
+            with self.assertRaises(ValueError):
+                self.validate()
 
-    def test_repair_sessions_cannot_reset_the_shared_deadline(self):
-        session = self.session(deadline=0)
-        with self.assertRaises(provider.agent.AgentError):
-            session.turn()
+    def test_policy_source_kind_and_discovered_version_are_immutable(self):
+        for changes in ({'catalog': False}, {'recipe': 'other'}, {'provenance': {'kind': 'binary'}},
+                        {'version': '3.0'}):
+            self.write_entry(version='2.0')
+            self.write_entry(**({'version': '2.0'} | changes))
+            with self.assertRaises(ValueError):
+                self.validate()
+
+    def test_host_policy_deletions_new_hidden_files_and_symlinks_fail_before_import(self):
+        self.write_entry(version='2.0')
+        policy = self.scratch / 'build/policy'
+        policy.unlink()
+        with self.assertRaises(ValueError):
+            self.validate()
+        policy.write_text('trusted')
+        hidden = self.scratch / '.git'
+        hidden.mkdir()
+        with self.assertRaises(ValueError):
+            self.validate()
+        hidden.rmdir()
+        recipe = self.scratch / self.entry['recipe']
+        recipe.unlink()
+        recipe.symlink_to(self.repo / self.entry['recipe'])
+        with self.assertRaises(ValueError):
+            self.validate()
+        self.assertEqual((self.repo / self.entry['recipe']).read_text(), 'source build')
+
+    def test_oversized_recipe_is_rejected_before_reading_model_bytes(self):
+        self.write_entry(version='2.0')
+        with (self.scratch / self.entry['recipe']).open('wb') as stream:
+            stream.truncate(16 * 1024 * 1024 + 1)
+        with self.assertRaisesRegex(ValueError, 'size limit'):
+            self.validate()
+
+    def test_downloads_are_not_imported_and_new_dependency_must_be_pinned_source(self):
+        self.write_entry(version='2.0')
+        downloads = self.scratch / '.upstream-downloads'
+        downloads.mkdir()
+        (downloads / 'archive').write_text('source archive')
+        self.assertEqual(self.validate(), ['build/locks/slackware.json'])
+        lock = self.scratch / 'build/locks/slackware.json'
+        entries = json.loads(lock.read_text())
+        entries.append({'name': 'dep', 'version': '1', 'internal': True, 'provenance': {'kind': 'source'}})
+        lock.write_text(json.dumps(entries))
+        with self.assertRaises(ValueError):
+            self.validate()
+
+    def test_unchanged_tracked_symlink_is_preserved_but_changed_link_is_rejected(self):
+        self.write_entry(version='2.0')
+        self.assertIn('build/locks/slackware.json', self.validate())
+        link = self.scratch / 'build/recipes/alpha/slack-desc'
+        link.unlink()
+        link.symlink_to('/etc/passwd')
+        with self.assertRaises(ValueError):
+            self.validate()
+        link.unlink()
+        link.write_text('replacement cannot overwrite the host symlink target')
+        with self.assertRaises(ValueError):
+            self.validate()
+
+    def test_controller_pins_changed_recipe_bytes_not_model_hash(self):
+        import hashlib
+        self.write_entry(version='2.0', recipe_sha256='forged')
+        recipe = self.scratch / self.entry['recipe']
+        recipe.write_text('updated source build')
+        paths = self.validate()
+        self.updates.import_workspace(self.repo, self.scratch, paths, self.report)
+        entry = json.loads((self.repo / 'build/locks/slackware.json').read_text())[0]
+        self.assertEqual(entry['recipe_sha256'], hashlib.sha256(b'updated source build').hexdigest())
+        self.assertTrue((self.repo / 'build/recipes/alpha/slack-desc').is_symlink())
+
+    def test_download_directory_symlink_is_not_ignored(self):
+        self.write_entry(version='2.0')
+        (self.scratch / '.upstream-downloads').symlink_to(self.repo, target_is_directory=True)
+        with self.assertRaises(ValueError):
+            self.validate()
+
+    def test_new_dependency_recipe_hash_is_controller_computed(self):
+        import hashlib
+        self.write_entry(version='2.0')
+        dependency = {'name': 'dep', 'version': '1', 'internal': True,
+                      'recipe': 'build/recipes/dep/build',
+                      'provenance': {'kind': 'source', 'revision': 'pinned'},
+                      'inputs': [{'url': 'https://example.invalid/source', 'sha256': 'a' * 64}]}
+        recipe = self.scratch / dependency['recipe']
+        recipe.parent.mkdir()
+        recipe.write_text('dependency source build')
+        lock = self.scratch / 'build/locks/slackware.json'
+        lock.write_text(json.dumps(json.loads(lock.read_text()) + [dependency]))
+        paths = self.validate()
+        self.updates.import_workspace(self.repo, self.scratch, paths, self.report)
+        entries = json.loads((self.repo / 'build/locks/slackware.json').read_text())
+        self.assertEqual(entries[1]['recipe_sha256'], hashlib.sha256(b'dependency source build').hexdigest())
+
+    def test_invalid_report_and_failed_import_always_clean_scratch(self):
+        import shutil
+        from types import SimpleNamespace
+        (self.repo / 'build/README.md').write_text('trusted guide')
+        class Service(controller.GitHubFixture):
+            def api(self, path, data=None, method=None):
+                if path.startswith('pulls?state=open'):
+                    return []
+                return super().api(path, data, method)
+        real_run = self.updates.run
+        def boundary(args, repo=None, input=None):
+            if args[1:2] == ['scripts/check-upstream-versions.py']:
+                return json.dumps(self.candidates)
+            return real_run(args, repo, input)
+        for invalid_report in (True, False):
+            attempts = []
+            def agent_run(repo, context):
+                attempts.append((context['attempt'], context['feedback']))
+                if not self.scratch.exists():
+                    shutil.copytree(self.repo, self.scratch, symlinks=True, ignore=shutil.ignore_patterns('.git'))
+                self.write_entry(version='2.0')
+                report = self.report | {'workspace': str(self.scratch)}
+                if invalid_report:
+                    report['recipes'] = []
+                return report
+            agent = SimpleNamespace(run_agent=agent_run)
+            with mock.patch.object(self.updates, 'run', side_effect=boundary), mock.patch.object(
+                    self.updates, 'prepare_branch'), mock.patch.object(self.updates, 'branch_lease', return_value=''), mock.patch.object(
+                    self.updates, 'load_script', return_value=agent), mock.patch.object(
+                    self.updates, 'import_workspace', side_effect=ValueError('import failed')), mock.patch.dict(
+                    'os.environ', {'GITHUB_EVENT_NAME': 'schedule'}), self.assertRaises(ValueError):
+                self.updates.update(self.repo, Service(None), {})
+            self.assertFalse(self.scratch.exists())
+            self.assertEqual(json.loads((self.repo / 'build/locks/slackware.json').read_text())[0]['version'], '1.0')
+            self.assertEqual(len(attempts), 3 if invalid_report else 1)
+            if invalid_report:
+                self.assertIn('workspace validation', attempts[1][1])
+
+
+class DurableApprovalTests(unittest.TestCase):
+    def test_attestation_survives_revoked_writer_permission_and_release_retry(self):
+        updates = controller.module()
+        pr = controller.ControllerTests.pr(self) | {'merged': True, 'merged_at': 'date'}
+        review = {'id': 1, 'user': {'login': 'maintainer', 'type': 'User'},
+                  'state': 'APPROVED', 'commit_id': 'a' * 40, 'author_association': 'OWNER'}
+        class Service(controller.GitHubFixture):
+            revoked = False
+            def api(self, path, data=None, method=None):
+                if path == 'compare/merge12...later':
+                    return {'status': 'ahead'}
+                if path == 'collaborators/maintainer/permission' and self.revoked:
+                    raise AssertionError('Historical permissions must not be reread')
+                return super().api(path, data, method)
+            def pages(self, path):
+                if path.startswith('pulls?'):
+                    return [pr]
+                if path == 'commits/wrongmerge/statuses?per_page=100':
+                    return []
+                return super().pages(path)
+        gh = Service(pr, [review])
+        updates.release(gh, {'pull_request': {'number': 12}})
+        self.assertEqual(gh.statuses[0]['target_url'], 'https://github.com/owner/tools/pull/12')
+        gh.revoked = True
+        updates.release(gh, {'pull_request': {'number': 12}})
+        with mock.patch.dict('os.environ', {'GITHUB_SHA': 'later'}):
+            updates.authorize(gh, {})
+        self.assertEqual(len(gh.statuses), 1)
+        trusted = gh.statuses[0]
+        for changes in ({'creator': {'login': 'model'}}, {'description': 'Approved head wrong'},
+                        {'context': 'other'}, {'state': 'failure'}, {'target_url': 'https://evil.invalid'}):
+            gh.statuses = [trusted | changes]
+            with mock.patch.dict('os.environ', {'GITHUB_SHA': 'later'}), self.assertRaises(ValueError):
+                updates.authorize(gh, {})
+        pr['merge_commit_sha'] = 'wrongmerge'
+        with mock.patch.dict('os.environ', {'GITHUB_SHA': 'later'}), self.assertRaises(ValueError):
+            # Even the same approved head requires an attestation on this exact merge.
+            with mock.patch.object(gh, 'api', return_value={'status': 'ahead'}):
+                updates.authorize(gh, {})
+        pr['merge_commit_sha'] = 'merge12'
+        gh.statuses = []
+        with mock.patch.dict('os.environ', {'GITHUB_SHA': 'later'}), self.assertRaises(ValueError):
+            updates.authorize(gh, {})
 
 
 if __name__ == '__main__':
