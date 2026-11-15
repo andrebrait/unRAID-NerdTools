@@ -1,27 +1,59 @@
-.package {
-    cursor: pointer;
-}
 #package_form {
     margin-top: -10px;
 }
-.switch-button-label.off {
-    color: inherit;
+#package_form .wrapper {
+    overflow-x: auto;
 }
-.uptodate {
-    color:#44B012;
-    white-space:nowrap;
+.pkgaction {
+    min-width: 7rem;
 }
-.updateready, .update {
-    white-space:nowrap;
-    cursor: pointer;
-}
-.uninstalled, .installed {
-    white-space:nowrap;
-    cursor: inherit;
-}
-table.tablesorter tbody td.wrapper  {
+.version-value,
+.planned-change {
     white-space: nowrap;
 }
-table.tablesorter .checked  {
-    width: 90px;
+.package-changed td:first-child {
+    border-left: 0.25rem solid currentColor;
+}
+.package-changed .planned-change,
+.package-update-available .planned-change {
+    font-weight: 600;
+}
+#package_plan_dialog {
+    width: min(50rem, calc(100vw - 2rem));
+    max-height: calc(100vh - 2rem);
+    padding: 0;
+    color: CanvasText;
+    background: Canvas;
+    border: 1px solid ButtonBorder;
+}
+#package_plan_dialog::backdrop {
+    background: rgb(0 0 0 / 55%);
+}
+.package-plan-dialog {
+    padding: 1rem;
+}
+#package_plan_table {
+    width: 100%;
+    border-collapse: collapse;
+}
+#package_plan_table th,
+#package_plan_table td {
+    padding: 0.5rem;
+    text-align: left;
+    border-bottom: 1px solid ButtonBorder;
+}
+.package-plan-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+@media (max-width: 40rem) {
+    #package_plan_dialog {
+        width: calc(100vw - 1rem);
+        max-height: calc(100vh - 1rem);
+    }
+    .package-plan-dialog {
+        padding: 0.75rem;
+    }
 }
