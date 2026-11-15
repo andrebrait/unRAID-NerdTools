@@ -153,7 +153,7 @@ jobs:
         run: |
           job=$(gh api "repos/$GH_REPO/actions/runs/$RUN_ID/jobs?per_page=100" --jq '.jobs[] | select(.name == "codex") | .id')
           test -n "$job"
-          gh api "repos/$GH_REPO/actions/jobs/$job/logs" > "$RUNNER_TEMP/codex.log"
+          gh api --allow-escape-sequences "repos/$GH_REPO/actions/jobs/$job/logs" > "$RUNNER_TEMP/codex.log"
           python3 scripts/upstream-runner.py fallback --log "$RUNNER_TEMP/codex.log" --status "$RUNNER_TEMP/candidate/status.json"
 
   claude:

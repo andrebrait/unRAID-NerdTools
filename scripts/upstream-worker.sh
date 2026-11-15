@@ -26,6 +26,8 @@ case "${1:-}" in
     sudo chmod 755 /home/nerdtools-agent
     sudo install -d -o "$actor" -g "$actor" -m 755 /home/nerdtools-agent/.codex
     printf 'approval_policy = "never"\n[sandbox_workspace_write]\nnetwork_access = true\n' | sudo tee /home/nerdtools-agent/.codex/config.toml >/dev/null
+    # The action's runner-owned proxy writes this before the agent starts.
+    sudo install -o "$(id -un)" -g "$(id -gn)" -m 644 /dev/null "/home/nerdtools-agent/.codex/${GITHUB_RUN_ID:?}.json"
     ;;
   claude-proxy)
     # The model UID cannot read the real key from the proxy's config or memory.
