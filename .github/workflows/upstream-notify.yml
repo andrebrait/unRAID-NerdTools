@@ -1,0 +1,32 @@
+name: Upstream workflow notifications
+
+on:
+  workflow_run:
+    workflows:
+      - Update upstream recipes
+      - Release merged upstream recipes
+      - Discover Unraid releases
+      - Build native packages
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  notify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Notify maintainers from trusted code
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+        run: python3 scripts/upstream-notify.py

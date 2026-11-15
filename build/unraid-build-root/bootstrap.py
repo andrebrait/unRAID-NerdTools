@@ -6,12 +6,16 @@ Use only on a disposable Linux x86_64 runner; roots stay private to that job.
 """
 import argparse
 import hashlib
+import http.client
+import ipaddress
 import json
 import os
 from pathlib import Path, PurePosixPath
 import re
 import shlex
 import shutil
+import socket
+import ssl
 import stat
 import subprocess
 import sys
@@ -24,6 +28,7 @@ import zipfile
 SHA256 = re.compile(r"[a-f0-9]{64}\Z")
 NAME = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9+_.-]*\Z")
 VERSION = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+(?:[-.][a-zA-Z0-9.]+)?\Z")
+GLOBAL_V6 = ipaddress.ip_network("2000::/3")
 
 
 def run(args, check=True, **kwargs):
@@ -59,6 +64,65 @@ class HTTPSRedirect(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
+def public_ip(address):
+    """True only for globally routable unicast addresses; IPv6 must be in 2000::/3 and IPv4-mapped forms follow their IPv4 rules."""
+    try:
+        ip = ipaddress.ip_address(address.split("%")[0])
+    except ValueError:
+        return False
+    if ip.version == 6 and ip.ipv4_mapped:
+        ip = ip.ipv4_mapped
+    if ip.is_multicast or not ip.is_global:
+        return False
+    return ip.version == 4 or ip in GLOBAL_V6
+
+
+def resolve_public(host):
+    """Every answer must be public; connections use only these addresses, never a second lookup."""
+    try:
+        addresses = [str(ipaddress.ip_address(host))]
+    except ValueError:
+        # Numeric forms such as 2130706433 are resolved by the system, then validated like any other answer.
+        try:
+            infos = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
+        except OSError:
+            raise ValueError(f"Host does not resolve: {host}") from None
+        addresses = list(dict.fromkeys(info[4][0] for info in infos))
+    if not addresses or not all(public_ip(address) for address in addresses):
+        raise ValueError(f"Host resolves to a non-public address: {host}")
+    return addresses
+
+
+class PinnedHTTPSConnection(http.client.HTTPSConnection):
+    """TLS to one validated address; the real hostname still drives SNI and certificate checks."""
+
+    def __init__(self, host, addresses, timeout):
+        super().__init__(host, timeout=timeout, context=ssl.create_default_context())
+        self.addresses = addresses
+
+    def connect(self):
+        failure = None
+        for address in self.addresses:
+            sock = None
+            try:
+                sock = socket.create_connection((address, self.port), self.timeout, self.source_address)
+                self.sock = self._context.wrap_socket(sock, server_hostname=self.host)
+                return
+            except OSError as error:
+                if sock is not None:
+                    sock.close()
+                failure = error
+        raise OSError(f"Could not connect to validated addresses for {self.host}") from failure
+
+
+class PinnedHTTPSHandler(urllib.request.HTTPSHandler):
+    """Every request, including each redirect hop, is resolved, validated and pinned before connecting."""
+
+    def https_open(self, req):
+        addresses = resolve_public(https_url(req.full_url).hostname)
+        return self.do_open(lambda host, **kwargs: PinnedHTTPSConnection(host, addresses, **kwargs), req)
+
+
 def validate_input(item):
     if not isinstance(item, dict) or any(not isinstance(item.get(key), str) for key in ("url", "file", "sha256")):
         raise ValueError("Input requires string URL, filename and SHA256")
@@ -91,7 +155,7 @@ def fetch(item, cache):
     for attempt in range(3):
         if path.exists():
             break
-        opener = urllib.request.build_opener(HTTPSRedirect())
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), PinnedHTTPSHandler(), HTTPSRedirect())
         request = urllib.request.Request(item["url"], headers={"User-Agent": "NerdTools-reproducible-build"})
         try:
             with opener.open(request, timeout=120) as response, tempfile.NamedTemporaryFile(dir=cache, delete=False) as stream:
