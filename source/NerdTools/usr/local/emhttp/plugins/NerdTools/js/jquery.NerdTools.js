@@ -33,6 +33,10 @@ function rowStateClass(change) {
     if (change === 'update-available' || change === 'downgrade-available') return 'package-update-available';
     return '';
 }
+function automaticAction(state) {
+    return state.automatic && ['install','upgrade','downgrade','remove'].indexOf(state.change) !== -1
+        ? state.change : null;
+}
 $(function() {
     $('#tblPackages').tablesorter({
         sortList: [[1, 0]],
@@ -87,13 +91,19 @@ function packageError(message) {
 function requestError(xhr) {
     return xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : 'NerdTools request failed; please try again.';
 }
-function planData(action) {
+function planData(action, actions) {
     var data = {
         action: action,
         update_check_hours: $('#update_check_hours').val(),
         csrf_token: $('#package_form input[name="csrf_token"]').val()
     };
-    $('.pkgaction').each(function() { data['actions[' + $(this).attr('data-package') + ']'] = this.value; });
+    if (actions) {
+        Object.keys(actions).forEach(function(name) { data['actions[' + name + ']'] = actions[name]; });
+    } else {
+        $('.pkgaction').each(function() {
+            data['actions[' + $(this).attr('data-package') + ']'] = $(this).attr('data-intent');
+        });
+    }
     return data;
 }
 function isCatalogResponseCurrent(revision) {
@@ -129,9 +139,10 @@ function packageQuery(force) {
             var row = $('<tr>').attr('data-package', pkg.name);
             var select = $('<select>', {'class': 'pkgaction', 'data-package': pkg.name, 'aria-label': 'Action for ' + pkg.tool});
             $.each(pkg.actions, function(_, action) { select.append($('<option>').val(action).text(actionLabel(action, pkg.installed))); });
-            select.val(pkg.default_action).prop('disabled', pkg.actions.length === 1)
+            select.val(pkg.default_action).attr('data-intent', pkg.default_action).prop('disabled', pkg.actions.length === 1)
                 .toggleClass('package-action-selected', actionIsEmphasized(pkg.default_action)).on('change', function() {
-                    $(this).toggleClass('package-action-selected', actionIsEmphasized(this.value)); requestPlan();
+                    $(this).attr('data-intent', this.value)
+                        .toggleClass('package-action-selected', actionIsEmphasized(this.value)); requestPlan();
                 });
             row.append($('<td>').append(select));
             row.append($('<td>', {'class': 'package wrapper'}).text(pkg.tool));
@@ -217,6 +228,10 @@ function renderPlan(plan) {
         if (state.automatic) label = 'Required ' + label.toLowerCase();
         if (state.reason) label += ' — ' + state.reason;
         row.find('.planned-change').text(label);
+        var select = row.find('.pkgaction'); var selectedAction = automaticAction(state) || state.intent;
+        if (selectedAction && select.find('option[value="' + selectedAction + '"]').length) {
+            select.val(selectedAction).toggleClass('package-action-selected', actionIsEmphasized(selectedAction));
+        }
         var stateClass = rowStateClass(state.change);
         if (stateClass) row.addClass(stateClass);
         if ($.inArray(state.change, ['install','upgrade','downgrade','remove']) !== -1) row.addClass('package-changed');
@@ -252,7 +267,7 @@ function confirmPlan() {
         return;
     }
     var revision = displayedPlanRevision; var planId = displayedPlanId;
-    var data = planData('confirm'); data.plan = planId; confirmingPlanId = planId;
+    var data = planData('confirm', nerdPlan.actions); data.plan = planId; confirmingPlanId = planId;
     $('#btnPlanCancel, #btnPlanConfirm').prop('disabled', true);
     $.post('/plugins/NerdTools/include/Settings.php', data).done(function(response) {
         if (!isConfirmationCurrent(revision, planId) || response.plan !== planId) {

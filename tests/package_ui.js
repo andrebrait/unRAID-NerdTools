@@ -35,6 +35,12 @@ assert.equal(context.rowStateClass('downgrade'), 'package-upgrade', 'downgrade r
 assert.equal(context.rowStateClass('update-available'), 'package-update-available', 'available update row uses attention state');
 assert.equal(context.actionIsEmphasized('keep'), false, 'Keep action is not emphasized');
 assert.equal(context.actionIsEmphasized('install'), true, 'non-keep action is emphasized');
+assert.equal(context.automaticAction({automatic: true, change: 'remove'}), 'remove',
+    'automatic removal selects Remove');
+assert.equal(context.automaticAction({automatic: true, change: 'upgrade'}), 'upgrade',
+    'automatic upgrade selects Upgrade');
+assert.equal(context.automaticAction({automatic: false, change: 'upgrade'}), null,
+    'explicit actions are not rewritten');
 const postCalls = []; const openBoxCalls = []; let closeCalls = 0;
 const jqueryResult = {
     val: () => '24',
@@ -52,7 +58,7 @@ context.$ = jquery;
 context.document = {getElementById: () => ({close: () => { closeCalls++; }})};
 context.openBox = (...args) => openBoxCalls.push(args);
 context.planRevision = 5;
-context.nerdPlan = {id: 'replacement-plan'};
+context.nerdPlan = {id: 'replacement-plan', actions: {dep: 'upgrade', consumer: 'keep'}};
 context.displayedPlanId = 'displayed-plan';
 context.displayedPlanRevision = 4;
 context.confirmPlan();
@@ -64,4 +70,6 @@ context.displayedPlanRevision = 5;
 context.confirmPlan();
 assert.equal(postCalls.length, 1, 'current confirmation sends one request');
 assert.equal(postCalls[0].data.plan, 'replacement-plan', 'confirmation submits the displayed plan ID');
+assert.equal(postCalls[0].data['actions[dep]'], 'upgrade', 'confirmation preserves the server plan root intent');
+assert.equal(postCalls[0].data['actions[consumer]'], 'keep', 'confirmation preserves automatic dependent intent');
 console.log('Package UI race contracts passed');

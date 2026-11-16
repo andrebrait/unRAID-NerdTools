@@ -249,11 +249,12 @@ function nt_plan($packages, $owned, $installed, $config, $actions, $hours, $cata
         $graph[$name] = ['dependencies'=>$normalizeDependencies($dependencies)];
     }
 
-    $operations = []; $requestedRoots = []; $installRoots = [];
+    $operations = []; $requestedRoots = []; $installRoots = []; $upgradeRoots = [];
     foreach ($intents as $name => $intent) {
         if (in_array($intent, ['install','upgrade','downgrade'], true)) {
             $requestedRoots[$name] = $name;
             if ($intent === 'install') $installRoots[$name] = $name;
+            elseif ($intent === 'upgrade') $upgradeRoots[$name] = $name;
         }
     }
     foreach ($requestedRoots as $root) {
@@ -304,11 +305,14 @@ function nt_plan($packages, $owned, $installed, $config, $actions, $hours, $cata
             }
         }
     };
-    foreach ($installRoots as $root) {
-        $closure = nt_resolve([$root], $packages); $queue = [];
-        foreach ($closure as $name) {
-            if ($name === $root || !$states[$name]['installed'] || !$states[$name]['owned']) continue;
-            if ($stageMove($name, $root)) $queue[] = $name;
+    foreach ($installRoots + $upgradeRoots as $root) {
+        $queue = [];
+        if (isset($upgradeRoots[$root])) $queue[] = $root;
+        else {
+            foreach (nt_resolve([$root], $packages) as $name) {
+                if ($name === $root || !$states[$name]['installed'] || !$states[$name]['owned']) continue;
+                if ($stageMove($name, $root)) $queue[] = $name;
+            }
         }
         $seen = array_fill_keys($queue, true);
         while ($queue) {
@@ -332,6 +336,24 @@ function nt_plan($packages, $owned, $installed, $config, $actions, $hours, $cata
         $dependencies = $state['package'] && (!$state['installed'] || $replace)
             ? $state['package']['dependencies'] : ($state['owned']['dependencies'] ?? []);
         $finalGraph[$name] = ['dependencies'=>$normalizeDependencies($dependencies)];
+    }
+    $removeReverse = [];
+    foreach ($finalGraph as $name => $package) {
+        foreach ($package['dependencies'] as $dependency) $removeReverse[$dependency][] = $name;
+    }
+    $removeQueue = []; $removeRoots = [];
+    foreach ($intents as $name => $intent) {
+        if ($intent !== 'remove') continue;
+        $removeQueue[] = $name; $removeRoots[$name] = $name;
+    }
+    while ($removeQueue) {
+        $dependency = array_shift($removeQueue); $root = $removeRoots[$dependency];
+        foreach ($removeReverse[$dependency] ?? [] as $dependent) {
+            if (($operations[$dependent]['change'] ?? null) === 'remove'
+                || empty($states[$dependent]['installed']) || empty($states[$dependent]['owned'])) continue;
+            $operations[$dependent] = ['change'=>'remove','automatic'=>true,'reason'=>'Required by removing '.$root];
+            $preferences[$dependent] = 'no'; $removeRoots[$dependent] = $root; $removeQueue[] = $dependent;
+        }
     }
     $validationRoots = [];
     foreach ($states as $name => $state) {
