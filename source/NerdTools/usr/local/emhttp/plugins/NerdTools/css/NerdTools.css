@@ -16,35 +16,38 @@
 .pkgaction.package-action-selected {
     font-weight: 700;
 }
-table.tablesorter tbody tr.package-remove {
+table.tablesorter tbody tr[data-action="remove"] {
     background-color: rgb(198 40 40 / 22%) !important;
 }
-table.tablesorter tbody tr.package-install {
+table.tablesorter tbody tr[data-action="install"] {
     background-color: rgb(46 125 50 / 22%) !important;
 }
-table.tablesorter tbody tr.package-upgrade {
+table.tablesorter tbody tr[data-action="upgrade"],
+table.tablesorter tbody tr[data-action="downgrade"] {
     background-color: rgb(21 101 192 / 22%) !important;
 }
-table.tablesorter tbody tr.package-update-available {
+table.tablesorter tbody tr.package-has-update[data-action="keep"] {
     background-color: rgb(249 168 37 / 22%) !important;
 }
-table.tablesorter tbody tr.package-remove td:first-child {
+table.tablesorter tbody tr[data-action="remove"] td:first-child {
     border-left: 0.25rem solid rgb(198 40 40);
 }
-table.tablesorter tbody tr.package-install td:first-child {
+table.tablesorter tbody tr[data-action="install"] td:first-child {
     border-left: 0.25rem solid rgb(46 125 50);
 }
-table.tablesorter tbody tr.package-upgrade td:first-child {
+table.tablesorter tbody tr[data-action="upgrade"] td:first-child,
+table.tablesorter tbody tr[data-action="downgrade"] td:first-child {
     border-left: 0.25rem solid rgb(21 101 192);
 }
-table.tablesorter tbody tr.package-update-available td:first-child {
+table.tablesorter tbody tr.package-has-update[data-action="keep"] td:first-child {
     border-left: 0.25rem solid rgb(249 168 37);
 }
-.package-has-update .version-value,
-.package-upgrade .version-value {
+.package-has-update[data-action="keep"] .version-value,
+[data-action="upgrade"] .version-value,
+[data-action="downgrade"] .version-value {
     font-weight: 600;
 }
-.package-changed .planned-change {
+[data-action]:not([data-action="keep"]) .planned-change {
     font-weight: 600;
 }
 #package_plan_dialog {

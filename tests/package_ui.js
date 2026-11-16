@@ -28,14 +28,24 @@ context.confirmingPlanId = null;
 assert.equal(context.canCancelConfirmation(), true, 'idle confirmation dialog may be cancelled');
 assert.equal(context.actionLabel('keep', false), '-', 'uninstalled Keep displays as -');
 assert.equal(context.actionLabel('keep', true), 'Keep', 'installed Keep keeps its label');
-assert.equal(context.actionStateClass('remove'), 'package-remove', 'removal action uses removal state');
-assert.equal(context.actionStateClass('install'), 'package-install', 'installation action uses install state');
-assert.equal(context.actionStateClass('upgrade'), 'package-upgrade', 'upgrade action uses upgrade state');
-assert.equal(context.actionStateClass('downgrade'), 'package-upgrade', 'downgrade action uses version-change state');
-assert.equal(context.actionStateClass('keep', false), '', 'current Keep action has no row state');
-assert.equal(context.actionStateClass('keep', true), 'package-update-available', 'Keep with an available update is yellow');
 assert.equal(context.actionIsEmphasized('keep'), false, 'Keep action is not emphasized');
 assert.equal(context.actionIsEmphasized('install'), true, 'non-keep action is emphasized');
+const visual = {action: null, selected: null, emphasized: null};
+const fakeSelect = {
+    val: value => { visual.selected = value; return fakeSelect; },
+    toggleClass: (_name, value) => { visual.emphasized = value; return fakeSelect; },
+};
+const fakeRow = {
+    attr: (_name, value) => { visual.action = value; return fakeRow; },
+    toggleClass: () => fakeRow,
+    find: () => fakeSelect,
+};
+context.syncActionDisplay(fakeRow, 'remove');
+assert.deepEqual(visual, {action: 'remove', selected: 'remove', emphasized: true},
+    'row action attribute, selector, and emphasis update atomically');
+context.syncActionDisplay(fakeRow, 'keep');
+assert.deepEqual(visual, {action: 'keep', selected: 'keep', emphasized: false},
+    'Keep atomically clears action visuals');
 assert.equal(context.automaticAction({automatic: true, change: 'remove'}), 'remove',
     'automatic removal selects Remove');
 assert.equal(context.automaticAction({automatic: true, change: 'upgrade'}), 'upgrade',

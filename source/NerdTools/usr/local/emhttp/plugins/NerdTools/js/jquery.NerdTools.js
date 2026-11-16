@@ -25,24 +25,20 @@ function actionLabel(action, installed) {
 function actionIsEmphasized(action) {
     return action !== 'keep';
 }
-function actionStateClass(action, hasUpdate) {
-    if (action === 'remove') return 'package-remove';
-    if (action === 'install') return 'package-install';
-    if (action === 'upgrade' || action === 'downgrade') return 'package-upgrade';
-    if (hasUpdate) return 'package-update-available';
-    return '';
-}
 function automaticAction(state) {
     return state.automatic && ['install','upgrade','downgrade','remove'].indexOf(state.change) !== -1
         ? state.change : null;
 }
 function syncActionDisplay(row, action) {
-    row.removeClass('package-changed package-remove package-install package-upgrade package-update-available');
-    var stateClass = actionStateClass(action, row.hasClass('package-has-update'));
-    if (stateClass) row.addClass(stateClass);
-    if (actionIsEmphasized(action)) row.addClass('package-changed');
+    row.attr('data-action', action).toggleClass('package-changed', actionIsEmphasized(action));
     row.find('.pkgaction').val(action)
         .toggleClass('package-action-selected', actionIsEmphasized(action));
+}
+function syncAllActionDisplays() {
+    $('#tblPackages tbody tr').each(function() {
+        var row = $(this); var select = row.find('.pkgaction');
+        if (select.length) syncActionDisplay(row, select.val());
+    });
 }
 $(function() {
     $('#tblPackages').tablesorter({
@@ -57,6 +53,7 @@ $(function() {
             filter_functions: {'.filter-version': true}
         }
     });
+    $('#tblPackages').on('updateComplete', syncAllActionDisplays);
     $('#package_form').on('submit', function(event) { event.preventDefault(); Apply(); });
     $('#btnApply').on('click', Apply);
     $('#btnRefresh').on('click', function() { packageQuery(true); });
@@ -157,6 +154,7 @@ function packageQuery(force) {
             row.append($('<td>', {'class': 'version-value'}).text(pkg.available_version || '—'));
             row.append($('<td>', {'class': 'planned-change'}).text('Planning…'));
             row.append($('<td>').text(pkg.size));
+            syncActionDisplay(row, pkg.default_action);
             body.append(row);
         });
         if (!data.packages.length) {
