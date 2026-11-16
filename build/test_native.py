@@ -563,5 +563,284 @@ class NativeBuildTests(unittest.TestCase):
 
 
 
+class CandidateArtifactTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.package_dir = self.root / "packages"
+        self.package_dir.mkdir()
+        self.packages = [{"name": "zed", "version": "1.0"},
+                         {"name": "alpha", "version": "2.1"}]
+        self.plan = {"build": ["zed", "alpha"], "reuse": [],
+                     "builds": {"zed": 2, "alpha": 4}}
+        self.keys = {"zed": "a" * 64, "alpha": "b" * 64}
+        self.identity = {
+            "repository": "example/unraid-nerdtools", "pr": 17,
+            "head": "c" * 40, "tree": "d" * 40, "workflow": "build-packages.yml",
+            "run": 12345, "attempt": 2,
+            "artifact_name": "candidate-packages-pr-17-run-12345-attempt-2",
+        }
+        self.files = {
+            "zed": "nerdtools-zed-1.0-x86_64-2_NT73.txz",
+            "alpha": "nerdtools-alpha-2.1-x86_64-4_NT73.txz",
+        }
+        for package in self.packages:
+            self.write_package(self.package_dir / self.files[package["name"]], package["name"])
+
+    def write_package(self, path, name, member_name=None):
+        payload = b"verified package payload for " + name.encode()
+        info = tarfile.TarInfo(member_name or f"opt/nerdtools/bin/{name}")
+        info.mode, info.uid, info.gid, info.size = 0o755, 0, 0, len(payload)
+        with tarfile.open(path, "w:xz") as archive:
+            archive.addfile(info, io.BytesIO(payload))
+
+    def make_manifest(self, plan=None, package_dir=None):
+        self.assertTrue(callable(getattr(native, "candidate_manifest", None)))
+        with patch.object(native, "build_keys", return_value=self.keys):
+            return native.candidate_manifest(self.packages, plan or self.plan,
+                                             package_dir or self.package_dir, self.identity)
+
+    def verify(self, manifest, plan=None, package_dir=None, expected=None, keys=None):
+        self.assertTrue(callable(getattr(native, "verify_candidate_bundle", None)))
+        with patch.object(native, "build_keys", return_value=keys or self.keys):
+            return native.verify_candidate_bundle(
+                self.packages, plan or self.plan, package_dir or self.package_dir,
+                manifest, expected or self.identity)
+
+    def clone(self, value):
+        return json.loads(json.dumps(value))
+
+    def test_manifest_is_deterministic_sorted_and_binds_changed_packages(self):
+        manifest = self.make_manifest()
+        self.assertEqual(manifest, self.make_manifest())
+        self.assertEqual(manifest, {
+            "schema": 1,
+            **self.identity,
+            "baseline_version": native.BASELINE["version"],
+            "baseline_image_sha256": native.BASELINE["image"]["sha256"],
+            "toolchain_sha256": rootfs.digest(native.REPO / "build/locks/toolchain.json"),
+            "rebuild_generation": native.REBUILD_GENERATION,
+            "source_date_epoch": int(native.EPOCH),
+            "packages": [
+                {"name": "alpha", "build": 4, "build_key": self.keys["alpha"],
+                 "file": self.files["alpha"],
+                 "sha256": hashlib.sha256((self.package_dir / self.files["alpha"]).read_bytes()).hexdigest(),
+                 "size": (self.package_dir / self.files["alpha"]).stat().st_size},
+                {"name": "zed", "build": 2, "build_key": self.keys["zed"],
+                 "file": self.files["zed"],
+                 "sha256": hashlib.sha256((self.package_dir / self.files["zed"]).read_bytes()).hexdigest(),
+                 "size": (self.package_dir / self.files["zed"]).stat().st_size},
+            ],
+        })
+        self.assertEqual([item["name"] for item in manifest["packages"]], ["alpha", "zed"])
+
+    def test_manifest_writer_uses_stable_json(self):
+        manifest = self.make_manifest()
+        self.assertTrue(callable(getattr(native, "write_candidate_manifest", None)))
+        path = self.root / "candidate-manifest.json"
+        native.write_candidate_manifest(path, manifest)
+        self.assertEqual(path.read_text(), json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+
+    def test_empty_candidate_set_is_rejected(self):
+        plan = {"build": [], "reuse": [{"name": "zed"}, {"name": "alpha"}],
+                "builds": {"zed": 2, "alpha": 4}}
+        with self.assertRaises(ValueError):
+            self.make_manifest(plan=plan)
+
+    def test_manifest_requires_exact_regular_package_files(self):
+        extra = self.package_dir / "unexpected.txz"
+        extra.write_bytes(b"extra")
+        with self.assertRaises(ValueError):
+            self.make_manifest()
+        extra.unlink()
+        path = self.package_dir / self.files["zed"]
+        path.unlink()
+        path.symlink_to(self.package_dir / self.files["alpha"])
+        with self.assertRaises(ValueError):
+            self.make_manifest()
+
+    def test_verification_checks_every_archive_and_returns_builds_and_sorted_files(self):
+        result = self.verify(self.make_manifest())
+        self.assertEqual(result, {"builds": {"alpha": 4, "zed": 2},
+                                  "files": sorted(self.files.values())})
+
+    def test_wrong_run_attempt_head_or_tree_is_rejected(self):
+        manifest = self.make_manifest()
+        for field, value in (("run", 99999), ("attempt", 3), ("head", "e" * 40), ("tree", "f" * 40)):
+            with self.subTest(field=field):
+                changed = self.clone(manifest)
+                changed[field] = value
+                with self.assertRaises(ValueError):
+                    self.verify(changed)
+
+    def test_changed_compatibility_key_or_build_number_is_rejected(self):
+        manifest = self.make_manifest()
+        for field, value in (("build_key", "e" * 64), ("build", 8)):
+            with self.subTest(field=field):
+                changed = self.clone(manifest)
+                changed["packages"][0][field] = value
+                with self.assertRaises(ValueError):
+                    self.verify(changed)
+
+    def test_missing_extra_and_duplicate_manifest_packages_are_rejected(self):
+        manifest = self.make_manifest()
+        variants = []
+        missing = self.clone(manifest)
+        missing["packages"].pop()
+        variants.append(missing)
+        extra = self.clone(manifest)
+        extra["packages"].append({"name": "new", "build": 1, "build_key": "f" * 64,
+                                  "file": "nerdtools-new-1.0-x86_64-1_NT73.txz",
+                                  "sha256": "a" * 64, "size": 1})
+        variants.append(extra)
+        duplicate = self.clone(manifest)
+        duplicate["packages"].append(self.clone(duplicate["packages"][0]))
+        variants.append(duplicate)
+        for changed in variants:
+            with self.subTest(records=changed["packages"]):
+                with self.assertRaises(ValueError):
+                    self.verify(changed)
+
+    def test_missing_and_extra_artifact_files_are_rejected(self):
+        manifest = self.make_manifest()
+        path = self.package_dir / self.files["zed"]
+        path.unlink()
+        with self.assertRaises(ValueError):
+            self.verify(manifest)
+        self.write_package(path, "zed")
+        (self.package_dir / "unexpected.txz").write_bytes(b"extra")
+        with self.assertRaises(ValueError):
+            self.verify(manifest)
+
+    def test_symlink_and_special_package_files_are_rejected(self):
+        manifest = self.make_manifest()
+        path = self.package_dir / self.files["zed"]
+        path.unlink()
+        path.symlink_to(self.package_dir / self.files["alpha"])
+        with self.assertRaises(ValueError):
+            self.verify(manifest)
+        path.unlink()
+        os.mkfifo(path)
+        with self.assertRaises(ValueError):
+            self.verify(manifest)
+
+    def test_filename_sha256_and_size_mismatches_are_rejected(self):
+        manifest = self.make_manifest()
+        variants = []
+        filename = self.clone(manifest)
+        filename["packages"][0]["file"] = self.files["zed"]
+        variants.append(filename)
+        sha = self.clone(manifest)
+        sha["packages"][0]["sha256"] = "e" * 64
+        variants.append(sha)
+        size = self.clone(manifest)
+        size["packages"][0]["size"] += 1
+        variants.append(size)
+        for changed in variants:
+            with self.subTest(record=changed["packages"][0]):
+                with self.assertRaises(ValueError):
+                    self.verify(changed)
+
+    def test_malformed_manifest_schema_is_rejected(self):
+        manifest = self.make_manifest()
+        variants = []
+        missing = self.clone(manifest)
+        del missing["tree"]
+        variants.append(missing)
+        extra = self.clone(manifest)
+        extra["target_evidence"] = {}
+        variants.append(extra)
+        version = self.clone(manifest)
+        version["schema"] = 2
+        variants.append(version)
+        for changed in variants:
+            with self.subTest(manifest=changed):
+                with self.assertRaises(ValueError):
+                    self.verify(changed)
+
+    def test_non_object_records_and_boolean_schema_values_fail_closed(self):
+        manifest = self.make_manifest()
+        variants = []
+        non_object = self.clone(manifest)
+        non_object["packages"].append(None)
+        variants.append(non_object)
+        boolean_schema = self.clone(manifest)
+        boolean_schema["schema"] = True
+        variants.append(boolean_schema)
+        boolean_generation = self.clone(manifest)
+        boolean_generation["rebuild_generation"] = True
+        variants.append(boolean_generation)
+        for changed in variants:
+            with self.subTest(manifest=changed):
+                with self.assertRaises(ValueError):
+                    self.verify(changed)
+
+    def test_empty_candidate_file_is_rejected(self):
+        (self.package_dir / self.files["zed"]).write_bytes(b"")
+        with self.assertRaises(ValueError):
+            self.make_manifest()
+
+    def test_candidate_and_reuse_plan_overlap_is_rejected(self):
+        manifest = self.make_manifest()
+        overlap = {"build": ["zed", "alpha"],
+                   "reuse": [{"name": "alpha", "file": "old.txz", "sha256": "a" * 64}],
+                   "builds": {"zed": 2, "alpha": 4}}
+        with self.assertRaises(ValueError):
+            self.verify(manifest, plan=overlap)
+
+    def test_current_plan_drift_is_rejected(self):
+        manifest = self.make_manifest()
+        drift = {"build": ["alpha"], "reuse": [{"name": "zed", "file": self.files["zed"],
+                                                 "sha256": "a" * 64}],
+                 "builds": {"zed": 2, "alpha": 4}}
+        with self.assertRaises(ValueError):
+            self.verify(manifest, plan=drift)
+
+    def test_invalid_archive_is_inspected_and_rejected(self):
+        path = self.package_dir / self.files["zed"]
+        self.write_package(path, "zed", "opt/nerdtools/../../etc/shadow")
+        with self.assertRaises(ValueError):
+            self.verify(self.make_manifest())
+
+    def test_cli_creates_and_verifies_candidate_manifest(self):
+        plan_path = self.root / "plan.json"
+        manifest_path = self.root / "manifest.json"
+        expected_path = self.root / "expected.json"
+        plan_path.write_text(json.dumps(self.plan))
+        expected_path.write_text(json.dumps({"identity": self.identity, "plan": self.plan}))
+        create_args = ["native.py", "candidate-create", "--package-artifacts", str(self.package_dir),
+                       "--plan", str(plan_path), "--output", str(manifest_path),
+                       "--repository", self.identity["repository"], "--pr", str(self.identity["pr"]),
+                       "--head", self.identity["head"], "--tree", self.identity["tree"],
+                       "--workflow", self.identity["workflow"], "--run", str(self.identity["run"]),
+                       "--attempt", str(self.identity["attempt"]), "--artifact-name", self.identity["artifact_name"]]
+        with patch.object(native, "load_packages", return_value=self.packages), \
+                patch.object(native, "build_keys", return_value=self.keys), \
+                patch("sys.argv", create_args), patch("sys.stdout", new=io.StringIO()):
+            try:
+                native.main()
+            except SystemExit as error:
+                exit_code = error.code
+            else:
+                exit_code = 0
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(json.loads(manifest_path.read_text()), self.make_manifest())
+        verify_args = ["native.py", "candidate-verify", "--package-artifacts", str(self.package_dir),
+                       "--manifest", str(manifest_path), "--expected-json", str(expected_path)]
+        with patch.object(native, "load_packages", return_value=self.packages), \
+                patch.object(native, "build_keys", return_value=self.keys), \
+                patch("sys.argv", verify_args), patch("sys.stdout", new=io.StringIO()) as output:
+            try:
+                native.main()
+            except SystemExit as error:
+                exit_code = error.code
+            else:
+                exit_code = 0
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(json.loads(output.getvalue()),
+                         {"builds": {"alpha": 4, "zed": 2}, "files": sorted(self.files.values())})
+
+
 if __name__ == "__main__":
     unittest.main()

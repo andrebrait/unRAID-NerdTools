@@ -95,6 +95,29 @@ Each package also has its own `package-<name>.yml` workflow. Pushes and pull req
 
 Published tags are unique `packages-<family>-<run_id>-<run_attempt>` and use `make_latest=false`, preserving the plugin release's `latest` link. Existing releases/assets are never pruned or overwritten. The plugin discovers the newest applicable catalog-bearing package release rather than assuming GitHub's latest release contains packages.
 
+## Candidate package manifests
+
+`candidate-create` seals the nonempty `build` set from the normal plan (`build`, `reuse` and `builds`) into a deterministic manifest. It records repository/PR/head/tree/workflow/run/attempt/artifact identity, baseline and toolchain inputs, rebuild generation, source-date epoch, and sorted package build numbers, reuse-compatibility keys, filenames, SHA256 hashes and sizes. The key determines whether a package is compatible for reuse; SHA256 binds the actual bytes.
+
+`candidate-verify` requires an `--expected-json` file containing both the trusted identity and the current normal plan:
+
+```json
+{"identity":{"repository":"owner/repo","pr":123,"head":"<commit SHA>","tree":"<tree SHA>","workflow":"<workflow ID>","run":456,"attempt":1,"artifact_name":"candidate-packages-123"},"plan":{"build":["example"],"reuse":[],"builds":{"example":1}}}
+```
+
+Verification requires the candidate package set and build numbers to match the current plan, rejects links/special files and unexpected paths, checks each SHA256/size, and runs the normal package archive inspector. It returns `builds` and a sorted `files` list for workflow outputs; candidate mode fails instead of falling back to compilation. Target-specific evidence is not included and must be rerun by the publishing workflow. The trusted workflow/controller remains responsible for requiring the same repository, trusted workflow and automation branch, `publish=false`, successful conclusion and exact PR head.
+
+```sh
+python3 build/native.py candidate-create \
+  --package-artifacts candidate-packages/ --plan plan.json --output candidate-manifest.json \
+  --repository owner/repo --pr 123 --head <commit-sha> --tree <tree-sha> \
+  --workflow <workflow-id> --run 456 --attempt 1 --artifact-name candidate-packages-123
+python3 build/native.py candidate-verify \
+  --package-artifacts candidate-packages/ --manifest candidate-manifest.json \
+  --expected-json candidate-expected.json
+```
+
+
 The catalog shape is:
 
 ```json
