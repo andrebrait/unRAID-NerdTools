@@ -31,7 +31,7 @@ mkdir -p "${OUTPUT:-/out}"
 
 
 PKGNAM=sshfs
-VERSION=3.7.6
+VERSION=3.7.7
 BUILD=${BUILD:-2}
 
 NUMJOBS=${NUMJOBS:-" -j$(expr $(nproc) + 1) "}

@@ -574,9 +574,9 @@
   },
   {
     "name": "nodejs",
-    "version": "24.22.2",
+    "version": "24.22.3",
     "recipe": "build/recipes/nodejs/nodejs.SlackBuild",
-    "recipe_sha256": "59079770976d245b426a97d1679499f8f78119bf8c7aa256ba6beef4d08e5c20",
+    "recipe_sha256": "57c39e78de83a728789ef226634dcbababec6519948a16a3badc8ea1e70055f1",
     "provenance": {
       "kind": "source",
       "url": "https://git.slackware.nl/current/plain/source/l/nodejs/nodejs.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
@@ -584,9 +584,9 @@
     },
     "inputs": [
       {
-        "url": "https://nodejs.org/dist/v24.22.2/node-v24.22.2.tar.xz",
-        "file": "node-v24.22.2.tar.xz",
-        "sha256": "8fe2ec1723bb9f8d0b683907c82708debbeda64af21cb2aa214c4241eed0a061"
+        "url": "https://nodejs.org/dist/v24.22.3/node-v24.22.3.tar.xz",
+        "file": "node-v24.22.3.tar.xz",
+        "sha256": "48ca3aa8a9b02133356922ef4fc80200e00598c80a4ef446f7c39a459222593d"
       }
     ],
     "dependencies": [],
@@ -909,9 +909,9 @@
   },
   {
     "name": "sshfs",
-    "version": "3.7.6",
+    "version": "3.7.7",
     "recipe": "build/recipes/sshfs/sshfs.SlackBuild",
-    "recipe_sha256": "59a8d0d1e413ca114e73fffa981d1189ea14cc340f9798edd9132421795302c2",
+    "recipe_sha256": "b6cb6a43d4cedc1460e18a62a6d0fa27a656303b5b5a0f43968a06ef218c11c8",
     "provenance": {
       "kind": "source",
       "url": "https://git.slackware.nl/current/plain/source/n/sshfs/sshfs.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
@@ -919,9 +919,9 @@
     },
     "inputs": [
       {
-        "url": "https://github.com/libfuse/sshfs/releases/download/sshfs-3.7.6/sshfs-3.7.6.tar.xz",
-        "file": "sshfs-3.7.6.tar.xz",
-        "sha256": "6a1bcb31450a077e9cb1b7ff158c71de34db697c3c0da6cb362502131e495893"
+        "url": "https://github.com/libfuse/sshfs/releases/download/sshfs-3.7.7/sshfs-3.7.7.tar.xz",
+        "file": "sshfs-3.7.7.tar.xz",
+        "sha256": "893013ce6cdbf6f9fa790c9a4ca2b07eea95139f965f5c14f06b458cbe17f00d"
       }
     ],
     "dependencies": [],
@@ -1067,9 +1067,9 @@
   },
   {
     "name": "vim",
-    "version": "9.2.1252",
+    "version": "9.2.1342",
     "recipe": "build/recipes/vim/vim.SlackBuild",
-    "recipe_sha256": "7039a5eb3834b2a84e3d6da2f33a98768478fba56c0df3848db413cbfa69bce4",
+    "recipe_sha256": "96634d20ab39e18c90c080d6a6197e45649024b324d5d4cd705640905842d072",
     "provenance": {
       "kind": "source",
       "url": "https://git.slackware.nl/current/plain/source/ap/vim/vim.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
@@ -1077,9 +1077,9 @@
     },
     "inputs": [
       {
-        "url": "https://github.com/vim/vim/archive/refs/tags/v9.2.1252.tar.gz",
-        "file": "vim-9.2.1252.tar.gz",
-        "sha256": "9e62bb4226caedf676eb70b3ba4d32b671135096c57a8ebbd63ffd423ebc5e01"
+        "url": "https://github.com/vim/vim/archive/refs/tags/v9.2.1342.tar.gz",
+        "file": "vim-9.2.1342.tar.gz",
+        "sha256": "321d6b7832b9c6def7fb7f533d28266a4a4f80e46506cedeea177e26096b2957"
       }
     ],
     "dependencies": [
