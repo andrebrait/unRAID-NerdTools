@@ -25,7 +25,7 @@ jobs:
         with:
           ref: main
           persist-credentials: false
-      - name: Dispatch release discovery after verified approval
+      - name: Dispatch release discovery with approved candidate identity
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}

@@ -95,6 +95,29 @@ Each package also has its own `package-<name>.yml` workflow. Pushes and pull req
 
 Published tags are unique `packages-<family>-<run_id>-<run_attempt>` and use `make_latest=false`, preserving the plugin release's `latest` link. Existing releases/assets are never pruned or overwritten. The plugin discovers the newest applicable catalog-bearing package release rather than assuming GitHub's latest release contains packages.
 
+## Candidate package manifests
+
+`candidate-create` seals the nonempty `build` set from the normal plan (`build`, `reuse` and `builds`) into a deterministic manifest. It records repository/PR/head/tree/workflow/run/attempt/artifact identity, baseline and toolchain inputs, rebuild generation, source-date epoch, and sorted package build numbers, reuse-compatibility keys, filenames, SHA256 hashes and sizes. The key determines whether a package is compatible for reuse; SHA256 binds the actual bytes.
+
+`candidate-verify` requires an `--expected-json` file containing both the trusted identity and the current normal plan:
+
+```json
+{"identity":{"repository":"owner/repo","pr":123,"head":"<commit SHA>","tree":"<tree SHA>","workflow":"<workflow ID>","run":456,"attempt":1,"artifact_name":"candidate-packages-123"},"plan":{"build":["example"],"reuse":[],"builds":{"example":1}}}
+```
+
+Verification requires the candidate package set and build numbers to match the current plan, rejects links/special files and unexpected paths, checks each SHA256/size, and runs the normal package archive inspector. It returns `builds` and a sorted `files` list for workflow outputs; candidate mode fails instead of falling back to compilation. Target-specific evidence is not included and must be rerun by the publishing workflow. The trusted workflow/controller remains responsible for requiring the same repository, trusted workflow and automation branch, `publish=false`, successful conclusion and exact PR head.
+
+```sh
+python3 build/native.py candidate-create \
+  --package-artifacts candidate-packages/ --plan plan.json --output candidate-manifest.json \
+  --repository owner/repo --pr 123 --head <commit-sha> --tree <tree-sha> \
+  --workflow <workflow-id> --run 456 --attempt 1 --artifact-name candidate-packages-123
+python3 build/native.py candidate-verify \
+  --package-artifacts candidate-packages/ --manifest candidate-manifest.json \
+  --expected-json candidate-expected.json
+```
+
+
 The catalog shape is:
 
 ```json
@@ -142,7 +165,13 @@ Notifications for the same workflow and source revision are serialized with GitH
 
 Preparation, publication and maintainer retry jobs share the `upstream-recipe-issue-writes` concurrency group. Only these issue-writing jobs wait for one another; provider execution does not hold that lock. A retry during provider execution invalidates the saved plan, while a retry during publication runs after the writer finishes. This prevents a publication failure from overwriting the retry between its issue read and write.
 
-Under **Settings → Actions → General**, enable **Allow GitHub Actions to create and approve pull requests**; the controller uses creation only. Protect `main` with required CI and human approval, dismiss stale approvals and give automation no bypass.
+Under **Settings → Actions → General**, enable **Allow GitHub Actions to create and approve pull requests**; the controller uses creation only. Protect `main` with human approval, dismiss stale approvals and give automation no bypass.
+
+### Candidate promotion for maintainers
+
+Recipe automation opens its batch PR ready for review. `nerdtools/candidate-build` reports whether the exact current PR head has a usable package candidate: pending means the catalog build is incomplete, success means the exact run and artifacts were accepted, and failure means they were not. This status is informational rather than a repository-wide required check, because unrelated PRs do not produce recipe candidates. Protect `main` separately with one human approval, stale-approval dismissal and no automation bypass.
+
+The changed-package bundle and its manifest expire after 90 days. The merge callback fails closed when the exact-head candidate tuple is absent, incomplete, expired or mismatched; it does not silently rebuild or immediately publish different bytes. The daily scheduled release discovery remains the recovery path and can later rebuild normally without candidate inputs. A successful candidate-backed release copies `candidate-manifest.json` into the final release artifacts and provenance, retaining the package-byte origin after the temporary Actions artifacts expire.
 
 For a read-only end-to-end evaluation, manually dispatch with `evaluation=true` and a package such as `sshfs`. The controller produces a validated patch instead of opening a PR, and a separate credential-free native job builds and tests it. The environment still restricts which branches may run; any temporary evaluation-branch exception must be removed afterward. No evaluation publishes a package.
 

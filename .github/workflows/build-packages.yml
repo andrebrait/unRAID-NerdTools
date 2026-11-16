@@ -1,5 +1,5 @@
 name: Build native packages
-run-name: Unraid compatibility ${{ inputs.unraid_version }} ${{ inputs.unraid_sha256 }} publish=${{ inputs.publish || false }}
+run-name: Unraid compatibility ${{ inputs.unraid_version }} ${{ inputs.unraid_sha256 }} publish=${{ inputs.publish || false }}${{ inputs.candidate_run_id && format(' candidate={0}/{1}', inputs.candidate_run_id, inputs.candidate_run_attempt) || '' }}
 
 on:
   pull_request:
@@ -39,6 +39,46 @@ on:
         required: true
         type: boolean
         default: false
+      candidate_pr:
+        description: Candidate pull request number
+        required: false
+        type: string
+      candidate_head_sha:
+        description: Candidate pull request head SHA
+        required: false
+        type: string
+      candidate_run_id:
+        description: Candidate build workflow run ID
+        required: false
+        type: string
+      candidate_run_attempt:
+        description: Candidate build workflow run attempt
+        required: false
+        type: string
+      candidate_package_artifact_id:
+        description: Candidate package artifact ID
+        required: false
+        type: string
+      candidate_package_artifact_name:
+        description: Candidate package artifact name
+        required: false
+        type: string
+      candidate_manifest_artifact_id:
+        description: Candidate manifest artifact ID
+        required: false
+        type: string
+      candidate_manifest_artifact_name:
+        description: Candidate manifest artifact name
+        required: false
+        type: string
+      candidate_manifest_sha256:
+        description: Candidate manifest SHA256
+        required: false
+        type: string
+      candidate_merge_sha:
+        description: Merge commit SHA that authorized the candidate
+        required: false
+        type: string
 
 # Container jobs default to sh (dash in the Debian image); steps are written for bash.
 defaults:
@@ -49,7 +89,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: native-${{ github.ref }}-${{ inputs.unraid_version }}-${{ inputs.unraid_sha256 }}-${{ inputs.publish }}
+  group: native-${{ github.ref }}-${{ inputs.unraid_version }}-${{ inputs.unraid_sha256 }}-${{ inputs.publish }}${{ inputs.candidate_run_id && format('-candidate-{0}-{1}', inputs.candidate_run_id, inputs.candidate_run_attempt) || '' }}
   cancel-in-progress: false
 
 jobs:
@@ -72,9 +112,19 @@ jobs:
       - name: Validate checked recipes, pins, dependency closure, and complete catalog
         run: python3 build/native.py validate
 
+  candidate-workflow-validation:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Exercise candidate run validation with hosted jq
+        working-directory: build
+        run: python3 -m unittest test_native.CandidateArtifactTests.test_candidate_workflow_validation_checks_exact_run_attempt_and_artifacts
+
   package-list:
     if: github.event_name == 'workflow_dispatch'
-    needs: validate
+    needs: [validate, candidate-workflow-validation]
     runs-on: ubuntu-24.04
     outputs:
       names: ${{ steps.packages.outputs.names }}
@@ -82,6 +132,7 @@ jobs:
       tag: ${{ steps.packages.outputs.tag }}
       builds: ${{ steps.packages.outputs.builds }}
       reuse: ${{ steps.packages.outputs.reuse }}
+      candidate_mode: ${{ steps.packages.outputs.candidate_mode }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -92,6 +143,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          CANDIDATE_PR: ${{ inputs.candidate_pr }}
+          CANDIDATE_HEAD_SHA: ${{ inputs.candidate_head_sha }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          CANDIDATE_RUN_ATTEMPT: ${{ inputs.candidate_run_attempt }}
+          CANDIDATE_PACKAGE_ARTIFACT_ID: ${{ inputs.candidate_package_artifact_id }}
+          CANDIDATE_PACKAGE_ARTIFACT_NAME: ${{ inputs.candidate_package_artifact_name }}
+          CANDIDATE_MANIFEST_ARTIFACT_ID: ${{ inputs.candidate_manifest_artifact_id }}
+          CANDIDATE_MANIFEST_ARTIFACT_NAME: ${{ inputs.candidate_manifest_artifact_name }}
+          CANDIDATE_MANIFEST_SHA256: ${{ inputs.candidate_manifest_sha256 }}
+          CANDIDATE_MERGE_SHA: ${{ inputs.candidate_merge_sha }}
         run: |
           mkdir previous
           tag=$(gh api "repos/$GH_REPO/releases?per_page=100" --jq '[.[] | select(.draft | not) | select(any(.assets[]; .name == "build-keys.json"))][0].tag_name // empty')
@@ -105,7 +166,159 @@ jobs:
           fi
           plan=$(python3 build/native.py plan --previous previous)
           jq -r '"Compiling \(.build | length), carrying over \(.reuse | length)"' <<<"$plan"
-          { echo "tag=$tag"; echo "plan=$plan"; echo "names=$(jq -c .build <<<"$plan")"; echo "builds=$(jq -c .builds <<<"$plan")"; echo "reuse=$(jq -c .reuse <<<"$plan")"; } >> "$GITHUB_OUTPUT"
+          candidate_mode=false
+          for value in "$CANDIDATE_PR" "$CANDIDATE_HEAD_SHA" "$CANDIDATE_RUN_ID" "$CANDIDATE_RUN_ATTEMPT" \
+                       "$CANDIDATE_PACKAGE_ARTIFACT_ID" "$CANDIDATE_PACKAGE_ARTIFACT_NAME" \
+                       "$CANDIDATE_MANIFEST_ARTIFACT_ID" "$CANDIDATE_MANIFEST_ARTIFACT_NAME" \
+                       "$CANDIDATE_MANIFEST_SHA256" "$CANDIDATE_MERGE_SHA"; do
+            [[ -z "$value" ]] || candidate_mode=true
+          done
+          if [[ "$candidate_mode" == true ]]; then
+            names='[]'
+            echo "names=[]" >> "$GITHUB_OUTPUT"
+          else
+            names=$(jq -c .build <<<"$plan")
+            echo "names=$names" >> "$GITHUB_OUTPUT"
+          fi
+          {
+            echo "tag=$tag"
+            echo "plan=$plan"
+            echo "builds=$(jq -c .builds <<<"$plan")"
+            echo "reuse=$(jq -c .reuse <<<"$plan")"
+            echo "candidate_mode=$candidate_mode"
+          } >> "$GITHUB_OUTPUT"
+
+  candidate:
+    if: github.event_name == 'workflow_dispatch'
+    needs: [package-list]
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    outputs:
+      active: ${{ steps.candidate.outputs.active }}
+      builds: ${{ steps.candidate.outputs.builds }}
+      candidate_identity: ${{ steps.candidate.outputs.candidate_identity }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate exact candidate run and artifact identities
+        id: candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          CANDIDATE_MODE: ${{ needs.package-list.outputs.candidate_mode }}
+          BUILDS: ${{ needs.package-list.outputs.builds }}
+          PLAN: ${{ needs.package-list.outputs.plan }}
+          CANDIDATE_PR: ${{ inputs.candidate_pr }}
+          CANDIDATE_HEAD_SHA: ${{ inputs.candidate_head_sha }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          CANDIDATE_RUN_ATTEMPT: ${{ inputs.candidate_run_attempt }}
+          CANDIDATE_PACKAGE_ARTIFACT_ID: ${{ inputs.candidate_package_artifact_id }}
+          CANDIDATE_PACKAGE_ARTIFACT_NAME: ${{ inputs.candidate_package_artifact_name }}
+          CANDIDATE_MANIFEST_ARTIFACT_ID: ${{ inputs.candidate_manifest_artifact_id }}
+          CANDIDATE_MANIFEST_ARTIFACT_NAME: ${{ inputs.candidate_manifest_artifact_name }}
+          CANDIDATE_MANIFEST_SHA256: ${{ inputs.candidate_manifest_sha256 }}
+          CANDIDATE_MERGE_SHA: ${{ inputs.candidate_merge_sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$CANDIDATE_MODE" != true ]]; then
+            {
+              echo "active=false"
+              echo "builds=$BUILDS"
+              echo "candidate_identity={}"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          [[ "$CANDIDATE_PR" =~ ^[1-9][0-9]*$ \
+             && "$CANDIDATE_RUN_ID" =~ ^[1-9][0-9]*$ \
+             && "$CANDIDATE_RUN_ATTEMPT" =~ ^[1-9][0-9]*$ \
+             && "$CANDIDATE_PACKAGE_ARTIFACT_ID" =~ ^[1-9][0-9]*$ \
+             && "$CANDIDATE_MANIFEST_ARTIFACT_ID" =~ ^[1-9][0-9]*$ \
+             && "$CANDIDATE_HEAD_SHA" =~ ^([a-f0-9]{40}|[a-f0-9]{64})$ \
+             && "$CANDIDATE_MERGE_SHA" =~ ^([a-f0-9]{40}|[a-f0-9]{64})$ \
+             && "$CANDIDATE_MANIFEST_SHA256" =~ ^[a-f0-9]{64}$ ]]
+          [[ "$CANDIDATE_PACKAGE_ARTIFACT_NAME" == "candidate-packages-$CANDIDATE_RUN_ID-$CANDIDATE_RUN_ATTEMPT" ]]
+          [[ "$CANDIDATE_MANIFEST_ARTIFACT_NAME" == "candidate-manifest-$CANDIDATE_RUN_ID-$CANDIDATE_RUN_ATTEMPT" ]]
+          source_run=$(gh api "repos/$GH_REPO/actions/runs/$CANDIDATE_RUN_ID/attempts/$CANDIDATE_RUN_ATTEMPT")
+          jq -e --argjson run "$CANDIDATE_RUN_ID" --argjson attempt "$CANDIDATE_RUN_ATTEMPT" \
+             --arg head "$CANDIDATE_HEAD_SHA" \
+             '.id == $run and .run_attempt == $attempt and .head_sha == $head
+              and .head_branch == "automation/upstream-recipes"
+              and .event == "workflow_dispatch" and .status == "completed" and .conclusion == "success"' \
+             <<<"$source_run" >/dev/null
+          workflow_id=$(jq -r .workflow_id <<<"$source_run")
+          [[ "$(gh api "repos/$GH_REPO/actions/workflows/$workflow_id" --jq .path)" == ".github/workflows/build-packages.yml" ]]
+          pull=$(gh api "repos/$GH_REPO/pulls/$CANDIDATE_PR")
+          jq -e --argjson pr "$CANDIDATE_PR" --arg head "$CANDIDATE_HEAD_SHA" \
+             --arg merge "$CANDIDATE_MERGE_SHA" --arg repo "$GH_REPO" \
+             '.number == $pr and .state == "closed" and .merged == true and .merge_commit_sha == $merge
+              and .head.sha == $head and .head.repo.full_name == $repo' <<<"$pull" >/dev/null
+          tree=$(gh api "repos/$GH_REPO/commits/$CANDIDATE_HEAD_SHA" --jq .commit.tree.sha)
+          check_artifact() {
+            local id=$1 name=$2 metadata
+            metadata=$(gh api "repos/$GH_REPO/actions/artifacts/$id")
+            jq -e --argjson id "$id" --arg name "$name" --argjson run "$CANDIDATE_RUN_ID" \
+               --arg head "$CANDIDATE_HEAD_SHA" \
+               '.id == $id and .name == $name and .expired == false
+                and .workflow_run.id == $run and .workflow_run.head_sha == $head
+                and .workflow_run.head_branch == "automation/upstream-recipes"' \
+               <<<"$metadata" >/dev/null
+          }
+          check_artifact "$CANDIDATE_PACKAGE_ARTIFACT_ID" "$CANDIDATE_PACKAGE_ARTIFACT_NAME"
+          check_artifact "$CANDIDATE_MANIFEST_ARTIFACT_ID" "$CANDIDATE_MANIFEST_ARTIFACT_NAME"
+          identity=$(jq -cn --arg repository "$GH_REPO" --argjson pr "$CANDIDATE_PR" \
+            --arg head "$CANDIDATE_HEAD_SHA" --arg tree "$tree" --arg workflow "build-packages.yml" \
+            --argjson run "$CANDIDATE_RUN_ID" --argjson attempt "$CANDIDATE_RUN_ATTEMPT" \
+            --arg artifact "$CANDIDATE_PACKAGE_ARTIFACT_NAME" \
+            '{repository:$repository,pr:$pr,head:$head,tree:$tree,workflow:$workflow,run:$run,attempt:$attempt,artifact_name:$artifact}')
+          jq -n --argjson identity "$identity" --argjson plan "$PLAN" \
+            '{identity:$identity,plan:$plan}' > "$RUNNER_TEMP/candidate-expected.json"
+          {
+            echo "active=true"
+            echo "builds=$BUILDS"
+            echo "candidate_identity=$identity"
+          } >> "$GITHUB_OUTPUT"
+      - name: Download the exact source-run candidate package artifact
+        if: steps.candidate.outputs.active == 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ inputs.candidate_package_artifact_id }}
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.candidate_run_id }}
+          path: candidate-input/packages
+      - name: Download the exact source-run candidate manifest artifact
+        if: steps.candidate.outputs.active == 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ inputs.candidate_manifest_artifact_id }}
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.candidate_run_id }}
+          path: candidate-input/manifest
+      - name: Verify candidate manifest and package bytes before reupload
+        if: steps.candidate.outputs.active == 'true'
+        env:
+          EXPECTED_SHA256: ${{ inputs.candidate_manifest_sha256 }}
+        run: |
+          set -euo pipefail
+          manifest=candidate-input/manifest/candidate-manifest.json
+          [[ "$(sha256sum "$manifest" | cut -d' ' -f1)" == "$EXPECTED_SHA256" ]]
+          python3 build/native.py candidate-verify \
+            --package-artifacts candidate-input/packages \
+            --manifest "$manifest" --expected-json "$RUNNER_TEMP/candidate-expected.json"
+          mkdir -p verified-candidate/packages
+          cp -- candidate-input/packages/*.txz verified-candidate/packages/
+          cp -- "$manifest" verified-candidate/candidate-manifest.json
+      - name: Reupload one same-run verified candidate package artifact
+        if: steps.candidate.outputs.active == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: verified-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: verified-candidate/
+          if-no-files-found: error
+          retention-days: 90
 
   # BEGIN generated package jobs (scripts/package-change-workflows.py); do not edit.
   package-alsa-lib:
@@ -1129,8 +1342,12 @@ jobs:
   # END generated package jobs
 
   build:
-    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && needs.packages.result == 'success' }}
-    needs: [package-list, packages]
+    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && needs.package-list.result == 'success' && needs.packages.result == 'success' && needs.candidate.result == 'success' }}
+    needs: [package-list, candidate, packages]
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
     runs-on: ubuntu-24.04
     # Debian builder image with all tools (build/runner/Dockerfile), pinned by digest. Privileged for
     # Bubblewrap user namespaces, mknod and /dev/kvm. Update the digest after builder-image.yml republishes it.
@@ -1143,7 +1360,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Download only packages built in this workflow run
-        if: needs.package-list.outputs.names != '[]'
+        if: needs.candidate.outputs.active != 'true' && needs.package-list.outputs.names != '[]'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: native-package-*
@@ -1154,19 +1371,27 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           PLAN: ${{ needs.package-list.outputs.plan }}
           TAG: ${{ needs.package-list.outputs.tag }}
+          CANDIDATE_ACTIVE: ${{ needs.candidate.outputs.active }}
         run: |
-          mkdir -p package-artifacts
-          python3 - <<'PY'
-          import hashlib, json, os, shutil, urllib.request
+          if [[ "$CANDIDATE_ACTIVE" == true ]]; then REUSE_DIR=reuse-artifacts; else REUSE_DIR=package-artifacts; fi
+          mkdir -p "$REUSE_DIR"
+          python3 - "$REUSE_DIR" <<'PY'
+          import hashlib, json, os, shutil, sys, urllib.request
           # Public release assets; the builder image has no gh CLI and needs no token for these.
           base = f"https://github.com/{os.environ['REPOSITORY']}/releases/download/{os.environ['TAG']}/"
           for item in json.loads(os.environ['PLAN'])['reuse']:
-              path = 'package-artifacts/' + item['file']
+              path = os.path.join(sys.argv[1], item['file'])
               with urllib.request.urlopen(base + item['file'], timeout=300) as response, open(path, 'wb') as stream:
                   shutil.copyfileobj(response, stream)
               with open(path, 'rb') as stream:
                   assert hashlib.file_digest(stream, 'sha256').hexdigest() == item['sha256'], item['file']
           PY
+      - name: Download same-run verified candidate package bundle
+        if: needs.candidate.outputs.active == 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: verified-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: candidate-artifacts
       - name: Read the canonical baseline pins
         id: baseline
         run: |
@@ -1197,13 +1422,22 @@ jobs:
           TARGET_URL: ${{ inputs.unraid_url }}
           TARGET_CHANNEL: ${{ inputs.channel }}
           PUBLISH: ${{ inputs.publish }}
-          NERDTOOLS_BUILDS: ${{ needs.package-list.outputs.builds }}
+          NERDTOOLS_BUILDS: ${{ needs.candidate.outputs.builds }}
           NERDTOOLS_PREVIOUS_RELEASE: ${{ needs.package-list.outputs.tag }}
+          CANDIDATE_ACTIVE: ${{ needs.candidate.outputs.active }}
+          CANDIDATE_IDENTITY: ${{ needs.candidate.outputs.candidate_identity }}
+          PLAN: ${{ needs.package-list.outputs.plan }}
           BASELINE_ROOT: ${{ steps.roots.outputs.baseline-root }}
           DEVELOPMENT_ROOT: ${{ steps.roots.outputs.development-root }}
         run: |
           args=(--package-artifacts "$GITHUB_WORKSPACE/package-artifacts")
           if [[ "$PUBLISH" == true ]]; then args+=(--publish); fi
+          if [[ "$CANDIDATE_ACTIVE" == true ]]; then
+            python3 -c 'import json, os, sys; from pathlib import Path; Path(sys.argv[1]).write_text(json.dumps({"identity": json.loads(os.environ["CANDIDATE_IDENTITY"]), "plan": json.loads(os.environ["PLAN"])}))' "$RUNNER_TEMP/candidate-expected.json"
+            args+=(--candidate-artifacts "$GITHUB_WORKSPACE/candidate-artifacts"
+                   --candidate-expected-json "$RUNNER_TEMP/candidate-expected.json"
+                   --reuse-artifacts "$GITHUB_WORKSPACE/reuse-artifacts")
+          fi
           SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
           export SOURCE_DATE_EPOCH
           sudo --preserve-env=GITHUB_REPOSITORY,GITHUB_SHA,RUNNER_TEMP,SOURCE_DATE_EPOCH,NERDTOOLS_BUILDS,NERDTOOLS_PREVIOUS_RELEASE python3 build/native.py build \
@@ -1228,6 +1462,76 @@ jobs:
             dist/compatibility-*.json
             dist/provenance-*.json
             dist/kernel-smoke-*.log
+            ${{ needs.candidate.outputs.active == 'true' && 'dist/candidate-manifest.json' || '' }}
+          if-no-files-found: error
+          retention-days: 90
+      - name: Seal plan build packages for candidate promotion
+        if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/upstream-recipes' && inputs.publish == false && needs.package-list.outputs.names != '[]' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          HEAD: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          ARTIFACT_NAME: candidate-packages-${{ github.run_id }}-${{ github.run_attempt }}
+          PLAN: ${{ needs.package-list.outputs.plan }}
+        run: |
+          plan="$RUNNER_TEMP/candidate-plan.json"
+          printf '%s\n' "$PLAN" > "$plan"
+          pr=$(python3 - <<'PY'
+          import json, os, urllib.request
+          repository, head = os.environ['REPOSITORY'], os.environ['HEAD']
+          request = urllib.request.Request(
+              f"https://api.github.com/repos/{repository}/commits/{head}/pulls?per_page=100",
+              headers={"Accept": "application/vnd.github+json",
+                       "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
+                       "X-GitHub-Api-Version": "2022-11-28"})
+          with urllib.request.urlopen(request, timeout=30) as response:
+              pulls = json.load(response)
+          matches = [pull for pull in pulls
+                     if pull.get("state") == "open"
+                     and pull.get("head", {}).get("ref") == "automation/upstream-recipes"
+                     and pull.get("head", {}).get("sha") == head
+                     and (pull.get("head", {}).get("repo") or {}).get("full_name") == repository]
+          if len(matches) != 1:
+              raise SystemExit("Expected exactly one open automation/upstream-recipes PR for this commit")
+          print(matches[0]["number"])
+          PY
+          )
+          tree=$(git rev-parse "$HEAD^{tree}")
+          mkdir candidate-packages
+          python3 - "$plan" <<'PY'
+          import json, shutil, sys
+          from pathlib import Path
+          sys.path.insert(0, "build")
+          import native
+          packages = {package["name"]: package for package in native.load_packages()}
+          plan = json.loads(Path(sys.argv[1]).read_text())
+          for name in plan["build"]:
+              package = packages[name]
+              filename = native.artifact_name(package, plan["builds"][name])
+              shutil.copyfile(Path("package-artifacts") / filename,
+                              Path("candidate-packages") / filename)
+          PY
+          python3 build/native.py candidate-create \
+            --package-artifacts candidate-packages --plan "$plan" --output candidate-manifest.json \
+            --repository "$REPOSITORY" --pr "$pr" --head "$HEAD" --tree "$tree" \
+            --workflow build-packages.yml --run "$RUN_ID" --attempt "$RUN_ATTEMPT" \
+            --artifact-name "$ARTIFACT_NAME"
+      - name: Upload changed-package candidate artifact
+        if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/upstream-recipes' && inputs.publish == false && needs.package-list.outputs.names != '[]' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: candidate-packages-${{ github.run_id }}-${{ github.run_attempt }}
+          path: candidate-packages/
+          if-no-files-found: error
+          retention-days: 90
+      - name: Upload candidate manifest artifact
+        if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/upstream-recipes' && inputs.publish == false && needs.package-list.outputs.names != '[]' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: candidate-manifest-${{ github.run_id }}-${{ github.run_attempt }}
+          path: candidate-manifest.json
           if-no-files-found: error
           retention-days: 90
       # Neither the proprietary Unraid ZIP nor any extracted rootfs is uploaded or cached.
