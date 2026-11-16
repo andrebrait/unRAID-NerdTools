@@ -636,6 +636,12 @@ class NerdTools {
         $directory = $this->root.'/var/log/packages';
         return is_dir($directory) ? array_values(array_diff(scandir($directory), ['.','..'])) : [];
     }
+    public function pluginVersion() {
+        foreach ($this->installed() as $record) {
+            if (preg_match('/^NerdTools-([0-9]+(?:\.[0-9]+){2,3})-x86_64-1$/D', $record, $match)) return $match[1];
+        }
+        return '';
+    }
     public function owned() {
         $owned = nt_json($this->path.'/owned-packages.json');
         foreach ($owned as $name => $entry) {

@@ -18,7 +18,7 @@ $nt_vars = @parse_ini_file('/var/local/emhttp/var.ini', false, INI_SCANNER_RAW);
 
 <div class="title"><span class="left"><i class="fa fa-cubes icon"></i>Packages</span></div>
 <p>Choose an explicit action for each tool. Available updates remain unchanged until you select Upgrade or Downgrade. Required dependency changes are planned automatically and shown before confirmation.</p>
-<p id="catalog_status" role="status" aria-live="polite"></p>
+<dl id="catalog_status" class="catalog-status" role="status" aria-live="polite"></dl>
 <p id="package_error" role="alert" hidden></p>
 <div class="wrapper">
 <table class="tablesorter hover-highlight" id="tblPackages">

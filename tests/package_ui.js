@@ -30,21 +30,62 @@ assert.equal(context.actionLabel('keep', false), '-', 'uninstalled Keep displays
 assert.equal(context.actionLabel('keep', true), 'Keep', 'installed Keep keeps its label');
 assert.equal(context.actionIsEmphasized('keep'), false, 'Keep action is not emphasized');
 assert.equal(context.actionIsEmphasized('install'), true, 'non-keep action is emphasized');
+assert.deepEqual(
+    JSON.parse(JSON.stringify(context.catalogStatusRows(
+        {plugin_version: '2026.11.16.10', release: 'packages-test', hours: 24},
+        {last_success: 100, next_check: 200, error: ''},
+        value => `time:${value}`
+    ))),
+    [
+        {label: 'NerdTools version', value: '2026.11.16.10'},
+        {label: 'Package release', value: 'packages-test'},
+        {label: 'Last successful check', value: 'time:100'},
+        {label: 'Next eligible check', value: 'time:200'},
+    ],
+    'catalog metadata is returned as label-value rows'
+);
+assert.deepEqual(
+    JSON.parse(JSON.stringify(context.catalogStatusRows(
+        {plugin_version: '', release: '', hours: 0},
+        {error: 'rate limited'},
+        value => `time:${value}`
+    ))),
+    [
+        {label: 'NerdTools version', value: 'Unknown'},
+        {label: 'Package release', value: 'None'},
+        {label: 'Last successful check', value: 'Never'},
+        {label: 'Last check error', value: 'rate limited'},
+        {label: 'Catalog in use', value: 'Last successful cache'},
+        {label: 'Next eligible check', value: 'Disabled'},
+    ],
+    'catalog error and disabled states remain structured'
+);
+assert.equal(context.actionClass('remove', true), 'package-remove', 'Remove class overrides update availability');
+assert.equal(context.actionClass('install', false), 'package-install', 'Install uses install class');
+assert.equal(context.actionClass('upgrade', true), 'package-upgrade', 'Upgrade uses upgrade class');
+assert.equal(context.actionClass('keep', true), 'package-update-available', 'Available Keep uses update class');
+assert.equal(context.actionClass('keep', false), '', 'Current Keep has no action class');
 const visual = {selected: null, emphasized: null};
+const classes = new Set(['package-has-update']);
 const fakeSelect = {
     val: value => { visual.selected = value; return fakeSelect; },
     toggleClass: (_name, value) => { visual.emphasized = value; return fakeSelect; },
 };
 const fakeRow = {
-    toggleClass: () => fakeRow,
+    hasClass: name => classes.has(name),
+    removeClass: names => { names.split(' ').forEach(name => classes.delete(name)); return fakeRow; },
+    addClass: names => { names.split(' ').forEach(name => classes.add(name)); return fakeRow; },
+    toggleClass: (name, value) => { if (value) classes.add(name); else classes.delete(name); return fakeRow; },
     find: () => fakeSelect,
 };
 context.syncActionDisplay(fakeRow, 'remove');
-assert.deepEqual(visual, {selected: 'remove', emphasized: true},
-    'selector and emphasis update atomically');
+assert.deepEqual(visual, {selected: 'remove', emphasized: true}, 'selector and Remove class update atomically');
+assert.deepEqual([...classes].sort(), ['package-changed', 'package-has-update', 'package-remove'],
+    'Remove clears yellow and applies red class');
 context.syncActionDisplay(fakeRow, 'keep');
-assert.deepEqual(visual, {selected: 'keep', emphasized: false},
-    'Keep atomically clears action emphasis');
+assert.deepEqual(visual, {selected: 'keep', emphasized: false}, 'Keep clears action emphasis');
+assert.deepEqual([...classes].sort(), ['package-has-update', 'package-update-available'],
+    'available Keep clears red and applies yellow class');
 assert.equal(context.automaticAction({automatic: true, change: 'remove'}), 'remove',
     'automatic removal selects Remove');
 assert.equal(context.automaticAction({automatic: true, change: 'upgrade'}), 'upgrade',

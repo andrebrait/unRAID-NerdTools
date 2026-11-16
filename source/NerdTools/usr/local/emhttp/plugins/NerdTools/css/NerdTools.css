@@ -4,6 +4,19 @@
 #package_form .wrapper {
     overflow-x: auto;
 }
+.catalog-status {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 0.25rem 1rem;
+    margin: 0.5rem 0 1rem;
+}
+.catalog-status dt {
+    font-weight: 600;
+}
+.catalog-status dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
 .pkgaction {
     min-width: 7rem;
 }
@@ -16,41 +29,35 @@
 .pkgaction.package-action-selected {
     font-weight: 700;
 }
-table.tablesorter tbody tr:has(.pkgaction option[value="remove"]:checked) {
+table.tablesorter tbody tr.package-remove {
     background-color: rgb(198 40 40 / 22%) !important;
 }
-table.tablesorter tbody tr:has(.pkgaction option[value="install"]:checked) {
+table.tablesorter tbody tr.package-install {
     background-color: rgb(46 125 50 / 22%) !important;
 }
-table.tablesorter tbody tr:has(.pkgaction option[value="upgrade"]:checked),
-table.tablesorter tbody tr:has(.pkgaction option[value="downgrade"]:checked) {
+table.tablesorter tbody tr.package-upgrade {
     background-color: rgb(21 101 192 / 22%) !important;
 }
-table.tablesorter tbody tr.package-has-update:has(.pkgaction option[value="keep"]:checked) {
+table.tablesorter tbody tr.package-update-available {
     background-color: rgb(249 168 37 / 22%) !important;
 }
-table.tablesorter tbody tr:has(.pkgaction option[value="remove"]:checked) td:first-child {
+table.tablesorter tbody tr.package-remove td:first-child {
     border-left: 0.25rem solid rgb(198 40 40);
 }
-table.tablesorter tbody tr:has(.pkgaction option[value="install"]:checked) td:first-child {
+table.tablesorter tbody tr.package-install td:first-child {
     border-left: 0.25rem solid rgb(46 125 50);
 }
-table.tablesorter tbody tr:has(.pkgaction option[value="upgrade"]:checked) td:first-child,
-table.tablesorter tbody tr:has(.pkgaction option[value="downgrade"]:checked) td:first-child {
+table.tablesorter tbody tr.package-upgrade td:first-child {
     border-left: 0.25rem solid rgb(21 101 192);
 }
-table.tablesorter tbody tr.package-has-update:has(.pkgaction option[value="keep"]:checked) td:first-child {
+table.tablesorter tbody tr.package-update-available td:first-child {
     border-left: 0.25rem solid rgb(249 168 37);
 }
-.package-has-update:has(.pkgaction option[value="keep"]:checked) .version-value,
-tr:has(.pkgaction option[value="upgrade"]:checked) .version-value,
-tr:has(.pkgaction option[value="downgrade"]:checked) .version-value {
+.package-update-available .version-value,
+.package-upgrade .version-value {
     font-weight: 600;
 }
-tr:has(.pkgaction option[value="remove"]:checked) .planned-change,
-tr:has(.pkgaction option[value="install"]:checked) .planned-change,
-tr:has(.pkgaction option[value="upgrade"]:checked) .planned-change,
-tr:has(.pkgaction option[value="downgrade"]:checked) .planned-change {
+.package-changed .planned-change {
     font-weight: 600;
 }
 #package_plan_dialog {
@@ -90,5 +97,12 @@ tr:has(.pkgaction option[value="downgrade"]:checked) .planned-change {
     }
     .package-plan-dialog {
         padding: 0.75rem;
+    }
+    .catalog-status {
+        grid-template-columns: 1fr;
+        gap: 0.125rem;
+    }
+    .catalog-status dd {
+        margin-bottom: 0.5rem;
     }
 }

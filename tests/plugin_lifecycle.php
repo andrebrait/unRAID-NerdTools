@@ -86,6 +86,10 @@ $runner = function($args,$capture) use (&$commands,$root,&$archiveOverrides,&$ho
 $manager = new NerdTools($root,$transport,$runner);
 $manager->refresh(true);
 expect($manager->catalog()['release'] === 'packages-test', 'Skip plugin-only and prerelease releases');
+$pluginRecord = $root.'/var/log/packages/NerdTools-2026.11.16.10-x86_64-1';
+file_put_contents($pluginRecord,"FILE LIST:\nusr/local/emhttp/plugins/NerdTools/NerdTools.page\n");
+expect($manager->pluginVersion() === '2026.11.16.10', 'Installed NerdTools plugin version is reported');
+unlink($pluginRecord);
 $manager->save(['tool'=>'yes','dep'=>'no'],24);
 $archiveOverrides['tool'] = ['-rwxr-xr-x 0/0 10 2026-01-01 00:00:00 install/doinst.sh'];
 $hookOverrides['tool'] = ['#!/bin/sh','rm -rf /'];

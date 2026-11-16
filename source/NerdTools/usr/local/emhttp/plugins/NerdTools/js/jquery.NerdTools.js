@@ -29,7 +29,16 @@ function automaticAction(state) {
     return state.automatic && ['install','upgrade','downgrade','remove'].indexOf(state.change) !== -1
         ? state.change : null;
 }
+function actionClass(action, hasUpdate) {
+    if (action === 'remove') return 'package-remove';
+    if (action === 'install') return 'package-install';
+    if (action === 'upgrade' || action === 'downgrade') return 'package-upgrade';
+    return hasUpdate ? 'package-update-available' : '';
+}
 function syncActionDisplay(row, action) {
+    row.removeClass('package-remove package-install package-upgrade package-update-available');
+    var stateClass = actionClass(action, row.hasClass('package-has-update'));
+    if (stateClass) row.addClass(stateClass);
     row.toggleClass('package-changed', actionIsEmphasized(action));
     row.find('.pkgaction').val(action)
         .toggleClass('package-action-selected', actionIsEmphasized(action));
@@ -94,6 +103,27 @@ function packageError(message) {
 }
 function requestError(xhr) {
     return xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : 'NerdTools request failed; please try again.';
+}
+function catalogStatusRows(data, state, formatDate) {
+    formatDate = formatDate || function(value) { return new Date(value * 1000).toLocaleString(); };
+    var rows = [
+        {label: 'NerdTools version', value: data.plugin_version || 'Unknown'},
+        {label: 'Package release', value: data.release || 'None'},
+        {label: 'Last successful check', value: state.last_success ? formatDate(state.last_success) : 'Never'}
+    ];
+    if (state.error) {
+        rows.push({label: 'Last check error', value: state.error});
+        rows.push({label: 'Catalog in use', value: 'Last successful cache'});
+    }
+    rows.push({label: 'Next eligible check', value: data.hours === 0
+        ? 'Disabled' : (state.next_check ? formatDate(state.next_check) : 'Not scheduled')});
+    return rows;
+}
+function renderCatalogStatus(data, state) {
+    var status = $('#catalog_status').empty();
+    $.each(catalogStatusRows(data, state), function(_, row) {
+        status.append($('<dt>').text(row.label), $('<dd>').text(row.value));
+    });
 }
 function planData(action, actions) {
     var data = {
@@ -169,13 +199,7 @@ function packageQuery(force) {
         $.each(data.releases || [], function(_, tag) { releases.append($('<option>').val(tag).text(tag)); });
         releases.val(data.selector || 'latest');
         $('#github_token').attr('placeholder', data.token_set ? 'Saved (hidden)' : 'Not set');
-        var state = data.state || {};
-        var statusText = data.release ? 'Package release: ' + data.release + '. ' : '';
-        statusText += state.last_success ? 'Last successful check: ' + new Date(state.last_success * 1000).toLocaleString() + '. ' : 'No successful catalog check yet. ';
-        if (state.error) statusText += 'Last check failed: ' + state.error + '. Using the last-good cache. ';
-        if (data.hours === 0) statusText += 'Automatic checks are disabled.';
-        else if (state.next_check) statusText += 'Next eligible check: ' + new Date(state.next_check * 1000).toLocaleString() + '.';
-        $('#catalog_status').text(statusText);
+        renderCatalogStatus(data, data.state || {});
         var offers = $('#external_offers div').empty();
         $.each(data.external_packages || [], function(_, offer) {
             offers.append($('<p>').append(
