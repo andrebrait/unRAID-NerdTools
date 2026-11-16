@@ -245,6 +245,30 @@ def candidate_state_matches(state, run, pr):
             and isinstance(state.get('build_url'), str) and bool(state['build_url']))
 
 
+def candidate_release_inputs(state, pr):
+    run = {'id': state.get('run_id'), 'run_attempt': state.get('run_attempt')} if isinstance(state, dict) else {}
+    number = pr.get('number')
+    head = pr.get('head', {}).get('sha')
+    merge = pr.get('merge_commit_sha')
+    if (type(number) is not int or number < 1
+            or not isinstance(head, str) or not re.fullmatch(r'(?:[a-f0-9]{40}|[a-f0-9]{64})', head)
+            or not isinstance(merge, str) or not re.fullmatch(r'(?:[a-f0-9]{40}|[a-f0-9]{64})', merge)
+            or not candidate_state_matches(state, run, pr)):
+        raise ValueError('Release requires a complete candidate tuple for the merged PR head')
+    return {
+        'candidate_pr': str(number),
+        'candidate_head_sha': head,
+        'candidate_run_id': str(state['run_id']),
+        'candidate_run_attempt': str(state['run_attempt']),
+        'candidate_package_artifact_id': str(state['package_artifact_id']),
+        'candidate_package_artifact_name': state['package_artifact_name'],
+        'candidate_manifest_artifact_id': str(state['manifest_artifact_id']),
+        'candidate_manifest_artifact_name': state['manifest_artifact_name'],
+        'candidate_manifest_sha256': state['manifest_sha256'],
+        'candidate_merge_sha': merge,
+    }
+
+
 def update_candidate_build(gh, pr, state, run):
     clear_candidate_state(state)
     run_id = run.get('id')
@@ -1816,7 +1840,8 @@ def release(gh, event):
         gh.api(f"statuses/{pr['merge_commit_sha']}", {
             'context': 'nerdtools/human-approval', 'state': 'success',
             'description': f"Approved head {pr['head']['sha']}", 'target_url': pr['html_url']})
-    gh.dispatch('unraid-releases.yml')
+    inputs = candidate_release_inputs(read_state(pr), pr)
+    gh.dispatch('unraid-releases.yml', inputs=inputs)
     summary(f'Approved merge of PR {number}: dispatched default-branch compatibility and release discovery.')
 
 

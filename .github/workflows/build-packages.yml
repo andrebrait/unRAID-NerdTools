@@ -1,5 +1,5 @@
 name: Build native packages
-run-name: Unraid compatibility ${{ inputs.unraid_version }} ${{ inputs.unraid_sha256 }} publish=${{ inputs.publish || false }}
+run-name: Unraid compatibility ${{ inputs.unraid_version }} ${{ inputs.unraid_sha256 }} publish=${{ inputs.publish || false }}${{ inputs.candidate_run_id && format(' candidate={0}/{1}', inputs.candidate_run_id, inputs.candidate_run_attempt) || '' }}
 
 on:
   pull_request:
@@ -39,6 +39,46 @@ on:
         required: true
         type: boolean
         default: false
+      candidate_pr:
+        description: Candidate pull request number
+        required: false
+        type: string
+      candidate_head_sha:
+        description: Candidate pull request head SHA
+        required: false
+        type: string
+      candidate_run_id:
+        description: Candidate build workflow run ID
+        required: false
+        type: string
+      candidate_run_attempt:
+        description: Candidate build workflow run attempt
+        required: false
+        type: string
+      candidate_package_artifact_id:
+        description: Candidate package artifact ID
+        required: false
+        type: string
+      candidate_package_artifact_name:
+        description: Candidate package artifact name
+        required: false
+        type: string
+      candidate_manifest_artifact_id:
+        description: Candidate manifest artifact ID
+        required: false
+        type: string
+      candidate_manifest_artifact_name:
+        description: Candidate manifest artifact name
+        required: false
+        type: string
+      candidate_manifest_sha256:
+        description: Candidate manifest SHA256
+        required: false
+        type: string
+      candidate_merge_sha:
+        description: Merge commit SHA that authorized the candidate
+        required: false
+        type: string
 
 # Container jobs default to sh (dash in the Debian image); steps are written for bash.
 defaults:
@@ -49,7 +89,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: native-${{ github.ref }}-${{ inputs.unraid_version }}-${{ inputs.unraid_sha256 }}-${{ inputs.publish }}
+  group: native-${{ github.ref }}-${{ inputs.unraid_version }}-${{ inputs.unraid_sha256 }}-${{ inputs.publish }}${{ inputs.candidate_run_id && format('-candidate-{0}-{1}', inputs.candidate_run_id, inputs.candidate_run_attempt) || '' }}
   cancel-in-progress: false
 
 jobs:
