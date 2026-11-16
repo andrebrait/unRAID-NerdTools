@@ -127,7 +127,10 @@ function catalogStatusRows(data, state, formatDate) {
 function renderCatalogStatus(data, state) {
     var status = $('#catalog_status').empty();
     $.each(catalogStatusRows(data, state), function(_, row) {
-        status.append($('<dt>').text(row.label), $('<dd>').text(row.value));
+        status.append($('<li>').append(
+            $('<strong>').text(row.label + ': '),
+            document.createTextNode(row.value)
+        ));
     });
 }
 function planData(action, actions) {

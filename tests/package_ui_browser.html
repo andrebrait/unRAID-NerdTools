@@ -6,7 +6,7 @@
 <link rel="stylesheet" href="../source/NerdTools/usr/local/emhttp/plugins/NerdTools/css/NerdTools.css">
 </head>
 <body>
-<dl class="catalog-status" id="catalog-status"><dt>NerdTools version</dt><dd>2026.11.16.10</dd><dt>Package release</dt><dd>packages-test</dd><dt>Last successful check</dt><dd>16/11/2026, 09:41:43</dd><dt>Next eligible check</dt><dd>17/11/2026, 09:41:43</dd></dl>
+<ul class="catalog-status" id="catalog-status"><li><strong>NerdTools version: </strong>2026.11.16.10</li><li><strong>Package release: </strong>packages-test</li><li><strong>Last successful check: </strong>16/11/2026, 09:41:43</li><li><strong>Next eligible check: </strong>17/11/2026, 09:41:43</li></ul>
 <table class="tablesorter"><tbody>
 <tr data-case="current"><td><select class="pkgaction"><option value="keep">Keep</option><option value="remove">Remove</option></select></td><td class="version-value">1.0</td><td class="version-value">1.0</td><td class="planned-change">No change</td></tr>
 <tr class="package-has-update" data-case="available"><td><select class="pkgaction"><option value="keep">Keep</option><option value="upgrade">Upgrade</option><option value="remove">Remove</option></select></td><td class="version-value">1.0</td><td class="version-value">2.0</td><td class="planned-change">Update available</td></tr>
@@ -48,8 +48,9 @@
         applyAction('install', 'install');
         for (const name of ['libyaml', 'ruby', 'vim']) applyAction(name, 'keep');
         const status = document.getElementById('catalog-status');
-        assert(status.children.length === 8, 'Catalog status must contain four label-value rows');
-        assert(getComputedStyle(status).display === 'grid', 'Catalog status must use structured grid layout');
+        assert(status.children.length === 4, 'Catalog status must contain four compact list items');
+        assert([...status.children].every(item => item.tagName === 'LI' && item.querySelector('strong')),
+            'Each catalog item must keep its label and value together');
         assert(background('current') !== colors.remove, 'Keep row must not be red');
         assert(background('available') === colors.available, 'Available update must be yellow');
         assert(weight('available', 0) === '600' && weight('available', 1) === '600', 'Available versions must be bold');
