@@ -141,6 +141,12 @@ $expandedPlan = nt_plan($expandedPackages,$expandedOwned,array_column($expandedO
 check(array_column($expandedPlan['changes'],'package') === ['dep','app','extra','consumer']
     && $expandedPlan['rows']['extra']['change'] === 'install',
     'Automatically upgraded dependent stages its new dependencies');
+$removalOwned = $expandedOwned + ['extra'=>['record'=>'extra-1.0-x86_64-1','dependencies'=>[]]];
+rejects(function() use ($expandedPackages,$removalOwned) {
+    nt_plan($expandedPackages,$removalOwned,array_column($removalOwned,'record'),
+        ['dep'=>'yes','consumer'=>'yes','extra'=>'yes','update_check_hours'=>'24'],
+        ['app'=>'install','extra'=>'remove'],24);
+});
 $sameBuild = $planPackage('tool','1.0'); $sameBuild['file'] = 'tool-1.0-x86_64-2.txz';
 check(nt_update_kind('tool-1.0-x86_64-1','tool',$sameBuild) === 'upgrade',
     'Same-version package build replacement is an upgrade action');
@@ -148,6 +154,15 @@ $sameBuildPlan = nt_plan(['tool'=>$sameBuild],
     ['tool'=>['record'=>'tool-1.0-x86_64-1','dependencies'=>[]]],['tool-1.0-x86_64-1'],
     ['tool'=>'yes','update_check_hours'=>'24'],['tool'=>'upgrade'],24);
 check($sameBuildPlan['changes'][0]['change'] === 'upgrade', 'Same-version package build replacement can be planned');
+$legacyPackage = $planPackage('nerdtools-tool','1.0'); $legacyPackage['tool'] = 'tool';
+$legacyRecord = 'tool-1.0-x86_64-1_nerdtools';
+check(nt_update_kind($legacyRecord,'tool',$legacyPackage) === 'upgrade',
+    'Same-version legacy migration is offered as an upgrade action');
+$legacyPlan = nt_plan(['nerdtools-tool'=>$legacyPackage],
+    ['tool'=>['record'=>$legacyRecord,'dependencies'=>[]]],[$legacyRecord],
+    ['tool'=>'yes','update_check_hours'=>'24'],['nerdtools-tool'=>'upgrade'],24);
+check($legacyPlan['changes'][0]['package'] === 'nerdtools-tool'
+    && $legacyPlan['changes'][0]['change'] === 'upgrade', 'Same-version legacy migration can be planned');
 $removeOwned = [
     'dep'=>['record'=>'dep-1.0-x86_64-1','dependencies'=>[]],
     'app'=>['record'=>'app-1.0-x86_64-1','dependencies'=>['dep']],

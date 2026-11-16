@@ -230,16 +230,6 @@ function nt_plan($packages, $owned, $installed, $config, $actions, $hours, $cata
             ? $state['package']['dependencies'] : ($state['owned']['dependencies'] ?? []);
         $graph[$name] = ['dependencies'=>$dependencies];
     }
-    $selected = [];
-    foreach ($preferences as $name => $value) if ($value === 'yes') $selected[] = $name;
-    $required = nt_resolve($selected, $graph);
-    $requiredSet = array_fill_keys($required, true);
-    foreach ($intents as $name => $intent) {
-        if ($intent === 'remove' && isset($requiredSet[$name])) {
-            throw new RuntimeException('Package is required by a selected package: '.$name);
-        }
-    }
-    foreach ($required as $name) $preferences[$name] = 'yes';
 
     $operations = []; $requestedRoots = []; $installRoots = [];
     foreach ($intents as $name => $intent) {
@@ -316,6 +306,24 @@ function nt_plan($packages, $owned, $installed, $config, $actions, $hours, $cata
     foreach ($intents as $name => $intent) {
         if ($intent === 'remove') $operations[$name] = ['change'=>'remove','automatic'=>false,'reason'=>''];
     }
+    $finalGraph = [];
+    foreach ($states as $name => $state) {
+        $operation = $operations[$name] ?? null;
+        $replace = $operation && $operation['change'] !== 'remove';
+        $dependencies = $state['package'] && (!$state['installed'] || $replace)
+            ? $state['package']['dependencies'] : ($state['owned']['dependencies'] ?? []);
+        $finalGraph[$name] = ['dependencies'=>$dependencies];
+    }
+    $selected = [];
+    foreach ($preferences as $name => $value) if ($value === 'yes') $selected[] = $name;
+    $required = nt_resolve($selected, $finalGraph);
+    $requiredSet = array_fill_keys($required, true);
+    foreach ($intents as $name => $intent) {
+        if ($intent === 'remove' && isset($requiredSet[$name])) {
+            throw new RuntimeException('Package is required by a selected package: '.$name);
+        }
+    }
+    foreach ($required as $name) $preferences[$name] = 'yes';
 
     $installNames = [];
     foreach ($operations as $name => $operation) if ($operation['change'] !== 'remove') $installNames[] = $name;
