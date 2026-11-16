@@ -214,8 +214,9 @@ $chainOwned = [
 ];
 $chainPlan = nt_plan($chainPackages,$chainOwned,array_column($chainOwned,'record'),
     ['dep'=>'yes','app'=>'yes','peer'=>'yes','top'=>'yes','update_check_hours'=>'24'],['dep'=>'remove'],24);
-check(array_column($chainPlan['changes'],'package') === ['top','peer','app','dep'],
-    'Dependency removal cascades through every direct and transitive installed dependent');
+check(array_column($chainPlan['changes'],'package') === ['top','peer','app','dep']
+    && $chainPlan['rows']['top']['reason'] === 'Dependency dep marked for removal',
+    'Dependency removal cascades with display-name removal reason');
 $plan = nt_plan($planPackages,$planOwned,$planInstalled,$planConfig,[],168);
 check(count($plan['changes']) === 1 && $plan['changes'][0]['change'] === 'settings', 'Settings-only change is planned');
 rejects(function() use ($planPackages,$planOwned,$planInstalled,$planConfig) {

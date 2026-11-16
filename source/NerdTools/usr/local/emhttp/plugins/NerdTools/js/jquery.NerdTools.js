@@ -233,8 +233,11 @@ function renderPlan(plan) {
     $.each(plan.rows, function(name, state) {
         var row = $('#tblPackages tbody tr').filter(function() { return $(this).attr('data-package') === name; });
         var label = changeLabels[state.change] || state.change;
-        if (state.automatic) label = 'Required ' + label.toLowerCase();
-        if (state.reason) label += ' — ' + state.reason;
+        if (state.automatic && state.change === 'remove' && state.reason) label = state.reason;
+        else {
+            if (state.automatic) label = 'Required ' + label.toLowerCase();
+            if (state.reason) label += ' — ' + state.reason;
+        }
         row.find('.planned-change').text(label);
         var selectedAction = automaticAction(state) || state.intent;
         var select = row.find('.pkgaction');

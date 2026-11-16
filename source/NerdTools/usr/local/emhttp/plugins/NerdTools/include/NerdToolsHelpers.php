@@ -351,7 +351,8 @@ function nt_plan($packages, $owned, $installed, $config, $actions, $hours, $cata
         foreach ($removeReverse[$dependency] ?? [] as $dependent) {
             if (($operations[$dependent]['change'] ?? null) === 'remove'
                 || empty($states[$dependent]['installed']) || empty($states[$dependent]['owned'])) continue;
-            $operations[$dependent] = ['change'=>'remove','automatic'=>true,'reason'=>'Required by removing '.$root];
+            $operations[$dependent] = ['change'=>'remove','automatic'=>true,
+                'reason'=>'Dependency '.nt_tool_name($root).' marked for removal'];
             $preferences[$dependent] = 'no'; $removeRoots[$dependent] = $root; $removeQueue[] = $dependent;
         }
     }
