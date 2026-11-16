@@ -227,6 +227,11 @@ $missingDependentInstalled = ['dep-1.0-x86_64-1'];
 rejects(function() use ($planPackages,$removeOwned,$missingDependentInstalled,$removeConfig) {
     nt_plan($planPackages,$removeOwned,$missingDependentInstalled,$removeConfig,['dep'=>'remove'],24);
 });
+$catalogWithoutOwnedDependency = $planPackages;
+$catalogWithoutOwnedDependency['app']['dependencies'] = [];
+rejects(function() use ($catalogWithoutOwnedDependency,$removeOwned,$missingDependentInstalled,$removeConfig) {
+    nt_plan($catalogWithoutOwnedDependency,$removeOwned,$missingDependentInstalled,$removeConfig,['dep'=>'remove'],24);
+});
 $chainPackages = [
     'dep'=>$planPackage('dep','1.0'),
     'app'=>$planPackage('app','1.0',['dep']),

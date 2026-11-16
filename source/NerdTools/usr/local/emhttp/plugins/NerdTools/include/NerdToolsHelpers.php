@@ -250,7 +250,7 @@ function nt_plan($packages, $owned, $installed, $config, $actions, $hours, $cata
     $graph = [];
     foreach ($states as $name => $state) {
         $replace = in_array($intents[$name], ['install','upgrade','downgrade'], true);
-        $dependencies = $state['package'] && (!$state['installed'] || $replace)
+        $dependencies = $state['package'] && ($replace || (!$state['installed'] && !$state['owned']))
             ? $state['package']['dependencies'] : ($state['owned']['dependencies'] ?? []);
         $graph[$name] = ['dependencies'=>$normalizeDependencies($dependencies)];
     }
@@ -342,7 +342,7 @@ function nt_plan($packages, $owned, $installed, $config, $actions, $hours, $cata
     foreach ($states as $name => $state) {
         $operation = $operations[$name] ?? null;
         $replace = $operation && $operation['change'] !== 'remove';
-        $dependencies = $state['package'] && (!$state['installed'] || $replace)
+        $dependencies = $state['package'] && ($replace || (!$state['installed'] && !$state['owned']))
             ? $state['package']['dependencies'] : ($state['owned']['dependencies'] ?? []);
         $finalGraph[$name] = ['dependencies'=>$normalizeDependencies($dependencies)];
     }
