@@ -3,7 +3,6 @@ var nerdPlan = null;
 var planRequest = null;
 var planRevision = 0;
 var catalogRevision = 0;
-var planQueued = false;
 var confirmingPlanId = null;
 var displayedPlanId = null;
 var displayedPlanRevision = null;
@@ -26,16 +25,24 @@ function actionLabel(action, installed) {
 function actionIsEmphasized(action) {
     return action !== 'keep';
 }
-function rowStateClass(change) {
-    if (change === 'remove') return 'package-remove';
-    if (change === 'install') return 'package-install';
-    if (change === 'upgrade' || change === 'downgrade') return 'package-upgrade';
-    if (change === 'update-available' || change === 'downgrade-available') return 'package-update-available';
+function actionStateClass(action, hasUpdate) {
+    if (action === 'remove') return 'package-remove';
+    if (action === 'install') return 'package-install';
+    if (action === 'upgrade' || action === 'downgrade') return 'package-upgrade';
+    if (hasUpdate) return 'package-update-available';
     return '';
 }
 function automaticAction(state) {
     return state.automatic && ['install','upgrade','downgrade','remove'].indexOf(state.change) !== -1
         ? state.change : null;
+}
+function syncActionDisplay(row, action) {
+    row.removeClass('package-changed package-remove package-install package-upgrade package-update-available');
+    var stateClass = actionStateClass(action, row.hasClass('package-has-update'));
+    if (stateClass) row.addClass(stateClass);
+    if (actionIsEmphasized(action)) row.addClass('package-changed');
+    row.find('.pkgaction').val(action)
+        .toggleClass('package-action-selected', actionIsEmphasized(action));
 }
 $(function() {
     $('#tblPackages').tablesorter({
@@ -136,13 +143,12 @@ function packageQuery(force) {
         if (!isCatalogResponseCurrent(revision)) return;
         var body = $('#tblPackages tbody').empty();
         $.each(data.packages, function(_, pkg) {
-            var row = $('<tr>').attr('data-package', pkg.name);
+            var row = $('<tr>').attr('data-package', pkg.name).toggleClass('package-has-update', pkg.update_kind !== null);
             var select = $('<select>', {'class': 'pkgaction', 'data-package': pkg.name, 'aria-label': 'Action for ' + pkg.tool});
             $.each(pkg.actions, function(_, action) { select.append($('<option>').val(action).text(actionLabel(action, pkg.installed))); });
             select.val(pkg.default_action).attr('data-intent', pkg.default_action).prop('disabled', pkg.actions.length === 1)
                 .toggleClass('package-action-selected', actionIsEmphasized(pkg.default_action)).on('change', function() {
-                    $(this).attr('data-intent', this.value)
-                        .toggleClass('package-action-selected', actionIsEmphasized(this.value)); requestPlan();
+                    $(this).attr('data-intent', this.value); syncActionDisplay($(this).closest('tr'), this.value); requestPlan();
                 });
             row.append($('<td>').append(select));
             row.append($('<td>', {'class': 'package wrapper'}).text(pkg.tool));
@@ -198,43 +204,45 @@ function packageQuery(force) {
         $('#btnApply').prop('disabled', true);
     });
 }
+function showPlanningState() {
+    var rows = $('#tblPackages tbody tr');
+    rows.find('.planned-change').text('Planning…');
+    rows.each(function() {
+        var row = $(this); var select = row.find('.pkgaction');
+        if (select.length) syncActionDisplay(row, select.attr('data-intent'));
+    });
+}
 function requestPlan() {
     if (!nerdLoaded) return;
-    planRevision++; nerdPlan = null;
+    planRevision++; nerdPlan = null; showPlanningState();
     $('#btnApply').prop('disabled', true).val('Planning changes…');
-    if (planRequest) { planQueued = true; return; }
     runPlanRequest(planRevision);
 }
 function runPlanRequest(revision) {
-    planQueued = false;
-    planRequest = $.post('/plugins/NerdTools/include/Settings.php', planData('plan')).done(function(plan) {
+    var request = $.post('/plugins/NerdTools/include/Settings.php', planData('plan')); planRequest = request;
+    request.done(function(plan) {
         if (revision !== planRevision) return;
         nerdPlan = plan; renderPlan(plan); packageError('');
-    }).fail(function(xhr) {
-        if (revision !== planRevision) return;
+    }).fail(function(xhr, status) {
+        if (status === 'abort' || revision !== planRevision) return;
         nerdPlan = null; packageError(requestError(xhr));
         $('#btnApply').prop('disabled', true).val('Apply changes');
     }).always(function() {
-        planRequest = null;
-        if (nerdLoaded && (planQueued || revision !== planRevision)) runPlanRequest(planRevision);
-        else planQueued = false;
+        if (planRequest === request) planRequest = null;
     });
 }
 function renderPlan(plan) {
-    $('#tblPackages tbody tr').removeClass('package-changed package-remove package-install package-upgrade package-update-available');
     $.each(plan.rows, function(name, state) {
         var row = $('#tblPackages tbody tr').filter(function() { return $(this).attr('data-package') === name; });
         var label = changeLabels[state.change] || state.change;
         if (state.automatic) label = 'Required ' + label.toLowerCase();
         if (state.reason) label += ' — ' + state.reason;
         row.find('.planned-change').text(label);
-        var select = row.find('.pkgaction'); var selectedAction = automaticAction(state) || state.intent;
+        var selectedAction = automaticAction(state) || state.intent;
+        var select = row.find('.pkgaction');
         if (selectedAction && select.find('option[value="' + selectedAction + '"]').length) {
-            select.val(selectedAction).toggleClass('package-action-selected', actionIsEmphasized(selectedAction));
+            syncActionDisplay(row, selectedAction);
         }
-        var stateClass = rowStateClass(state.change);
-        if (stateClass) row.addClass(stateClass);
-        if ($.inArray(state.change, ['install','upgrade','downgrade','remove']) !== -1) row.addClass('package-changed');
     });
     var count = plan.changes.length;
     $('#btnApply').val(count ? 'Apply ' + count + (count === 1 ? ' change' : ' changes') : 'No changes')

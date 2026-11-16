@@ -40,12 +40,11 @@ table.tablesorter tbody tr.package-upgrade td:first-child {
 table.tablesorter tbody tr.package-update-available td:first-child {
     border-left: 0.25rem solid rgb(249 168 37);
 }
-.package-upgrade .version-value,
-.package-update-available .version-value {
+.package-has-update .version-value,
+.package-upgrade .version-value {
     font-weight: 600;
 }
-.package-changed .planned-change,
-.package-update-available .planned-change {
+.package-changed .planned-change {
     font-weight: 600;
 }
 #package_plan_dialog {

@@ -28,11 +28,12 @@ context.confirmingPlanId = null;
 assert.equal(context.canCancelConfirmation(), true, 'idle confirmation dialog may be cancelled');
 assert.equal(context.actionLabel('keep', false), '-', 'uninstalled Keep displays as -');
 assert.equal(context.actionLabel('keep', true), 'Keep', 'installed Keep keeps its label');
-assert.equal(context.rowStateClass('remove'), 'package-remove', 'removal row uses removal state');
-assert.equal(context.rowStateClass('install'), 'package-install', 'installation row uses install state');
-assert.equal(context.rowStateClass('upgrade'), 'package-upgrade', 'upgrade row uses upgrade state');
-assert.equal(context.rowStateClass('downgrade'), 'package-upgrade', 'downgrade row uses version-change state');
-assert.equal(context.rowStateClass('update-available'), 'package-update-available', 'available update row uses attention state');
+assert.equal(context.actionStateClass('remove'), 'package-remove', 'removal action uses removal state');
+assert.equal(context.actionStateClass('install'), 'package-install', 'installation action uses install state');
+assert.equal(context.actionStateClass('upgrade'), 'package-upgrade', 'upgrade action uses upgrade state');
+assert.equal(context.actionStateClass('downgrade'), 'package-upgrade', 'downgrade action uses version-change state');
+assert.equal(context.actionStateClass('keep', false), '', 'current Keep action has no row state');
+assert.equal(context.actionStateClass('keep', true), 'package-update-available', 'Keep with an available update is yellow');
 assert.equal(context.actionIsEmphasized('keep'), false, 'Keep action is not emphasized');
 assert.equal(context.actionIsEmphasized('install'), true, 'non-keep action is emphasized');
 assert.equal(context.automaticAction({automatic: true, change: 'remove'}), 'remove',
