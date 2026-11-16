@@ -834,6 +834,9 @@ def _candidate_plan(packages, plan):
             or set(builds) != set(catalog)
             or any(type(number) is not int or number < 1 for number in builds.values())):
         raise ValueError("Candidate plan does not partition the current catalog")
+    for record in reuse:
+        if record["file"] != artifact_name(catalog[record["name"]], builds[record["name"]]):
+            raise ValueError("Candidate reuse package does not match the current build")
     expected_files = {}
     for name in sorted(build_names):
         filename = artifact_name(catalog[name], builds[name])
@@ -958,6 +961,62 @@ def _read_json(path):
     return json.loads(Path(path).read_text(), object_pairs_hook=_json_object)
 
 
+def assemble_candidate_artifacts(packages, expected_data, candidate_bundle, reuse_dir, destination):
+    """Reverify candidate bytes, then combine them with exact checksummed reuse artifacts."""
+    if not isinstance(expected_data, dict) or set(expected_data) != {"identity", "plan"}:
+        raise ValueError("Expected candidate JSON must contain identity and plan")
+    candidate_bundle = Path(candidate_bundle)
+    manifest_path = candidate_bundle / "candidate-manifest.json"
+    package_dir = candidate_bundle / "packages"
+    if (candidate_bundle.is_symlink() or not candidate_bundle.is_dir()
+            or {entry.name for entry in candidate_bundle.iterdir()} != {"candidate-manifest.json", "packages"}
+            or manifest_path.is_symlink() or not manifest_path.is_file()):
+        raise ValueError("Candidate artifact has an invalid layout")
+    manifest = _read_json(manifest_path)
+    result = verify_candidate_bundle(packages, expected_data["plan"], package_dir,
+                                     manifest, expected_data["identity"])
+    _, build_names, _, candidate_filenames = _candidate_plan(packages, expected_data["plan"])
+    reuse = expected_data["plan"]["reuse"]
+    reuse_filenames = {record["file"] for record in reuse}
+    reuse_hashes = _candidate_file_hashes(reuse_dir, reuse_filenames)
+    for record in reuse:
+        if reuse_hashes[record["file"]]["sha256"] != record["sha256"]:
+            raise ValueError(f"Previous-release package digest mismatch: {record['file']}")
+
+    expected_files = set(candidate_filenames.values()) | reuse_filenames
+    if len(expected_files) != len(packages) - sum(not package.get("catalog", True) for package in packages):
+        raise ValueError("Candidate and reuse packages do not cover the current catalog")
+    destination = Path(destination)
+    if destination.exists():
+        if destination.is_symlink() or not destination.is_dir() or any(destination.iterdir()):
+            raise ValueError("Candidate package destination must be an empty real directory")
+    else:
+        destination.mkdir(parents=True)
+    manifest_records = {record["name"]: record for record in manifest["packages"]}
+    sources = [(package_dir / candidate_filenames[name], candidate_filenames[name],
+                manifest_records[name]["sha256"]) for name in build_names]
+    sources.extend((Path(reuse_dir) / record["file"], record["file"], record["sha256"])
+                   for record in reuse)
+    for source, filename, sha256 in sources:
+        target = destination / filename
+        if target.exists() or target.is_symlink():
+            raise ValueError(f"Refusing to overwrite package artifact: {filename}")
+        shutil.copyfile(source, target)
+        if digest(target) != sha256:
+            raise ValueError(f"Package artifact changed while assembling: {filename}")
+    if {entry.name for entry in destination.iterdir()} != expected_files:
+        raise ValueError("Candidate and reuse packages do not form the complete catalog")
+    return {"identity": expected_data["identity"], "manifest_sha256": digest(manifest_path),
+            "builds": result["builds"], "files": sorted(expected_files)}
+
+
+def _read_candidate_expected(path):
+    expected = _read_json(path)
+    if not isinstance(expected, dict) or set(expected) != {"identity", "plan"}:
+        raise ValueError("Expected candidate JSON must contain identity and plan")
+    return expected
+
+
 def build(args):
     if os.geteuid() != 0 or sys.platform != "linux" or os.uname().machine != "x86_64":
         raise ValueError("Builds require a disposable Linux x86_64 CI runner, running as root")
@@ -973,6 +1032,19 @@ def build(args):
     output.mkdir(parents=True, exist_ok=True)
     if any(output.iterdir()):
         raise ValueError("Output directory must be empty")
+    candidate_origin = None
+    if getattr(args, "candidate_artifacts", None) is not None:
+        if (args.package_artifacts is None or args.reuse_artifacts is None
+                or args.candidate_expected_json is None):
+            raise ValueError("Candidate builds require candidate, reuse, and expected artifacts")
+        candidate_origin = assemble_candidate_artifacts(
+            packages, _read_candidate_expected(args.candidate_expected_json), args.candidate_artifacts,
+            args.reuse_artifacts, args.package_artifacts)
+        shutil.copyfile(Path(args.candidate_artifacts) / "candidate-manifest.json",
+                        output / "candidate-manifest.json")
+    elif (getattr(args, "candidate_expected_json", None) is not None
+          or getattr(args, "reuse_artifacts", None) is not None):
+        raise ValueError("Candidate build options must be supplied together")
     args.work.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="nerdtools-", dir=args.work) as temporary:
         work = Path(temporary)
@@ -1038,6 +1110,9 @@ def build(args):
                       "carried_over_from": os.environ.get("NERDTOOLS_PREVIOUS_RELEASE") or None,
                       "baseline": BASELINE, "packages": packages,
                       "toolchain": json.loads((REPO / "build/locks/toolchain.json").read_text())}
+        if candidate_origin:
+            provenance["candidate_identity"] = candidate_origin["identity"]
+            provenance["candidate_manifest_sha256"] = candidate_origin["manifest_sha256"]
         (output / f"provenance-{fam}.json").write_text(json.dumps(provenance, indent=2) + "\n")
         report = {"status": "passed", "target_version": args.unraid_version, "target_sha256": args.unraid_sha256,
                   "channel": args.channel, "baseline": BASELINE["version"], "elf_files_checked": checked,
@@ -1072,6 +1147,9 @@ def main():
     parser.add_argument("--source-bundle", type=Path)
     parser.add_argument("--package-artifacts", type=Path, help="Same-run normalized package artifacts")
     parser.add_argument("--reuse", type=Path, help="Verified unchanged dependency packages from the previous release (build-one only)")
+    parser.add_argument("--candidate-artifacts", type=Path, help="Same-run verified candidate artifact bundle (build only)")
+    parser.add_argument("--candidate-expected-json", type=Path, help="Current plan and candidate identity (build only)")
+    parser.add_argument("--reuse-artifacts", type=Path, help="Checksum-verified previous-release packages (candidate build only)")
     parser.add_argument("--work", type=Path, default=Path(os.environ.get("RUNNER_TEMP", tempfile.gettempdir())))
     parser.add_argument("--plan", type=Path)
     parser.add_argument("--manifest", type=Path)
@@ -1089,10 +1167,16 @@ def main():
                         args.head, args.tree, args.workflow, args.run, args.attempt, args.artifact_name)
     if args.command not in ("candidate-create", "candidate-verify") and any(value is not None for value in candidate_fields):
         parser.error("Candidate options require candidate-create or candidate-verify")
+    candidate_build_fields = (args.candidate_artifacts, args.candidate_expected_json, args.reuse_artifacts)
+    if any(value is not None for value in candidate_build_fields):
+        if args.command != "build":
+            parser.error("Candidate build artifacts require the full-catalog build gate")
+        if any(value is None for value in candidate_build_fields) or args.package_artifacts is None:
+            parser.error("Candidate builds require package, candidate, reuse, and expected artifacts")
     if args.package and args.command != "build-one":
         parser.error("--package is only valid with build-one; full-catalog builds cannot be narrowed")
     if args.package_artifacts and args.command not in ("build", "candidate-create", "candidate-verify"):
-        parser.error("--package-artifacts requires a full-catalog or candidate command")
+        parser.error("--package-artifacts requires the full-catalog or candidate command")
     if args.command == "candidate-create":
         required = (args.package_artifacts, args.plan, args.output, args.repository, args.pr, args.head,
                     args.tree, args.workflow, args.run, args.attempt, args.artifact_name)
@@ -1109,9 +1193,7 @@ def main():
                                                        args.head, args.tree, args.workflow, args.run,
                                                        args.attempt, args.artifact_name)) or args.publish):
             parser.error("candidate-verify requires package artifacts, manifest and expected JSON only")
-        expected_data = _read_json(args.expected_json)
-        if not isinstance(expected_data, dict) or set(expected_data) != {"identity", "plan"}:
-            raise ValueError("Expected candidate JSON must contain identity and plan")
+        expected_data = _read_candidate_expected(args.expected_json)
         result = verify_candidate_bundle(load_packages(), expected_data["plan"], args.package_artifacts,
                                          _read_json(args.manifest), expected_data["identity"])
         print(json.dumps(result, sort_keys=True))

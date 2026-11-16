@@ -12,6 +12,7 @@ import tarfile
 import tempfile
 import unittest
 import zipfile
+from types import SimpleNamespace
 from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location("native", Path(__file__).with_name("native.py"))
@@ -862,6 +863,121 @@ class CandidateArtifactTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertEqual(json.loads(output.getvalue()),
                          {"builds": {"alpha": 4, "zed": 2}, "files": sorted(self.files.values())})
+
+    def test_candidate_mode_workflow_verifies_exact_ids_and_suppresses_compilation(self):
+        workflow = (native.REPO / ".github/workflows/build-packages.yml").read_text()
+        self.assertIn("actions: read", workflow)
+        self.assertIn("artifact-ids: ${{ inputs.candidate_package_artifact_id }}", workflow)
+        self.assertIn("artifact-ids: ${{ inputs.candidate_manifest_artifact_id }}", workflow)
+        self.assertIn("run-id: ${{ inputs.candidate_run_id }}", workflow)
+        self.assertIn("candidate-verify", workflow)
+        self.assertIn("verified-candidate-${{ github.run_id }}-${{ github.run_attempt }}", workflow)
+        self.assertIn('--candidate-artifacts "$GITHUB_WORKSPACE/candidate-artifacts"', workflow)
+        self.assertIn('--reuse-artifacts "$GITHUB_WORKSPACE/reuse-artifacts"', workflow)
+        self.assertIn("needs.candidate.outputs.active", workflow)
+        self.assertIn('.status == "completed"', workflow)
+        self.assertIn('.conclusion == "success"', workflow)
+
+        start = workflow.index("          candidate_mode=false\n")
+        end = workflow.index('\n          {\n            echo "tag=', start)
+        script = "\n".join(line[10:] for line in workflow[start:end].splitlines())
+        output = self.root / "package-list-output"
+        environment = os.environ.copy()
+        for name in ("CANDIDATE_PR", "CANDIDATE_HEAD_SHA", "CANDIDATE_RUN_ID",
+                     "CANDIDATE_RUN_ATTEMPT", "CANDIDATE_PACKAGE_ARTIFACT_ID",
+                     "CANDIDATE_PACKAGE_ARTIFACT_NAME", "CANDIDATE_MANIFEST_ARTIFACT_ID",
+                     "CANDIDATE_MANIFEST_ARTIFACT_NAME", "CANDIDATE_MANIFEST_SHA256",
+                     "CANDIDATE_MERGE_SHA"):
+            environment[name] = ""
+        environment["CANDIDATE_PR"] = "17"
+        environment["GITHUB_OUTPUT"] = str(output)
+        subprocess.run(["bash", "-c", script], check=True, env=environment)
+        self.assertIn("names=[]\n", output.read_text())
+
+    def test_candidate_final_build_merges_verified_bytes_before_target_gates(self):
+        plan = {"build": ["zed"],
+                "reuse": [{"name": "alpha", "file": self.files["alpha"],
+                           "sha256": hashlib.sha256((self.package_dir / self.files["alpha"]).read_bytes()).hexdigest()}],
+                "builds": {"zed": 2, "alpha": 4}}
+        candidate_bundle = self.root / "candidate-bundle"
+        candidate_packages = candidate_bundle / "packages"
+        candidate_packages.mkdir(parents=True)
+        shutil.copyfile(self.package_dir / self.files["zed"], candidate_packages / self.files["zed"])
+        reuse_dir = self.root / "reuse"
+        reuse_dir.mkdir()
+        shutil.copyfile(self.package_dir / self.files["alpha"], reuse_dir / self.files["alpha"])
+        manifest = self.make_manifest(plan=plan, package_dir=candidate_packages)
+        native.write_candidate_manifest(candidate_bundle / "candidate-manifest.json", manifest)
+        expected_path = self.root / "expected.json"
+        expected_path.write_text(json.dumps({"identity": self.identity, "plan": plan}))
+        package_artifacts = self.root / "package-artifacts"
+        output = self.root / "dist"
+        work = self.root / "work"
+        packages = [{**package, "dependencies": [], "inputs": []} for package in self.packages]
+        events = []
+        original_inspect = native.inspect_package
+        args = SimpleNamespace(
+            unraid_version="7.3.4", unraid_url="https://example.invalid/image.zip",
+            unraid_sha256="a" * 64, publish=False, channel="stable", output=output, work=work,
+            baseline_root=self.root / "baseline", development_root=self.root / "development",
+            source_bundle=None, package_artifacts=package_artifacts,
+            candidate_artifacts=candidate_bundle, candidate_expected_json=expected_path,
+            reuse_artifacts=reuse_dir,
+        )
+
+        with patch.object(native.os, "geteuid", return_value=0), \
+                patch.object(native, "validate_target"), \
+                patch.object(native, "load_packages", return_value=packages), \
+                patch.object(native, "publication_blockers", return_value=[]), \
+                patch.object(native, "prepared_roots", return_value=(self.root, self.root, self.root)), \
+                patch.object(native, "require_slocate_group"), \
+                patch.object(native, "require_provided"), \
+                patch.object(native, "fetch"), \
+                patch.object(native, "build_keys", return_value=self.keys), \
+                patch.object(native, "inspect_package",
+                             side_effect=lambda *call_args: (events.append("inspect"),
+                                                             original_inspect(*call_args))[1]), \
+                patch.object(native, "prepare_image", side_effect=lambda *call_args, **kwargs:
+                             events.append("target-gate")), \
+                patch.object(native, "install_payload"), \
+                patch.object(native, "audit_runtime", return_value=1), \
+                patch.object(native, "kernel_smoke", return_value="target-kernel"), \
+                patch.object(native, "asset_limits"), \
+                patch.object(native, "BUILDS", plan["builds"]):
+            native.build(args)
+
+        self.assertEqual(events[0], "inspect")
+        self.assertLess(events.index("inspect"), events.index("target-gate"))
+        self.assertEqual({path.name for path in package_artifacts.iterdir()},
+                         {self.files["zed"], self.files["alpha"]})
+        self.assertEqual((package_artifacts / self.files["zed"]).read_bytes(),
+                         (candidate_packages / self.files["zed"]).read_bytes())
+        self.assertEqual((package_artifacts / self.files["alpha"]).read_bytes(),
+                         (reuse_dir / self.files["alpha"]).read_bytes())
+        bad_reuse = self.clone(plan)
+        bad_reuse["reuse"][0]["sha256"] = "f" * 64
+        with patch.object(native, "build_keys", return_value=self.keys):
+            with self.assertRaisesRegex(ValueError, "Previous-release package digest mismatch"):
+                native.assemble_candidate_artifacts(
+                    packages, {"identity": self.identity, "plan": bad_reuse}, candidate_bundle,
+                    reuse_dir, self.root / "bad-reuse")
+        overlap = self.clone(plan)
+        overlap["build"] = ["zed", "alpha"]
+        overlap_destination = self.root / "overlap"
+        with patch.object(native, "build_keys", return_value=self.keys):
+            with self.assertRaisesRegex(ValueError, "does not partition"):
+                native.assemble_candidate_artifacts(
+                    packages, {"identity": self.identity, "plan": overlap}, candidate_bundle,
+                    reuse_dir, overlap_destination)
+        self.assertFalse(overlap_destination.exists())
+        self.assertEqual((output / "candidate-manifest.json").read_bytes(),
+                         (candidate_bundle / "candidate-manifest.json").read_bytes())
+        provenance = json.loads((output / "provenance-7.3.json").read_text())
+        self.assertEqual(provenance["candidate_identity"], self.identity)
+        self.assertEqual(provenance["candidate_manifest_sha256"],
+                         hashlib.sha256((output / "candidate-manifest.json").read_bytes()).hexdigest())
+        self.assertIn("candidate-manifest.json", (output / "SHA256SUMS").read_text())
+        self.assertFalse((self.root / "bad-reuse").exists())
 
     def test_build_and_build_one_cli_keep_dist_output_default(self):
         for command, handler in (("build", "build"), ("build-one", "build_one")):
