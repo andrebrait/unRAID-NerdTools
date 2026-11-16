@@ -114,11 +114,11 @@ $hookOverrides['tool'] = ['config() {','  NEW="$1"','  OLD="${NEW%.new}"',
 $hookOverrides['tool'][1] .= "\r";
 refused(function() use ($manager) { $manager->apply(true,true); }, 'Unaudited install hook');
 $hookOverrides['tool'][1] = '  NEW="$1"';
-$manager->apply(true,true);
+$manager->installMissing(true,true);
 $archiveOverrides = []; $hookOverrides = [];
 expect(array_keys($manager->owned()) === ['dep','tool'], 'Dependency-first installation and ownership');
 expect(count($manager->installed()) === 2, 'Both packages installed');
-$manager->apply(true,true);
+$manager->installMissing(true,true);
 expect(count(array_filter($commands,function($args) { return $args[0] === '/sbin/upgradepkg'; })) === 2, 'No redundant installations');
 // Atomic invalid-response handling retains a usable last-good catalog.
 $good = file_get_contents($manager->path.'/catalog-cache.json');
@@ -156,6 +156,10 @@ $archiveOverrides = [];
 $manager->restore();
 expect(in_array('tool-1.0-x86_64-1',$manager->installed(),true), 'Boot restores last explicitly installed version');
 expect(!in_array('tool-2.0-x86_64-1',$manager->installed(),true) && count($requests) === $requestCount, 'Boot performs no package download or implicit upgrade');
+$commandCount = count($commands);
+refused(function() use ($manager) { $manager->installMissing(true,true); }, 'confirmed GUI plan');
+expect(count($commands) === $commandCount && in_array('tool-1.0-x86_64-1',$manager->installed(),true),
+    'Unconfirmed CLI install cannot replace an installed package');
 file_put_contents($root.'/boot/extra/tool-other-unrelated.txz','not owned');
 $manager->apply(true,true);
 expect(in_array('tool-2.0-x86_64-1',$manager->installed(),true), 'New package installed');

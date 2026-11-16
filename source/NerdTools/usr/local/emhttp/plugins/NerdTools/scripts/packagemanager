@@ -6,7 +6,7 @@ $args = getopt('dquv', ['download','quiet','uninstall','verbose','check','force'
 if (isset($args['help'])) {
     echo "--release=<tag> select a retained published package release; --release=latest unpins\n";
     echo "--plan=<id> execute one confirmed GUI transaction\n";
-    echo "NerdTools native package manager\n\n--download  verify/download and install selected packages\n--uninstall remove only owned, unselected packages\n--check     refresh catalog when due (no package installations)\n--force     bypass normal interval, never rate-limit reset\n--boot      set schedule and restore selected packages\n--schedule  install hourly scheduler (interval defaults to daily)\n--remove-all remove owned packages and scheduler; preserve settings\n--quiet     suppress summary output\n";
+    echo "NerdTools native package manager\n\n--download  verify/download and install missing selected packages; installed version changes require GUI Apply\n--uninstall remove only owned, unselected packages\n--check     refresh catalog when due (no package installations)\n--force     bypass normal interval, never rate-limit reset\n--boot      set schedule and restore selected packages\n--schedule  install hourly scheduler (interval defaults to daily)\n--remove-all remove owned packages and scheduler; preserve settings\n--quiet     suppress summary output\n";
     exit(0);
 }
 if (isset($args['version'])) { echo "NerdTools package manager for Unraid 7.3.4+\n"; exit(0); }
@@ -25,7 +25,7 @@ try {
     }
     elseif (isset($args['release'])) {
         if (!$manager->refresh(true, $args['release'])) throw new RuntimeException('GitHub rate limit is still active');
-        nt_log('Selected package release '.$args['release'].'. Run --download to apply it.', $quiet);
+        nt_log('Selected package release '.$args['release'].'. Open the GUI to choose version changes and Apply.', $quiet);
     }
     elseif (isset($args['check'])) $manager->refresh(isset($args['force']));
     elseif (isset($args['boot'])) {
@@ -36,8 +36,8 @@ try {
     } else {
         // Shown at once: downloads and checksum checks can take a while before anything is installed.
         nt_log('Checking selected packages. Downloads and verification may take a few minutes...', $quiet);
-        $manager->apply(isset($args['d']) || isset($args['download']), isset($args['u']) || isset($args['uninstall']));
-        nt_log('All selected packages processed.', $quiet);
+        $manager->installMissing(isset($args['d']) || isset($args['download']), isset($args['u']) || isset($args['uninstall']));
+        nt_log('Missing selected packages processed.', $quiet);
     }
 } catch (Throwable $error) {
     nt_log($error->getMessage(), $quiet);

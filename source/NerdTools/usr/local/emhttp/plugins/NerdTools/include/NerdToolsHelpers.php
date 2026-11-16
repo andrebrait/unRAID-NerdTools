@@ -941,6 +941,34 @@ class NerdTools {
         }
         $this->syncAliases();
     }
+    public function installMissing($download, $uninstall) {
+        $catalog = $this->catalog(); $packages = $catalog['packages'] ?? [];
+        if (!$catalog) throw new RuntimeException('No valid catalog cached; check for updates first');
+        $config = $this->config(); $owned = $this->legacyOwned(); $selected = [];
+        foreach ($packages as $name => $package) if (nt_preference($config, $name) === 'yes') $selected[] = $name;
+        $required = nt_resolve($selected, $packages); $migrations = [];
+        foreach ($required as $name) {
+            $tool = $packages[$name]['tool'];
+            if (!isset($owned[$name]) && $tool !== $name && isset($owned[$tool])) $migrations[$name] = $tool;
+        }
+        foreach ($owned as $name => $entry) {
+            if (!isset($packages[$name]) && !in_array($name, $migrations, true) && nt_preference($config, $name) === 'yes') {
+                throw new RuntimeException('Selected package is absent from catalog: '.$name);
+            }
+        }
+        $install = [];
+        foreach ($required as $name) {
+            $entry = $owned[$name] ?? (isset($migrations[$name]) ? $owned[$migrations[$name]] : null);
+            if ($entry && ($entry['record'] !== nt_record($packages[$name]['file'])
+                || ($entry['sha256'] ?? '') !== $packages[$name]['sha256'])) {
+                throw new RuntimeException('Installed package changes require a confirmed GUI plan: '.$name);
+            }
+            if (!$entry || !in_array($entry['record'], $this->installed(), true)) $install[] = $name;
+        }
+        $migrated = array_values($migrations);
+        $remove = $uninstall ? array_values(array_diff(array_keys($owned), $required, $migrated)) : [];
+        $this->executeChanges($download, $install, $this->removalOrder($owned, $remove));
+    }
     public function apply($download, $uninstall, $removeAll = false) {
         $catalog = $removeAll ? [] : $this->catalog(); $packages = $catalog['packages'] ?? [];
         if (!$removeAll && !$catalog) throw new RuntimeException('No valid catalog cached; check for updates first');
