@@ -704,13 +704,17 @@ class ScratchPolicyTests(unittest.TestCase):
 class DurableApprovalTests(unittest.TestCase):
     def test_attestation_survives_revoked_writer_permission_and_release_retry(self):
         updates = controller.module()
-        pr = controller.ControllerTests.pr(self) | {'merged': True, 'merged_at': 'date'}
+        pr = controller.ControllerTests.pr(self) | {
+            'merged': True, 'merged_at': 'date',
+            'merge_commit_sha': controller.RELEASE_MERGE_SHA,
+        }
+        pr['body'] = updates.pr_body(controller.release_candidate_state())
         review = {'id': 1, 'user': {'login': 'maintainer', 'type': 'User'},
                   'state': 'APPROVED', 'commit_id': 'a' * 40, 'author_association': 'OWNER'}
         class Service(controller.GitHubFixture):
             revoked = False
             def api(self, path, data=None, method=None):
-                if path == 'compare/merge12...later':
+                if path == f'compare/{controller.RELEASE_MERGE_SHA}...later':
                     return {'status': 'ahead'}
                 if path == 'collaborators/maintainer/permission' and self.revoked:
                     raise AssertionError('Historical permissions must not be reread')
@@ -723,9 +727,15 @@ class DurableApprovalTests(unittest.TestCase):
                 return super().pages(path)
         gh = Service(pr, [review])
         updates.release(gh, {'pull_request': {'number': 12}})
+        self.assertEqual(
+            gh.dispatched,
+            [('unraid-releases.yml', 'main', controller.release_candidate_inputs())])
         self.assertEqual(gh.statuses[0]['target_url'], 'https://github.com/owner/tools/pull/12')
         gh.revoked = True
         updates.release(gh, {'pull_request': {'number': 12}})
+        self.assertEqual(
+            gh.dispatched,
+            [('unraid-releases.yml', 'main', controller.release_candidate_inputs())] * 2)
         with mock.patch.dict('os.environ', {'GITHUB_SHA': 'later'}):
             updates.authorize(gh, {})
         self.assertEqual(len(gh.statuses), 1)
@@ -740,7 +750,7 @@ class DurableApprovalTests(unittest.TestCase):
             # Even the same approved head requires an attestation on this exact merge.
             with mock.patch.object(gh, 'api', return_value={'status': 'ahead'}):
                 updates.authorize(gh, {})
-        pr['merge_commit_sha'] = 'merge12'
+        pr['merge_commit_sha'] = controller.RELEASE_MERGE_SHA
         gh.statuses = []
         with mock.patch.dict('os.environ', {'GITHUB_SHA': 'later'}), self.assertRaises(ValueError):
             updates.authorize(gh, {})

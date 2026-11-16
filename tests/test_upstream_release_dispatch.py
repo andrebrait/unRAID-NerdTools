@@ -186,6 +186,19 @@ const core = {setOutput:()=>{}, notice:()=>{}, warning:()=>{}, summary};
                     RuntimeError, 'complete candidate tuple'):
                 self.execute('current', 'true', complete | {missing: ''}, runs=[])
 
+    def test_partial_candidate_guard_precedes_checkout(self):
+        lines = WORKFLOW.read_text().splitlines()
+        guard = next(index for index, line in enumerate(lines)
+                     if line.strip() == '- name: Reject partial candidate identity before discovery')
+        checkout = next(index for index, line in enumerate(lines)
+                        if line.strip().startswith('- uses: actions/checkout@'))
+        self.assertLess(guard, checkout)
+        block = '\n'.join(lines[guard:checkout])
+        for key in CANDIDATE_KEYS:
+            self.assertIn(f'inputs.{key}', block)
+        self.assertIn('present != 0 && present != 10', block)
+        self.assertIn('exit 1', block)
+
     def test_candidate_run_and_attempt_are_part_of_title_and_deduplication(self):
         candidate = candidate_inputs()
         old_attempt = [{
@@ -201,6 +214,12 @@ const core = {setOutput:()=>{}, notice:()=>{}, warning:()=>{}, summary};
         self.assertIn(
             "format(' candidate={0}/{1}', inputs.candidate_run_id, inputs.candidate_run_attempt)",
             BUILD_WORKFLOW.read_text())
+
+    def test_candidate_concurrency_identity_includes_run_and_attempt(self):
+        group = next(line.strip() for line in BUILD_WORKFLOW.read_text().splitlines()
+                     if line.strip().startswith('group: native-'))
+        self.assertIn('inputs.candidate_run_id', group)
+        self.assertIn('inputs.candidate_run_attempt', group)
 
 
 if __name__ == '__main__':

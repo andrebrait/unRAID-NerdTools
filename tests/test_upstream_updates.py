@@ -13,6 +13,31 @@ import zipfile
 
 SCRIPT = Path(__file__).resolve().parents[1] / 'scripts/upstream-updates.py'
 
+RELEASE_MERGE_SHA = 'd' * 40
+
+
+def release_candidate_state():
+    return {
+        'head_sha': 'a' * 40, 'run_id': 44, 'run_attempt': 2,
+        'package_artifact_id': 101, 'package_artifact_name': 'candidate-packages-44-2',
+        'manifest_artifact_id': 102, 'manifest_artifact_name': 'candidate-manifest-44-2',
+        'manifest_sha256': 'c' * 64,
+        'build_url': 'https://github.com/owner/tools/actions/runs/44',
+    }
+
+
+def release_candidate_inputs():
+    return {
+        'candidate_pr': '12', 'candidate_head_sha': 'a' * 40,
+        'candidate_run_id': '44', 'candidate_run_attempt': '2',
+        'candidate_package_artifact_id': '101',
+        'candidate_package_artifact_name': 'candidate-packages-44-2',
+        'candidate_manifest_artifact_id': '102',
+        'candidate_manifest_artifact_name': 'candidate-manifest-44-2',
+        'candidate_manifest_sha256': 'c' * 64,
+        'candidate_merge_sha': RELEASE_MERGE_SHA,
+    }
+
 
 def module():
     spec = importlib.util.spec_from_file_location('upstream_updates', SCRIPT)
@@ -665,7 +690,7 @@ class GitHubFixture:
             return self.issues
         if path == 'pulls/12/reviews?per_page=100':
             return self.reviews
-        if path == 'commits/merge12/statuses?per_page=100':
+        if path == f"commits/{self.pr['merge_commit_sha']}/statuses?per_page=100":
             return self.statuses
         if path.endswith('/comments?per_page=100'):
             return []
@@ -684,12 +709,16 @@ class ControllerIntegrationTests(unittest.TestCase):
         cls.updates = module()
 
     def test_approved_merge_dispatches_release_but_stale_approval_cannot(self):
-        pr = self.pr() | {'merged': True, 'state': 'closed'}
+        pr = self.pr() | {
+            'merged': True, 'state': 'closed', 'merge_commit_sha': RELEASE_MERGE_SHA,
+        }
+        pr['body'] = self.updates.pr_body(release_candidate_state())
         review = {'id': 1, 'user': {'login': 'maintainer', 'type': 'User'},
                   'state': 'APPROVED', 'commit_id': 'a' * 40, 'author_association': 'OWNER'}
         gh = GitHubFixture(pr, [review])
         self.updates.release(gh, {'pull_request': {'number': 12}})
-        self.assertEqual(gh.dispatched, [('unraid-releases.yml', 'main', None)])
+        self.assertEqual(
+            gh.dispatched, [('unraid-releases.yml', 'main', release_candidate_inputs())])
         gh = GitHubFixture(pr, [review | {'commit_id': 'old'}])
         with self.assertRaises(ValueError):
             self.updates.release(gh, {'pull_request': {'number': 12}})
