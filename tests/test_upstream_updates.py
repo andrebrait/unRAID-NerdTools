@@ -20,18 +20,20 @@ def module():
     spec.loader.exec_module(result)
     return result
 
-def candidate_artifact_bundle(run, pr, tree):
+def candidate_artifact_bundle(run, pr, tree, manifest_overrides=None):
     package_name = f"candidate-packages-{run['id']}-{run['run_attempt']}"
     manifest_name = f"candidate-manifest-{run['id']}-{run['run_attempt']}"
-    manifest = json.dumps({
+    manifest = {
         'schema': 1, 'repository': 'owner/tools', 'pr': pr['number'],
         'head': run['head_sha'], 'tree': tree, 'workflow': 'build-packages.yml',
         'run': run['id'], 'attempt': run['run_attempt'], 'artifact_name': package_name,
         'packages': [{'name': 'vim'}],
-    }, sort_keys=True).encode()
+    }
+    manifest.update(manifest_overrides or {})
+    manifest_bytes = json.dumps(manifest, sort_keys=True).encode()
     archive = io.BytesIO()
     with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as bundle:
-        bundle.writestr('candidate-manifest.json', manifest)
+        bundle.writestr('candidate-manifest.json', manifest_bytes)
     package_id, manifest_id = run['id'] * 2 + 1, run['id'] * 2 + 2
     artifacts = [
         {'id': package_id, 'name': package_name, 'expired': False, 'size_in_bytes': 100,
@@ -195,6 +197,96 @@ class ControllerTests(unittest.TestCase):
                 self.assertEqual(gh.statuses[0]['state'], 'failure')
                 self.assertEqual(gh.statuses[0]['target_url'], pr['html_url'])
 
+    def test_manifest_numeric_identity_requires_positive_exact_integers(self):
+        head = 'a' * 40
+        tree = 'b' * 40
+        pr = self.pr()
+        run = {'id': 44, 'run_attempt': 2, 'head_sha': head,
+               'head_branch': self.updates.BRANCH, 'event': 'workflow_dispatch',
+               'status': 'completed', 'conclusion': 'success',
+               'path': '.github/workflows/build-packages.yml',
+               'head_repository': {'full_name': 'owner/tools'}}
+
+        class ArtifactService(GitHubFixture):
+            def __init__(self, archive, artifacts):
+                super().__init__(pr)
+                self.archive = archive
+                self.artifacts = artifacts
+                self.downloaded = []
+
+            def api(self, path, data=None, method=None):
+                if path == 'actions/runs/44':
+                    return run
+                if path == f'commits/{head}':
+                    return {'commit': {'tree': {'sha': tree}}}
+                return super().api(path, data, method)
+
+            def pages(self, path, field=None):
+                if path == 'actions/runs/44/artifacts?per_page=100' and field == 'artifacts':
+                    return self.artifacts
+                return super().pages(path, field)
+
+            def download_artifact(self, artifact_id, limit):
+                self.downloaded.append(artifact_id)
+                return self.archive
+
+        for label, changes in (
+                ('PR float', {'pr': 12.0}), ('run float', {'run': 44.0}),
+                ('attempt float', {'attempt': 2.0}), ('PR zero', {'pr': 0}),
+                ('run zero', {'run': 0}), ('attempt zero', {'attempt': 0})):
+            archive, artifacts = candidate_artifact_bundle(run, pr, tree, changes)
+            gh = ArtifactService(archive, artifacts)
+            with self.subTest(identity=label), self.assertRaisesRegex(
+                    ValueError, 'numeric identity'):
+                self.updates.candidate_artifact_state(gh, run, pr)
+            self.assertEqual(gh.downloaded, [artifacts[1]['id']])
+
+    def test_workflow_identity_mismatches_are_rejected_before_valid_manifest_download(self):
+        head = 'a' * 40
+        tree = 'b' * 40
+        pr = self.pr()
+        run = {'id': 44, 'run_attempt': 2, 'head_sha': head,
+               'head_branch': self.updates.BRANCH, 'event': 'workflow_dispatch',
+               'status': 'completed', 'conclusion': 'success',
+               'path': '.github/workflows/build-packages.yml',
+               'head_repository': {'full_name': 'owner/tools'}}
+        archive, artifacts = candidate_artifact_bundle(run, pr, tree)
+
+        class ArtifactService(GitHubFixture):
+            def __init__(self, run_response):
+                super().__init__(pr)
+                self.run_response = run_response
+                self.downloaded = []
+
+            def api(self, path, data=None, method=None):
+                if path.startswith('actions/runs/'):
+                    return self.run_response
+                if path == f'commits/{head}':
+                    return {'commit': {'tree': {'sha': tree}}}
+                return super().api(path, data, method)
+
+            def pages(self, path, field=None):
+                if path.startswith('actions/runs/') and field == 'artifacts':
+                    return artifacts
+                return super().pages(path, field)
+
+            def download_artifact(self, artifact_id, limit):
+                self.downloaded.append(artifact_id)
+                return archive
+
+        cases = (
+            ('repository', run | {'head_repository': {'full_name': 'attacker/tools'}}, run),
+            ('workflow path', run, run | {'path': '.github/workflows/other.yml'}),
+            ('head', run | {'head_sha': 'b' * 40}, run),
+            ('run ID', run | {'id': 45}, run),
+            ('attempt', run | {'run_attempt': 3}, run),
+        )
+        for label, callback, api_run in cases:
+            gh = ArtifactService(api_run)
+            with self.subTest(identity=label), self.assertRaises(ValueError):
+                self.updates.candidate_artifact_state(gh, callback, pr)
+            self.assertEqual(gh.downloaded, [])
+
     def test_foreign_or_wrong_branch_pr_cannot_trigger_privileged_work(self):
         pr = self.pr()
         self.assertTrue(self.updates.trusted_pr(pr, 'owner/tools'))
@@ -235,6 +327,21 @@ class ControllerTests(unittest.TestCase):
         self.assertEqual(self.updates.latest_build(runs, 'new')['id'], 9)
         self.assertIsNone(self.updates.latest_build(runs, 'unbuilt'))
 
+    def test_latest_build_selection_includes_callback_against_stale_run_list(self):
+        head = 'a' * 40
+        stale_attempt = {'id': 44, 'run_attempt': 1, 'head_sha': head,
+                         'event': 'workflow_dispatch', 'status': 'completed',
+                         'conclusion': 'failure'}
+        callback_attempt = stale_attempt | {
+            'run_attempt': 2, 'status': 'completed', 'conclusion': 'success'}
+
+        self.assertEqual(
+            self.updates.latest_build([stale_attempt], head, callback_attempt),
+            callback_attempt)
+        newer_run = stale_attempt | {'id': 45, 'run_attempt': 1}
+        self.assertEqual(
+            self.updates.latest_build([stale_attempt, newer_run], head, callback_attempt),
+            newer_run)
     def test_review_requests_require_availability_and_never_include_copilot(self):
         evidence = [{'user': {'login': 'coderabbitai[bot]', 'type': 'Bot'}}]
         self.assertEqual(self.updates.available_bots('', evidence), ['coderabbitai[bot]'])
@@ -940,7 +1047,7 @@ class OrphanedPublicationRaceTests(unittest.TestCase):
 
 
 class FinalAttemptTests(unittest.TestCase):
-    def prepare_final_build(self, conclusion):
+    def prepare_final_build(self, conclusion, callback_attempt=None):
         updates = module()
         candidate = {'name': 'vim', 'ours': '1.0', 'upstream': '2.0',
                      'source': 'Slackware-current', 'url': 'https://example.invalid/vim'}
@@ -958,7 +1065,7 @@ class FinalAttemptTests(unittest.TestCase):
                     if path.startswith('actions/workflows/build-packages.yml/runs?'):
                         return {'workflow_runs': self.builds}
                     if path.startswith('actions/runs/'):
-                        return self.builds[0]
+                        return self.api_run
                     if path.startswith('commits/'):
                         return {'commit': {'committer': {'date': '2026-11-14T00:00:00Z'},
                                            'tree': {'sha': 'b' * 40}}}
@@ -966,11 +1073,11 @@ class FinalAttemptTests(unittest.TestCase):
 
                 def pages(self, path, field=None):
                     if path.startswith('actions/runs/') and field == 'artifacts':
-                        return candidate_artifact_bundle(self.builds[0], self.pr, 'b' * 40)[1]
+                        return candidate_artifact_bundle(self.api_run, self.pr, 'b' * 40)[1]
                     return super().pages(path, field)
 
                 def download_artifact(self, artifact_id, limit):
-                    return candidate_artifact_bundle(self.builds[0], self.pr, 'b' * 40)[0]
+                    return candidate_artifact_bundle(self.api_run, self.pr, 'b' * 40)[0]
 
             gh = Service(pr)
             record = updates.sync_candidate_issues(gh, [candidate])[0]
@@ -986,6 +1093,14 @@ class FinalAttemptTests(unittest.TestCase):
                           'html_url': 'https://example.invalid/build/9',
                           'display_title': f"Unraid compatibility {baseline['version']} "
                                            f"{baseline['image']['sha256']} publish=false"}]
+            gh.api_run = gh.builds[0]
+            event = {}
+            event_name = 'schedule'
+            if callback_attempt is not None:
+                gh.api_run = gh.builds[0] | {
+                    'run_attempt': callback_attempt, 'status': 'completed', 'conclusion': 'success'}
+                event = {'workflow_run': gh.api_run}
+                event_name = 'workflow_run'
             real_run = updates.run
 
             def boundary(args, repo=None, input=None):
@@ -1000,8 +1115,8 @@ class FinalAttemptTests(unittest.TestCase):
                     updates, 'prepare_branch'), patch.object(
                     updates, 'branch_lease', return_value=pr['head']['sha']), patch.object(
                     updates, 'git', return_value='main'), patch.dict(
-                    'os.environ', {'GITHUB_EVENT_NAME': 'schedule', 'UPSTREAM_REVIEW_BOTS': ''}):
-                self.assertFalse(updates.prepare(root, gh, {}, output))
+                    'os.environ', {'GITHUB_EVENT_NAME': event_name, 'UPSTREAM_REVIEW_BOTS': ''}):
+                self.assertFalse(updates.prepare(root, gh, event, output))
             return updates.read_issue_state(gh.issues[0]), pr, gh
 
     def test_successful_build_on_third_attempt_still_becomes_ready(self):
@@ -1010,6 +1125,14 @@ class FinalAttemptTests(unittest.TestCase):
         self.assertEqual((issue['attempts'], issue['status']), (3, 'awaiting-review'))
         self.assertFalse(pr['draft'])
         self.assertEqual(len(gh.dispatched), 0)
+    def test_successful_callback_rerun_wins_over_stale_run_list(self):
+        issue, pr, gh = self.prepare_final_build('failure', callback_attempt=2)
+
+        self.assertEqual((issue['attempts'], issue['status']), (3, 'awaiting-review'))
+        self.assertEqual(module().read_state(gh.pr)['run_attempt'], 2)
+        self.assertEqual(gh.statuses[-1]['state'], 'success')
+        self.assertEqual(gh.statuses[-1]['target_url'], pr['html_url'])
+
 
     def test_failed_build_on_third_attempt_blocks_without_another_session(self):
         issue, pr, gh = self.prepare_final_build('failure')

@@ -211,10 +211,15 @@ def candidate_artifact_state(gh, completed, pr):
         'artifact_name': package_name,
     }
     if (not isinstance(manifest, dict) or type(manifest.get('schema')) is not int
-            or manifest['schema'] != 1
-            or any(manifest.get(key) != value for key, value in expected.items())
-            or not isinstance(manifest.get('packages'), list) or not manifest['packages']):
+            or manifest['schema'] != 1):
+        raise ValueError('Candidate manifest has an invalid schema')
+    if any(type(manifest.get(key)) is not int or manifest[key] < 1
+           for key in ('pr', 'run', 'attempt')):
+        raise ValueError('Candidate manifest numeric identity is invalid')
+    if any(manifest.get(key) != value for key, value in expected.items()):
         raise ValueError('Candidate manifest identity does not match the build')
+    if not isinstance(manifest.get('packages'), list) or not manifest['packages']:
+        raise ValueError('Candidate manifest package set is empty')
     build_url = f"{os.environ.get('GITHUB_SERVER_URL', 'https://github.com').rstrip('/')}/{gh.repository}/actions/runs/{run_id}"
     return {
         'head_sha': head, 'run_id': run_id, 'run_attempt': attempt,
@@ -286,8 +291,11 @@ def human_approved(pr, reviews):
             and not any(item['state'] == 'CHANGES_REQUESTED' for item in current))
 
 
-def latest_build(runs, sha):
+def latest_build(runs, sha, callback=None):
     matching = [item for item in runs if item.get('head_sha') == sha and item.get('event') == 'workflow_dispatch']
+    if (isinstance(callback, dict) and callback.get('head_sha') == sha
+            and callback.get('event') == 'workflow_dispatch'):
+        matching.append(callback)
     return max(matching, key=lambda item: (item['id'], item.get('run_attempt', 1)), default=None)
 
 
@@ -1278,12 +1286,12 @@ def prepare(repo, gh, event, output, evaluation=False, package=None):
         baseline = json.loads((repo / 'build/baseline.json').read_text())
         title = f"Unraid compatibility {baseline['version']} {baseline['image']['sha256']} publish=false"
         runs = gh.api(f'actions/workflows/build-packages.yml/runs?branch={quote(BRANCH)}&event=workflow_dispatch&per_page=100')['workflow_runs']
-        build = latest_build([item for item in runs if item.get('display_title') == title], pr['head']['sha'])
-        if workflow_run_event and build is None:
-            build = event['workflow_run']
+        callback = event.get('workflow_run') if workflow_run_event else None
+        build = latest_build([item for item in runs if item.get('display_title') == title],
+                             pr['head']['sha'], callback)
         callback_build = (workflow_run_event and build
-                         and build.get('id') == event['workflow_run'].get('id')
-                         and build.get('run_attempt') == event['workflow_run'].get('run_attempt'))
+                          and build.get('id') == event['workflow_run'].get('id')
+                          and build.get('run_attempt') == event['workflow_run'].get('run_attempt'))
         if build and not callback_build and not candidate_state_matches(state, build, pr):
             candidate_result = update_candidate_build(gh, pr, state, build)
             if (build.get('status') == 'completed' and build.get('conclusion') == 'success'
