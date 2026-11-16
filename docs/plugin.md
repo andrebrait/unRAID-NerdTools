@@ -6,7 +6,11 @@ Install the rendered `NerdTools.plg` from this fork's GitHub Releases. The check
 
 ## Package settings
 
-Open **Utilities → NerdTools**. Search, sort and filter the package table, turn packages on or off, and select **Apply**. Apply saves your selections and the check interval, then installs and removes packages to match. Dependencies are selected automatically and enforced again by the package manager. System packages or packages managed by another installer are protected, not adopted.
+Open **Utilities → NerdTools**. Each row shows the installed version, available version and planned change. Choose an explicit action: Keep, Install, Upgrade, Downgrade or Remove. Available updates remain visible but stay on Keep until selected. System packages or packages managed by another installer are protected, not adopted.
+
+Installing a new tool automatically plans missing dependencies. When one of those dependencies is already installed at an older catalog version, NerdTools also plans its required upgrade and upgrades installed dependents that must move with it. Each automatic row names the requesting tool. No unrelated package update is included. A required downgrade is never automatic: select Downgrade explicitly for every affected installed package.
+
+**Apply N changes** opens a confirmation dialog listing every install, upgrade, downgrade, removal, required dependency action and settings change, including each version transition. Confirm executes that exact server-generated plan. Cancel changes nothing. Any successful catalog refresh, ownership change, installed-package change, selection change or settings change invalidates the plan and requires a fresh review.
 
 Native package identities are `nerdtools-<tool>` so pkgtools cannot replace an Unraid package with the same tool name. The GUI continues to show original tool names. Existing selections are preserved when their settings keys migrate; installed ownership changes only after successful explicit verified Apply. Archives install qualified `nerdtools-<command>` launchers. NerdTools also creates an owned bare-command symlink when no host command exists in the service PATH or standard command directories; host commands are never shadowed. Only unchanged owned symlinks are removed, and foreign replacements are retained. Use the qualified command when a host command conflicts.
 
@@ -24,7 +28,7 @@ Capabilities listed under **Built into Unraid** come from the catalog's `provide
 
 ## Checks and failures
 
-Automatic checks default to daily. Choose Disabled, hourly, 6-hourly, 12-hourly, daily or weekly in the GUI. Checks refresh the catalog only; they do not automatically install package updates. **Force Updates** checks immediately unless GitHub's rate-limit reset is still active. Failed checks retry hourly, or after the server's later reset time. Invalid responses never overwrite the last-good catalog. An hourly native cron entry evaluates the configured interval; disabling checks causes no background HTTP requests.
+Automatic checks default to daily. Choose Disabled, hourly, 6-hourly, 12-hourly, daily or weekly in the GUI. Checks refresh the catalog only; they do not install package updates. **Check for updates** checks immediately unless GitHub's rate-limit reset is still active. Failed checks retry hourly, or after the server's later reset time. Invalid responses never overwrite the last-good catalog. An hourly native cron entry evaluates the configured interval; disabling checks causes no background HTTP requests.
 
 Checks use GitHub's API anonymously, about one request per check, within GitHub's limit of 60 requests per hour per public IP address. If checks keep failing with a rate-limit error, for example because many devices share one connection, enter an optional GitHub token in the settings page. Use a fine-grained personal access token with read-only access to public repositories and no other permissions. NerdTools sends it only to `api.github.com`, never to download hosts, and never shows it in the page again. It is stored in `/boot/config/plugins/NerdTools/github-token` on the USB flash drive, which anyone with access to the flash share can read; **Remove Token** deletes it.
 
@@ -32,16 +36,16 @@ Unraid's plugin boot hook restores only selected, previously owned versions whos
 
 ## Retained releases and rollback
 
-The **Package release** selector lists retained published package releases. Select a tag, choose **Use Release**, then **Apply** to restore its package versions. An incompatible or invalid catalog is rejected without changing the current cache. A specific release stays pinned across reboot and scheduled checks. Choose **Latest compatible release** to resume following new releases. Packages unavailable in the chosen release retain their preferences; an owned selected package absent from that catalog blocks removal so its dependencies are not silently lost.
+The **Package release** selector lists retained published package releases. Select a tag, choose **Use Release**, select Downgrade for the packages you want, then choose **Apply** and review the transaction. An incompatible or invalid catalog is rejected without changing the current cache. A specific release stays pinned across reboot and scheduled checks. Choose **Latest compatible release** to resume following new releases. Packages unavailable in the chosen release retain their preferences; an owned selected package absent from that catalog remains installed until explicitly removed.
 
-The equivalent CLI is:
+The CLI can select a retained release and install selected packages that are currently missing:
 
 ```
 /usr/local/emhttp/plugins/NerdTools/scripts/packagemanager --release=packages-<retained-tag>
 /usr/local/emhttp/plugins/NerdTools/scripts/packagemanager --download --uninstall
 ```
 
-Use `--release=latest` to unpin, `--check --force` to refresh the current selection, and `--help` for all commands. These commands are intended only on the supported Unraid host.
+`--download` never replaces an installed package. Open the GUI to choose and confirm upgrades or downgrades after selecting a release. Use `--release=latest` to unpin, `--check --force` to refresh the current selection, and `--help` for all commands. These commands are intended only on the supported Unraid host.
 
 ## Upgrades and removal
 
