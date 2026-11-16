@@ -597,6 +597,52 @@ class CandidateArtifactTests(unittest.TestCase):
         with tarfile.open(path, "w:xz") as archive:
             archive.addfile(info, io.BytesIO(payload))
 
+    def _make_normalized_cksfv(self):
+        source = self.root / "cksfv-source.txz"
+        payload = b"normalized cksfv executable"
+        with tarfile.open(source, "w:xz") as archive:
+            for name in ("opt", "opt/nerdtools", "opt/nerdtools/bin"):
+                directory = tarfile.TarInfo(name)
+                directory.type, directory.mode, directory.uid, directory.gid = tarfile.DIRTYPE, 0o755, 0, 0
+                archive.addfile(directory)
+            executable = tarfile.TarInfo("opt/nerdtools/bin/cksfv")
+            executable.mode, executable.uid, executable.gid, executable.size = 0o755, 0, 0, len(payload)
+            archive.addfile(executable, io.BytesIO(payload))
+        output = self.root / "normalized"
+        output.mkdir()
+        staging = self.root / "normalize-staging"
+        staging.mkdir()
+        staging.chmod(0o755)
+        package = {"name": "cksfv", "version": "1.3.14"}
+        original_umask = os.umask(0o022)
+        try:
+            with patch.object(native, "BUILDS", {"cksfv": 3}):
+                return native.normalize_package(package, source, output, staging)
+        finally:
+            os.umask(original_umask)
+
+    def _rewrite_package_archive(self, source, destination, *, remove_launcher=False,
+                                 extra_name=None, extra_type=tarfile.REGTYPE,
+                                 extra_payload=b"host launcher"):
+        launcher = native.PurePosixPath("usr/local/bin/nerdtools-cksfv")
+        with tarfile.open(source, "r:xz") as original, tarfile.open(destination, "w:xz") as rewritten:
+            for member in original.getmembers():
+                if remove_launcher and native.checked_path(member.name) == launcher:
+                    continue
+                stream = original.extractfile(member) if member.isfile() else None
+                rewritten.addfile(member, stream)
+            if extra_name is not None:
+                member = tarfile.TarInfo(extra_name)
+                member.mode, member.uid, member.gid = 0o755, 0, 0
+                member.type = extra_type
+                if extra_type == tarfile.SYMTYPE:
+                    member.linkname = "../../../opt/nerdtools/bin/cksfv"
+                elif extra_type in (tarfile.REGTYPE, tarfile.AREGTYPE):
+                    member.size = len(extra_payload)
+                    rewritten.addfile(member, io.BytesIO(extra_payload))
+                    return
+                rewritten.addfile(member)
+
     def make_manifest(self, plan=None, package_dir=None):
         self.assertTrue(callable(getattr(native, "candidate_manifest", None)))
         with patch.object(native, "build_keys", return_value=self.keys):
@@ -621,10 +667,10 @@ class CandidateArtifactTests(unittest.TestCase):
         original_inspect = native.inspect_package
         builds = json.loads(args.candidate_expected_json.read_text())["plan"]["builds"]
 
-        def inspect(archive, tool):
+        def inspect(archive, tool, **kwargs):
             inspections.append((Path(archive), tool))
             events.append("inspect")
-            return original_inspect(archive, tool)
+            return original_inspect(archive, tool, **kwargs)
 
         with patch.object(native.os, "geteuid", return_value=0), \
                 patch.object(native, "validate_target"), \
@@ -675,6 +721,55 @@ class CandidateArtifactTests(unittest.TestCase):
 
     def clone(self, value):
         return json.loads(json.dumps(value))
+
+    def test_normalized_cksfv_launcher_is_rejected_by_default_and_allowed_when_normalized(self):
+        package = self._make_normalized_cksfv()
+        self.assertEqual(package.name, "nerdtools-cksfv-1.3.14-x86_64-3_NT73.txz")
+        with self.assertRaisesRegex(ValueError, "Package touches forbidden host paths: .*nerdtools-cksfv"):
+            native.inspect_package(package, "cksfv")
+        packages = [{"name": "cksfv", "version": "1.3.14"}]
+        plan = {"build": ["cksfv"], "reuse": [], "builds": {"cksfv": 3}}
+        candidate_dir = self.root / "normalized-candidate"
+        candidate_dir.mkdir()
+        shutil.copyfile(package, candidate_dir / package.name)
+        keys = {"cksfv": "a" * 64}
+        with patch.object(native, "build_keys", return_value=keys):
+            manifest = native.candidate_manifest(packages, plan, candidate_dir, self.identity)
+        with patch.object(native, "build_keys", return_value=keys):
+            result = native.verify_candidate_bundle(
+                packages, plan, candidate_dir, manifest, self.identity)
+        self.assertEqual(result, {"builds": {"cksfv": 3}, "files": [package.name]})
+        members = native.inspect_package(package, "cksfv", allow_normalizer_launchers=True)
+        launcher = next(member for member in members
+                        if native.checked_path(member.name)
+                        == native.PurePosixPath("usr/local/bin/nerdtools-cksfv"))
+        self.assertTrue(launcher.isfile())
+        self.assertEqual(launcher.mode & 0o7777, 0o755)
+        self.assertEqual(launcher.uid, 0)
+        self.assertEqual(launcher.gid, 0)
+        with tarfile.open(package) as archive:
+            self.assertIn(b"exec /opt/nerdtools/bin/cksfv", archive.extractfile(launcher).read())
+
+    def test_normalized_launcher_allowlist_rejects_unowned_paths_links_and_special_files(self):
+        package = self._make_normalized_cksfv()
+        cases = (
+            ("wrong-name", "usr/local/bin/nerdtools-cksfv-extra", False, tarfile.REGTYPE,
+             b"#!/bin/sh\n"),
+            ("cross-package", "usr/local/bin/nerdtools-alpha", False, tarfile.REGTYPE,
+             b"#!/bin/sh\n"),
+            ("launcher-symlink", "usr/local/bin/nerdtools-cksfv", True, tarfile.SYMTYPE, b""),
+            ("launcher-fifo", "usr/local/bin/nerdtools-cksfv", True, tarfile.FIFOTYPE, b""),
+            ("tampered-launcher", "usr/local/bin/nerdtools-cksfv", True, tarfile.REGTYPE,
+             b"#!/bin/sh\nmalicious\n"),
+        )
+        for name, path, remove, member_type, payload in cases:
+            with self.subTest(case=name):
+                hostile = self.root / f"{name}.txz"
+                self._rewrite_package_archive(package, hostile, remove_launcher=remove,
+                                             extra_name=path, extra_type=member_type,
+                                             extra_payload=payload)
+                with self.assertRaises(ValueError):
+                    native.inspect_package(hostile, "cksfv", allow_normalizer_launchers=True)
 
     def test_manifest_is_deterministic_sorted_and_binds_changed_packages(self):
         manifest = self.make_manifest()

@@ -195,9 +195,44 @@ def load_packages():
 
 
 
-def inspect_package(archive, tool):
+def _normalizer_launcher_script(target):
+    return (
+        '#!/bin/sh\n'
+        'export PATH=/opt/nerdtools/bin:/opt/nerdtools/sbin:$PATH\n'
+        'export LD_LIBRARY_PATH=/opt/nerdtools/lib64:/opt/nerdtools/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}\n'
+        'export GI_TYPELIB_PATH=/opt/nerdtools/lib64/girepository-1.0${GI_TYPELIB_PATH:+:$GI_TYPELIB_PATH}\n'
+        'exec ' + shlex.quote(target) + ' "$@"\n'
+    )
+
+
+def _normalizer_launchers(members):
+    directories = {PRIVATE / "bin": "bin", PRIVATE / "sbin": "sbin"}
+    launchers = {}
+    names = set()
+    for member in members:
+        path = checked_path(member.name)
+        directory = directories.get(path.parent)
+        if directory is None or member.isdir():
+            continue
+        if not (member.issym() or (member.isfile() or member.islnk()) and member.mode & 0o111):
+            continue
+        name = path.name
+        if not NAME.fullmatch(name):
+            raise ValueError(f"Unsafe launcher name: {name}")
+        if name in names:
+            raise ValueError(f"Ambiguous launcher name: {name}")
+        names.add(name)
+        launcher = PurePosixPath("usr/local/bin") / ("nerdtools-" + name)
+        target = f"/opt/nerdtools/{directory}/{name}"
+        launchers[launcher] = _normalizer_launcher_script(target).encode()
+    return launchers
+
+
+def inspect_package(archive, tool, *, allow_normalizer_launchers=False):
     with tarfile.open(archive) as tar:
         members = tar.getmembers()
+        normalizer_launchers = (_normalizer_launchers(members)
+                                if allow_normalizer_launchers and tool != "rar" else {})
         regular = {checked_path(member.name) for member in members if member.isfile()}
         seen = set()
         locate_binaries = {PRIVATE / "bin" / name for name in ("plocate", "mlocate")}
@@ -208,7 +243,15 @@ def inspect_package(archive, tool):
             if not re.fullmatch(r"[A-Za-z0-9_+.,/ @%()-]+", member.name) or path in seen:
                 raise ValueError(f"Unsupported or duplicate package path: {member.name}")
             seen.add(path)
-            check_destination(tool, member, path)
+            launcher = normalizer_launchers.get(path)
+            if launcher is None:
+                check_destination(tool, member, path)
+            else:
+                contents = tar.extractfile(member) if member.isfile() else None
+                if (not member.isfile() or member.uid != 0 or member.gid != 0
+                        or member.mode & 0o7777 != 0o755 or contents is None
+                        or contents.read(len(launcher) + 1) != launcher):
+                    raise ValueError(f"Invalid normalizer-generated launcher: {member.name}")
             if member.isdir():
                 safe_directory(member)
             if member.name.lstrip("./") in INTEGRATION_DIGESTS:
@@ -296,7 +339,7 @@ def normalize_package(package, original, output, staging):
     for name, target in launchers.items():
         launcher = staging / "usr/local/bin" / ("nerdtools-" + name)
         launcher.parent.mkdir(parents=True, exist_ok=True)
-        launcher.write_text('#!/bin/sh\nexport PATH=/opt/nerdtools/bin:/opt/nerdtools/sbin:$PATH\nexport LD_LIBRARY_PATH=/opt/nerdtools/lib64:/opt/nerdtools/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}\nexport GI_TYPELIB_PATH=/opt/nerdtools/lib64/girepository-1.0${GI_TYPELIB_PATH:+:$GI_TYPELIB_PATH}\nexec ' + shlex.quote(target) + ' "$@"\n')
+        launcher.write_text(_normalizer_launcher_script(target))
         launcher.chmod(0o755)
     configs = sorted(str(path.relative_to(staging)) for path in staging.rglob("*.new") if path.is_file() and not path.is_symlink())
     if configs:
@@ -944,7 +987,7 @@ def verify_candidate_bundle(packages, plan, package_dir, manifest, expected):
         if record["sha256"] != actual["sha256"] or record["size"] != actual["size"]:
             raise ValueError(f"Candidate package digest mismatch: {name}")
     for name in names:
-        inspect_package(Path(package_dir) / filenames[name], name)
+        inspect_package(Path(package_dir) / filenames[name], name, allow_normalizer_launchers=True)
     return {"builds": builds, "files": sorted(filenames.values())}
 
 
@@ -1007,7 +1050,8 @@ def assemble_candidate_artifacts(packages, expected_data, candidate_bundle, reus
     if {entry.name for entry in destination.iterdir()} != expected_files:
         raise ValueError("Candidate and reuse packages do not form the complete catalog")
     for name in sorted(catalog):
-        inspect_package(destination / artifact_name(catalog[name], builds[name]), name)
+        inspect_package(destination / artifact_name(catalog[name], builds[name]), name,
+                        allow_normalizer_launchers=True)
     return {"identity": expected_data["identity"], "manifest_sha256": digest(manifest_path),
             "builds": result["builds"], "files": sorted(expected_files)}
 
