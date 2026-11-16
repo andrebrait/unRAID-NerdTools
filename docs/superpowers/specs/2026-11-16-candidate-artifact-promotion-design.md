@@ -84,7 +84,7 @@ The controller accepts a candidate only after the exact-head catalog workflow su
 - candidate-manifest SHA256
 - successful build URL
 
-It then sets `nerdtools/candidate-build` success. Build failure or missing artifacts sets failure. Repository protection requires one human approval but does not require this recipe-specific status, which would otherwise block unrelated PRs. A premature merge is allowed at GitHub level, but the trusted merge callback refuses publication without a valid exact-head candidate; scheduled discovery may rebuild later.
+The `main` branch protection requires one approving human review, dismisses stale approvals when the head changes, and grants automation no bypass. It intentionally does not require this recipe-specific status, which would block unrelated PRs. A premature merge is therefore possible at GitHub level, but the trusted merge callback refuses immediate publication without a valid exact-head candidate; scheduled discovery may rebuild later.
 
 ## Merge and release dispatch
 

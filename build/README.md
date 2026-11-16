@@ -167,6 +167,12 @@ Preparation, publication and maintainer retry jobs share the `upstream-recipe-is
 
 Under **Settings → Actions → General**, enable **Allow GitHub Actions to create and approve pull requests**; the controller uses creation only. Protect `main` with required CI and human approval, dismiss stale approvals and give automation no bypass.
 
+### Candidate promotion for maintainers
+
+Recipe automation opens its batch PR ready for review. `nerdtools/candidate-build` reports whether the exact current PR head has a usable package candidate: pending means the catalog build is incomplete, success means the exact run and artifacts were accepted, and failure means they were not. This status is informational rather than a repository-wide required check, because unrelated PRs do not produce recipe candidates. Protect `main` separately with one human approval, stale-approval dismissal and no automation bypass.
+
+The changed-package bundle and its manifest expire after 90 days. The merge callback fails closed when the exact-head candidate tuple is absent, incomplete, expired or mismatched; it does not silently rebuild or immediately publish different bytes. The daily scheduled release discovery remains the recovery path and can later rebuild normally without candidate inputs. A successful candidate-backed release copies `candidate-manifest.json` into the final release artifacts and provenance, retaining the package-byte origin after the temporary Actions artifacts expire.
+
 For a read-only end-to-end evaluation, manually dispatch with `evaluation=true` and a package such as `sshfs`. The controller produces a validated patch instead of opening a PR, and a separate credential-free native job builds and tests it. The environment still restricts which branches may run; any temporary evaluation-branch exception must be removed afterward. No evaluation publishes a package.
 
 ## Reusable bootstrap action
