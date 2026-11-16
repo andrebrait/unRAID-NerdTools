@@ -20,6 +20,19 @@ var changeLabels = {
     unavailable: 'Unavailable — no change',
     settings: 'Change setting'
 };
+function actionLabel(action, installed) {
+    return action === 'keep' && !installed ? '-' : actionLabels[action];
+}
+function actionIsEmphasized(action) {
+    return action !== 'keep';
+}
+function rowStateClass(change) {
+    if (change === 'remove') return 'package-remove';
+    if (change === 'install') return 'package-install';
+    if (change === 'upgrade' || change === 'downgrade') return 'package-upgrade';
+    if (change === 'update-available' || change === 'downgrade-available') return 'package-update-available';
+    return '';
+}
 $(function() {
     $('#tblPackages').tablesorter({
         sortList: [[1, 0]],
@@ -115,8 +128,11 @@ function packageQuery(force) {
         $.each(data.packages, function(_, pkg) {
             var row = $('<tr>').attr('data-package', pkg.name);
             var select = $('<select>', {'class': 'pkgaction', 'data-package': pkg.name, 'aria-label': 'Action for ' + pkg.tool});
-            $.each(pkg.actions, function(_, action) { select.append($('<option>').val(action).text(actionLabels[action])); });
-            select.val(pkg.default_action).prop('disabled', pkg.actions.length === 1).on('change', requestPlan);
+            $.each(pkg.actions, function(_, action) { select.append($('<option>').val(action).text(actionLabel(action, pkg.installed))); });
+            select.val(pkg.default_action).prop('disabled', pkg.actions.length === 1)
+                .toggleClass('package-action-selected', actionIsEmphasized(pkg.default_action)).on('change', function() {
+                    $(this).toggleClass('package-action-selected', actionIsEmphasized(this.value)); requestPlan();
+                });
             row.append($('<td>').append(select));
             row.append($('<td>', {'class': 'package wrapper'}).text(pkg.tool));
             row.append($('<td>').text((pkg.dependency_labels || pkg.dependencies).join(', ') || '—'));
@@ -194,15 +210,16 @@ function runPlanRequest(revision) {
     });
 }
 function renderPlan(plan) {
-    $('#tblPackages tbody tr').removeClass('package-changed package-update-available');
+    $('#tblPackages tbody tr').removeClass('package-changed package-remove package-install package-upgrade package-update-available');
     $.each(plan.rows, function(name, state) {
         var row = $('#tblPackages tbody tr').filter(function() { return $(this).attr('data-package') === name; });
         var label = changeLabels[state.change] || state.change;
         if (state.automatic) label = 'Required ' + label.toLowerCase();
         if (state.reason) label += ' — ' + state.reason;
         row.find('.planned-change').text(label);
+        var stateClass = rowStateClass(state.change);
+        if (stateClass) row.addClass(stateClass);
         if ($.inArray(state.change, ['install','upgrade','downgrade','remove']) !== -1) row.addClass('package-changed');
-        else if (state.change === 'update-available' || state.change === 'downgrade-available') row.addClass('package-update-available');
     });
     var count = plan.changes.length;
     $('#btnApply').val(count ? 'Apply ' + count + (count === 1 ? ' change' : ' changes') : 'No changes')
