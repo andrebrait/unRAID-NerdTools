@@ -643,9 +643,11 @@ class CandidateArtifactTests(unittest.TestCase):
         self.assertEqual(path.read_text(), json.dumps(manifest, indent=2, sort_keys=True) + "\n")
 
     def test_empty_candidate_set_is_rejected(self):
-        plan = {"build": [], "reuse": [{"name": "zed"}, {"name": "alpha"}],
-                "builds": {"zed": 2, "alpha": 4}}
-        with self.assertRaises(ValueError):
+        plan = {"build": [], "reuse": [
+            {"name": "zed", "file": self.files["zed"], "sha256": "a" * 64},
+            {"name": "alpha", "file": self.files["alpha"], "sha256": "b" * 64}],
+            "builds": {"zed": 2, "alpha": 4}}
+        with self.assertRaisesRegex(ValueError, "Candidate plan does not partition"):
             self.make_manifest(plan=plan)
 
     def test_manifest_requires_exact_regular_package_files(self):
@@ -661,7 +663,12 @@ class CandidateArtifactTests(unittest.TestCase):
             self.make_manifest()
 
     def test_verification_checks_every_archive_and_returns_builds_and_sorted_files(self):
-        result = self.verify(self.make_manifest())
+        with patch.object(native, "inspect_package", wraps=native.inspect_package) as inspected:
+            result = self.verify(self.make_manifest())
+        self.assertEqual([call.args for call in inspected.call_args_list], [
+            (self.package_dir / self.files["alpha"], "alpha"),
+            (self.package_dir / self.files["zed"], "zed"),
+        ])
         self.assertEqual(result, {"builds": {"alpha": 4, "zed": 2},
                                   "files": sorted(self.files.values())})
 
@@ -723,6 +730,15 @@ class CandidateArtifactTests(unittest.TestCase):
         path.unlink()
         os.mkfifo(path)
         with self.assertRaises(ValueError):
+            self.verify(manifest)
+
+    def test_hard_linked_candidate_files_are_rejected_on_creation_and_verification(self):
+        manifest = self.make_manifest()
+        candidate = self.package_dir / self.files["zed"]
+        os.link(candidate, self.root / "external-link.txz")
+        with self.assertRaisesRegex(ValueError, "regular file"):
+            self.make_manifest()
+        with self.assertRaisesRegex(ValueError, "regular file"):
             self.verify(manifest)
 
     def test_filename_sha256_and_size_mismatches_are_rejected(self):
@@ -797,11 +813,17 @@ class CandidateArtifactTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.verify(manifest, plan=drift)
 
-    def test_invalid_archive_is_inspected_and_rejected(self):
+    def test_invalid_archive_is_inspected_and_rejected_in_package_order(self):
         path = self.package_dir / self.files["zed"]
         self.write_package(path, "zed", "opt/nerdtools/../../etc/shadow")
-        with self.assertRaises(ValueError):
-            self.verify(self.make_manifest())
+        manifest = self.make_manifest()
+        with patch.object(native, "inspect_package", wraps=native.inspect_package) as inspected:
+            with self.assertRaises(ValueError):
+                self.verify(manifest)
+        self.assertEqual([call.args for call in inspected.call_args_list], [
+            (self.package_dir / self.files["alpha"], "alpha"),
+            (self.package_dir / self.files["zed"], "zed"),
+        ])
 
     def test_cli_creates_and_verifies_candidate_manifest(self):
         plan_path = self.root / "plan.json"
@@ -840,6 +862,17 @@ class CandidateArtifactTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertEqual(json.loads(output.getvalue()),
                          {"builds": {"alpha": 4, "zed": 2}, "files": sorted(self.files.values())})
+
+    def test_build_and_build_one_cli_keep_dist_output_default(self):
+        for command, handler in (("build", "build"), ("build-one", "build_one")):
+            with self.subTest(command=command):
+                arguments = ["native.py", command]
+                if command == "build-one":
+                    arguments += ["--package", "alpha", "--baseline-root", "/baseline",
+                                  "--development-root", "/development"]
+                with patch.object(native, handler) as invoked, patch("sys.argv", arguments):
+                    native.main()
+                self.assertEqual(invoked.call_args.args[0].output, Path("dist"))
 
 
 if __name__ == "__main__":

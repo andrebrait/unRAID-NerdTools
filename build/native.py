@@ -1116,7 +1116,7 @@ def main():
                                          _read_json(args.manifest), expected_data["identity"])
         print(json.dumps(result, sort_keys=True))
         return
-    if args.output is None and args.command == "build":
+    if args.output is None and args.command in ("build", "build-one"):
         args.output = Path("dist")
     if args.package_artifacts and args.command != "build":
         parser.error("--package-artifacts requires the full-catalog build gate")
