@@ -65,27 +65,34 @@ assert.equal(context.actionClass('install', false), 'package-install', 'Install 
 assert.equal(context.actionClass('upgrade', true), 'package-upgrade', 'Upgrade uses upgrade class');
 assert.equal(context.actionClass('keep', true), 'package-update-available', 'Available Keep uses update class');
 assert.equal(context.actionClass('keep', false), '', 'Current Keep has no action class');
-const visual = {selected: null, emphasized: null};
+assert.equal(context.versionHasUpdate('keep', true), true, 'available Keep marks version cells');
+assert.equal(context.versionHasUpdate('upgrade', true), true, 'Upgrade marks version cells');
+assert.equal(context.versionHasUpdate('remove', true), false, 'Remove clears version-cell update class');
+const visual = {selected: null, actionCell: null, versionCell: null, plannedCell: null};
 const classes = new Set(['package-has-update']);
+const fakeActionCell = {toggleClass: (_name, value) => { visual.actionCell = value; return fakeActionCell; }};
+const fakeVersion = {toggleClass: (_name, value) => { visual.versionCell = value; return fakeVersion; }};
+const fakePlanned = {toggleClass: (_name, value) => { visual.plannedCell = value; return fakePlanned; }};
 const fakeSelect = {
     val: value => { visual.selected = value; return fakeSelect; },
-    toggleClass: (_name, value) => { visual.emphasized = value; return fakeSelect; },
+    closest: () => fakeActionCell,
 };
 const fakeRow = {
     hasClass: name => classes.has(name),
     removeClass: names => { names.split(' ').forEach(name => classes.delete(name)); return fakeRow; },
     addClass: names => { names.split(' ').forEach(name => classes.add(name)); return fakeRow; },
-    toggleClass: (name, value) => { if (value) classes.add(name); else classes.delete(name); return fakeRow; },
-    find: () => fakeSelect,
+    find: selector => selector === '.pkgaction' ? fakeSelect : (selector === '.version-value' ? fakeVersion : fakePlanned),
 };
 context.syncActionDisplay(fakeRow, 'remove');
-assert.deepEqual(visual, {selected: 'remove', emphasized: true}, 'selector and Remove class update atomically');
-assert.deepEqual([...classes].sort(), ['package-changed', 'package-has-update', 'package-remove'],
-    'Remove clears yellow and applies red class');
+assert.deepEqual(visual, {selected: 'remove', actionCell: true, versionCell: false, plannedCell: true},
+    'Remove updates row and cell classes atomically');
+assert.deepEqual([...classes].sort(), ['package-has-update', 'package-remove'],
+    'Remove clears yellow and applies red row class');
 context.syncActionDisplay(fakeRow, 'keep');
-assert.deepEqual(visual, {selected: 'keep', emphasized: false}, 'Keep clears action emphasis');
+assert.deepEqual(visual, {selected: 'keep', actionCell: false, versionCell: true, plannedCell: false},
+    'available Keep updates row and cell classes atomically');
 assert.deepEqual([...classes].sort(), ['package-has-update', 'package-update-available'],
-    'available Keep clears red and applies yellow class');
+    'available Keep clears red and applies yellow row class');
 assert.equal(context.automaticAction({automatic: true, change: 'remove'}), 'remove',
     'automatic removal selects Remove');
 assert.equal(context.automaticAction({automatic: true, change: 'upgrade'}), 'upgrade',

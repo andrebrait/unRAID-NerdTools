@@ -10,7 +10,7 @@
 <table class="tablesorter"><tbody>
 <tr data-case="current"><td><select class="pkgaction"><option value="keep">Keep</option><option value="remove">Remove</option></select></td><td class="version-value">1.0</td><td class="version-value">1.0</td><td class="planned-change">No change</td></tr>
 <tr class="package-has-update" data-case="available"><td><select class="pkgaction"><option value="keep">Keep</option><option value="upgrade">Upgrade</option><option value="remove">Remove</option></select></td><td class="version-value">1.0</td><td class="version-value">2.0</td><td class="planned-change">Update available</td></tr>
-<tr data-case="install"><td><select class="pkgaction package-action-selected"><option value="keep">-</option><option value="install" selected>Install</option></select></td><td class="version-value">—</td><td class="version-value">1.0</td><td class="planned-change">Install</td></tr>
+<tr data-case="install"><td><select class="pkgaction"><option value="keep">-</option><option value="install" selected>Install</option></select></td><td class="version-value">—</td><td class="version-value">1.0</td><td class="planned-change">Install</td></tr>
 <tr data-case="libyaml"><td><select class="pkgaction"><option value="keep">Keep</option><option value="remove">Remove</option></select></td><td>libyaml</td><td class="planned-change">No change</td></tr>
 <tr data-case="ruby"><td><select class="pkgaction"><option value="keep">Keep</option><option value="remove">Remove</option></select></td><td>ruby</td><td class="planned-change">No change</td></tr>
 <tr data-case="vim"><td><select class="pkgaction"><option value="keep">Keep</option><option value="remove">Remove</option></select></td><td>vim</td><td class="planned-change">No change</td></tr>
@@ -30,12 +30,16 @@
     const weight = (name, index) => getComputedStyle(row(name).querySelectorAll('.version-value')[index]).fontWeight;
     const assert = (condition, message) => { if (!condition) throw new Error(message); };
     const applyAction = (name, action, hasUpdate = false) => {
-        const element = row(name);
+        const element = row(name); const changed = action !== 'keep';
         element.classList.remove('package-remove', 'package-install', 'package-upgrade', 'package-update-available');
         if (action === 'remove') element.classList.add('package-remove');
         else if (action === 'install') element.classList.add('package-install');
         else if (action === 'upgrade' || action === 'downgrade') element.classList.add('package-upgrade');
         else if (hasUpdate) element.classList.add('package-update-available');
+        element.querySelector('td').classList.toggle('package-action-changed', changed);
+        element.querySelectorAll('.version-value').forEach(cell =>
+            cell.classList.toggle('package-version-update', hasUpdate && ['keep', 'upgrade', 'downgrade'].includes(action)));
+        element.querySelector('.planned-change').classList.toggle('package-change-selected', changed);
         select(name).value = action;
     };
     try {
@@ -49,13 +53,16 @@
         assert(background('current') !== colors.remove, 'Keep row must not be red');
         assert(background('available') === colors.available, 'Available update must be yellow');
         assert(weight('available', 0) === '600' && weight('available', 1) === '600', 'Available versions must be bold');
+        assert(row('install').querySelector('td').classList.contains('package-action-changed'), 'Install action cell must be emphasized');
         assert(background('install') === colors.install, 'Install must be green');
         applyAction('available', 'upgrade', true);
         assert(background('available') === colors.upgrade, 'Upgrade must override yellow with blue');
         for (const name of ['libyaml', 'ruby', 'vim']) applyAction(name, 'remove');
         for (const name of ['libyaml', 'ruby', 'vim']) assert(background(name) === colors.remove, `${name} Remove must be red`);
+        assert(row('ruby').querySelector('td').classList.contains('package-action-changed'), 'Ruby Remove action cell must be emphasized');
         applyAction('ruby', 'keep');
         assert(background('ruby') !== colors.remove, 'Ruby Keep must immediately clear red');
+        assert(!row('ruby').querySelector('td').classList.contains('package-action-changed'), 'Ruby Keep must clear action-cell emphasis');
         assert(background('libyaml') === colors.remove && background('vim') === colors.remove, 'Other Remove rows must stay red');
         document.title = 'PASS'; document.getElementById('result').textContent = 'PASS';
     } catch (error) {

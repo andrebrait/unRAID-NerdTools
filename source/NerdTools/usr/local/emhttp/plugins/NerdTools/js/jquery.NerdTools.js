@@ -35,13 +35,18 @@ function actionClass(action, hasUpdate) {
     if (action === 'upgrade' || action === 'downgrade') return 'package-upgrade';
     return hasUpdate ? 'package-update-available' : '';
 }
+function versionHasUpdate(action, hasUpdate) {
+    return hasUpdate && (action === 'keep' || action === 'upgrade' || action === 'downgrade');
+}
 function syncActionDisplay(row, action) {
     row.removeClass('package-remove package-install package-upgrade package-update-available');
     var stateClass = actionClass(action, row.hasClass('package-has-update'));
     if (stateClass) row.addClass(stateClass);
-    row.toggleClass('package-changed', actionIsEmphasized(action));
-    row.find('.pkgaction').val(action)
-        .toggleClass('package-action-selected', actionIsEmphasized(action));
+    var changed = actionIsEmphasized(action); var select = row.find('.pkgaction');
+    select.val(action).closest('td').toggleClass('package-action-changed', changed);
+    row.find('.version-value').toggleClass('package-version-update',
+        versionHasUpdate(action, row.hasClass('package-has-update')));
+    row.find('.planned-change').toggleClass('package-change-selected', changed);
 }
 function syncAllActionDisplays() {
     $('#tblPackages tbody tr').each(function() {
