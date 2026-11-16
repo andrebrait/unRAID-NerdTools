@@ -429,7 +429,8 @@ class ControllerTests(unittest.TestCase):
         updates = self.updates
         gh = GitHubFixture(None)
         gh.api = lambda path: []
-        with tempfile.TemporaryDirectory() as folder, patch.object(
+        with tempfile.TemporaryDirectory() as folder, patch.dict(
+                'os.environ', {'GITHUB_EVENT_NAME': 'schedule'}), patch.object(
                 updates, 'run', return_value='[]') as run, patch.object(updates, 'prepare_branch') as branch:
             self.assertFalse(updates.prepare(Path(folder), gh, {}, Path(folder) / 'handoff'))
             self.assertEqual(run.call_args.args[0][1], 'scripts/check-upstream-versions.py')
