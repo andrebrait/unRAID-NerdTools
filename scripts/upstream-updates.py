@@ -4,16 +4,20 @@ import argparse
 import hashlib
 import html
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path, PurePosixPath
 import re
 import shutil
+import stat
 import subprocess
 import sys
 from urllib.parse import quote
+import zlib
 import tempfile
 import tarfile
+import zipfile
 
 BRANCH = 'automation/upstream-recipes'
 TITLE = 'Update upstream recipes'
@@ -28,6 +32,15 @@ ISSUE_STATUSES = {'queued', 'assessing', 'building', 'awaiting-review', 'blocked
 ISSUE_FIELDS = ('name', 'upstream', 'source', 'url')
 _UNSET = object()
 NAME = re.compile(r'[a-zA-Z0-9][a-zA-Z0-9+_.-]*\Z')
+
+CANDIDATE_STATUS_CONTEXT = 'nerdtools/candidate-build'
+CANDIDATE_STATE_KEYS = (
+    'head_sha', 'run_id', 'run_attempt', 'package_artifact_id',
+    'package_artifact_name', 'manifest_artifact_id', 'manifest_artifact_name',
+    'manifest_sha256', 'build_url',
+)
+MAX_MANIFEST_ARCHIVE_SIZE = 2 * 1024 * 1024
+MAX_MANIFEST_SIZE = 1024 * 1024
 
 
 def run(args, repo=None, input=None):
@@ -64,8 +77,191 @@ class GitHub:
             raise ValueError(f'Paginated GitHub response has no {field} array')
         return [item for page in pages for item in page[field]]
 
+    def download_artifact(self, artifact_id, limit):
+        process = subprocess.Popen(
+            ['gh', 'api', '-H', 'Accept: application/vnd.github+json',
+             f'{self.root}/actions/artifacts/{artifact_id}/zip'],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        data = bytearray()
+        try:
+            while len(data) <= limit:
+                chunk = process.stdout.read(min(65536, limit + 1 - len(data)))
+                if not chunk:
+                    break
+                data.extend(chunk)
+            if len(data) > limit:
+                process.kill()
+                process.wait()
+                raise ValueError('Manifest artifact download exceeds the size limit')
+            if process.wait() != 0:
+                raise ValueError('Could not download manifest artifact')
+            return bytes(data)
+        finally:
+            process.stdout.close()
+
     def dispatch(self, workflow, ref='main', inputs=None):
         self.api(f'actions/workflows/{workflow}/dispatches', {'ref': ref, 'inputs': inputs or {}})
+
+
+def read_candidate_manifest_archive(archive):
+    if not isinstance(archive, bytes) or not archive or len(archive) > MAX_MANIFEST_ARCHIVE_SIZE:
+        raise ValueError('Manifest artifact archive exceeds the size limit')
+    try:
+        with zipfile.ZipFile(io.BytesIO(archive)) as source:
+            members = source.infolist()
+            if len(members) != 1:
+                raise ValueError('Manifest artifact must contain exactly one file')
+            member = members[0]
+            mode = member.external_attr >> 16
+            file_type = stat.S_IFMT(mode)
+            if (member.filename != 'candidate-manifest.json' or member.is_dir()
+                    or file_type not in (0, stat.S_IFREG) or member.flag_bits & 1
+                    or member.file_size < 1 or member.file_size > MAX_MANIFEST_SIZE
+                    or member.compress_size > MAX_MANIFEST_ARCHIVE_SIZE):
+                raise ValueError('Manifest artifact contains an unsafe file')
+            with source.open(member) as stream:
+                data = stream.read(MAX_MANIFEST_SIZE + 1)
+            if len(data) != member.file_size or len(data) > MAX_MANIFEST_SIZE:
+                raise ValueError('Manifest artifact extraction exceeds the size limit')
+            return data
+    except (OSError, RuntimeError, NotImplementedError, EOFError, zlib.error,
+            zipfile.BadZipFile, zipfile.LargeZipFile) as error:
+        raise ValueError('Invalid manifest artifact archive') from error
+
+
+def clear_candidate_state(state):
+    for key in CANDIDATE_STATE_KEYS:
+        state.pop(key, None)
+
+
+def set_candidate_status(gh, pr, sha, state):
+    descriptions = {
+        'pending': 'Waiting for exact-head catalog and candidate artifacts.',
+        'success': 'Exact-head catalog and candidate manifest verified.',
+        'failure': 'Catalog build or candidate artifact validation failed.',
+    }
+    if state not in descriptions or sha != pr.get('head', {}).get('sha'):
+        raise ValueError('Candidate status must target the current PR head')
+    gh.api(f'statuses/{sha}', {
+        'context': CANDIDATE_STATUS_CONTEXT, 'state': state,
+        'description': descriptions[state], 'target_url': pr['html_url'],
+    })
+
+
+def candidate_artifact_state(gh, completed, pr):
+    run_id, attempt = completed.get('id'), completed.get('run_attempt')
+    head = completed.get('head_sha')
+    completed_repo = completed.get('head_repository')
+    if (type(run_id) is not int or run_id < 1 or type(attempt) is not int or attempt < 1
+            or head != pr.get('head', {}).get('sha')
+            or completed.get('head_branch') != BRANCH
+            or completed.get('event') != 'workflow_dispatch'
+            or not isinstance(completed_repo, dict)
+            or completed_repo.get('full_name') != gh.repository):
+        raise ValueError('Workflow run identity does not match the PR')
+    run = gh.api(f'actions/runs/{run_id}')
+    run_repo = run.get('head_repository') if isinstance(run, dict) else None
+    run_path = run.get('path') if isinstance(run, dict) else None
+    if (not isinstance(run, dict) or type(run.get('id')) is not int or run['id'] != run_id
+            or type(run.get('run_attempt')) is not int or run['run_attempt'] != attempt
+            or run.get('head_sha') != head or run.get('head_branch') != BRANCH
+            or run.get('event') != 'workflow_dispatch' or run.get('status') != 'completed'
+            or run.get('conclusion') != 'success' or not isinstance(run_repo, dict)
+            or run_repo.get('full_name') != gh.repository or not isinstance(run_path, str)
+            or run_path.split('@', 1)[0] != '.github/workflows/build-packages.yml'):
+        raise ValueError('GitHub workflow run identity is incomplete or mismatched')
+    package_name = f'candidate-packages-{run_id}-{attempt}'
+    manifest_name = f'candidate-manifest-{run_id}-{attempt}'
+    artifacts = gh.pages(f'actions/runs/{run_id}/artifacts?per_page=100', field='artifacts')
+    selected = {}
+    for artifact in artifacts:
+        name = artifact.get('name') if isinstance(artifact, dict) else None
+        if name not in (package_name, manifest_name):
+            continue
+        workflow_run = artifact.get('workflow_run')
+        artifact_id = artifact.get('id')
+        if (name in selected or type(artifact_id) is not int or artifact_id < 1
+                or artifact.get('expired') is not False or not isinstance(workflow_run, dict)
+                or type(workflow_run.get('id')) is not int or workflow_run['id'] != run_id
+                or workflow_run.get('head_sha') != head
+                or type(artifact.get('size_in_bytes')) is not int
+                or artifact['size_in_bytes'] < 1):
+            raise ValueError('Candidate artifact is expired, duplicated, or from another run')
+        selected[name] = artifact
+    if set(selected) != {package_name, manifest_name}:
+        raise ValueError('Exact package and manifest artifact set is incomplete')
+    package = selected[package_name]
+    manifest_artifact = selected[manifest_name]
+    if manifest_artifact['size_in_bytes'] > MAX_MANIFEST_ARCHIVE_SIZE:
+        raise ValueError('Manifest artifact archive exceeds the size limit')
+    commit = gh.api(f'commits/{head}')
+    tree = (commit.get('commit') or {}).get('tree', {}).get('sha') if isinstance(commit, dict) else None
+    if (not isinstance(tree, str)
+            or not re.fullmatch(r'(?:[a-f0-9]{40}|[a-f0-9]{64})', tree)):
+        raise ValueError('Candidate head has no valid commit tree')
+    manifest_bytes = read_candidate_manifest_archive(
+        gh.download_artifact(manifest_artifact['id'], MAX_MANIFEST_ARCHIVE_SIZE))
+    try:
+        manifest = json.loads(manifest_bytes)
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as error:
+        raise ValueError('Candidate manifest is not valid JSON') from error
+    expected = {
+        'repository': gh.repository, 'pr': pr['number'], 'head': head, 'tree': tree,
+        'workflow': 'build-packages.yml', 'run': run_id, 'attempt': attempt,
+        'artifact_name': package_name,
+    }
+    if (not isinstance(manifest, dict) or type(manifest.get('schema')) is not int
+            or manifest['schema'] != 1
+            or any(manifest.get(key) != value for key, value in expected.items())
+            or not isinstance(manifest.get('packages'), list) or not manifest['packages']):
+        raise ValueError('Candidate manifest identity does not match the build')
+    build_url = f"{os.environ.get('GITHUB_SERVER_URL', 'https://github.com').rstrip('/')}/{gh.repository}/actions/runs/{run_id}"
+    return {
+        'head_sha': head, 'run_id': run_id, 'run_attempt': attempt,
+        'package_artifact_id': package['id'], 'package_artifact_name': package_name,
+        'manifest_artifact_id': manifest_artifact['id'],
+        'manifest_artifact_name': manifest_name,
+        'manifest_sha256': hashlib.sha256(manifest_bytes).hexdigest(),
+        'build_url': build_url,
+    }
+
+
+def candidate_state_matches(state, run, pr):
+    run_id, attempt = run.get('id'), run.get('run_attempt')
+    return (type(run_id) is int and type(attempt) is int
+            and state.get('head_sha') == pr.get('head', {}).get('sha')
+            and state.get('run_id') == run_id and state.get('run_attempt') == attempt
+            and type(state.get('package_artifact_id')) is int and state['package_artifact_id'] > 0
+            and state.get('package_artifact_name') == f'candidate-packages-{run_id}-{attempt}'
+            and type(state.get('manifest_artifact_id')) is int and state['manifest_artifact_id'] > 0
+            and state.get('manifest_artifact_name') == f'candidate-manifest-{run_id}-{attempt}'
+            and isinstance(state.get('manifest_sha256'), str)
+            and re.fullmatch(r'[a-f0-9]{64}', state['manifest_sha256'])
+            and isinstance(state.get('build_url'), str) and bool(state['build_url']))
+
+
+def update_candidate_build(gh, pr, state, run):
+    clear_candidate_state(state)
+    run_id = run.get('id')
+    build_url = (f"{os.environ.get('GITHUB_SERVER_URL', 'https://github.com').rstrip('/')}"
+                 f"/{gh.repository}/actions/runs/{run_id}") if type(run_id) is int else None
+    if build_url:
+        state['build_url'] = build_url
+    if run.get('status') != 'completed':
+        result = 'pending'
+    elif run.get('conclusion') != 'success':
+        result = 'failure'
+    else:
+        try:
+            state.update(candidate_artifact_state(gh, run, pr))
+            result = 'success'
+        except (ValueError, TypeError, KeyError, OSError, subprocess.CalledProcessError) as error:
+            state['build_url'] = build_url
+            result = 'failure'
+    set_candidate_status(gh, pr, pr['head']['sha'], result)
+    gh.api(f"pulls/{pr['number']}", {'body': pr_body(state)}, method='PATCH')
+    return result
+
 
 
 def trusted_pr(pr, repository):
@@ -943,7 +1139,7 @@ def recover_orphaned_publication(repo, gh, records, discovered):
              'status': 'building'}
     try:
         pr = gh.api('pulls', {'title': TITLE, 'head': BRANCH, 'base': 'main',
-                              'draft': True, 'body': pr_body(state)})
+                              'draft': False, 'body': pr_body(state)})
         if (not trusted_pr(pr, gh.repository) or pr.get('state') != 'open'
                 or pr.get('head', {}).get('sha') != previous):
             raise ValueError('Recovered PR does not match the leased automation branch')
@@ -976,18 +1172,33 @@ def prepare(repo, gh, event, output, evaluation=False, package=None):
     pr = requests[0] if requests else None
     if pr and not trusted_pr(pr, gh.repository):
         raise ValueError('Refusing untrusted automation PR')
-    if not evaluation and os.environ.get('GITHUB_EVENT_NAME') == 'workflow_run':
-        completed = event['workflow_run']
-        if not pr or completed['head_sha'] != pr['head']['sha']:
-            summary('Ignoring stale-head build completion.')
+    workflow_run_event = not evaluation and os.environ.get('GITHUB_EVENT_NAME') == 'workflow_run'
+    state = read_state(pr) if pr else {
+        'attempts': 0, 'candidates': [], 'candidate_issues': [],
+        'report': {'summary': '', 'recipes': []}}
+    if workflow_run_event:
+        completed = event.get('workflow_run') or {}
+        head_repository = completed.get('head_repository')
+        if (not pr or completed.get('head_sha') != pr['head']['sha']
+                or completed.get('head_branch') != BRANCH
+                or completed.get('event') != 'workflow_dispatch'
+                or not isinstance(head_repository, dict)
+                or head_repository.get('full_name') != gh.repository
+                or type(completed.get('id')) is not int or completed['id'] < 1
+                or type(completed.get('run_attempt')) is not int or completed['run_attempt'] < 1):
+            summary('Ignoring stale or untrusted build completion.')
+            return False
+        candidate_result = update_candidate_build(gh, pr, state, completed)
+        if completed.get('status') != 'completed':
+            return False
+        if completed.get('conclusion') == 'success' and candidate_result != 'success':
+            summary('Candidate artifact verification failed; the PR remains unready.')
             return False
     discovered = json.loads(run([sys.executable, 'scripts/check-upstream-versions.py'], repo))
     if package:
         discovered = [item for item in discovered if item['name'] == package]
     discovered = sorted(discovered, key=lambda item: tuple(candidate_identity(item).values()))
-    state = read_state(pr) if pr else {
-        'attempts': 0, 'candidates': [], 'candidate_issues': [],
-        'report': {'summary': '', 'recipes': []}}
+
     run_url = workflow_run_url(gh.repository)
     records = []
     if not evaluation:
@@ -1068,6 +1279,17 @@ def prepare(repo, gh, event, output, evaluation=False, package=None):
         title = f"Unraid compatibility {baseline['version']} {baseline['image']['sha256']} publish=false"
         runs = gh.api(f'actions/workflows/build-packages.yml/runs?branch={quote(BRANCH)}&event=workflow_dispatch&per_page=100')['workflow_runs']
         build = latest_build([item for item in runs if item.get('display_title') == title], pr['head']['sha'])
+        if workflow_run_event and build is None:
+            build = event['workflow_run']
+        callback_build = (workflow_run_event and build
+                         and build.get('id') == event['workflow_run'].get('id')
+                         and build.get('run_attempt') == event['workflow_run'].get('run_attempt'))
+        if build and not callback_build and not candidate_state_matches(state, build, pr):
+            candidate_result = update_candidate_build(gh, pr, state, build)
+            if (build.get('status') == 'completed' and build.get('conclusion') == 'success'
+                    and candidate_result != 'success'):
+                summary('Candidate artifact verification failed; the PR remains unready.')
+                return False
         committed_at = gh.api(f"commits/{pr['head']['sha']}")['commit']['committer']['date']
         bots = available_bots(os.environ.get('UPSTREAM_REVIEW_BOTS', ''), reviews)
         inline_feedback = current_feedback(inline, pr['head']['sha'], committed_at, bots, 'inline')
@@ -1081,8 +1303,9 @@ def prepare(repo, gh, event, output, evaluation=False, package=None):
             gh.api(f"pulls/{pr['number']}", {'body': pr_body(state)}, method='PATCH')
             summary(f"Batch build is still running: {build['html_url']}")
             return False
-        if (build and build['conclusion'] == 'success' and not state.get('validation_error')
-                and not state.get('force_repair')):
+        if (build and build['conclusion'] == 'success'
+                and candidate_state_matches(state, build, pr)
+                and not state.get('validation_error') and not state.get('force_repair')):
             state['build_url'] = build['html_url']
             update_candidate_issues(gh, records, candidates, 'awaiting-review',
                                    failure=None, build_url=build['html_url'])
@@ -1349,19 +1572,14 @@ def finish(repo, gh, plan_path, workspace, report_path, dry_run=False, output=No
         return
     try:
         if changed or sha != previous:
-            if pr and not pr.get('draft'):
-                node = pr['node_id']
-                run(['gh', 'api', 'graphql', '-f',
-                     'query=mutation($id:ID!){convertPullRequestToDraft(input:{pullRequestId:$id}){pullRequest{id}}}',
-                     '-f', f'id={node}'])
             push(repo, gh, previous)
-            state.pop('build_url', None)
+            clear_candidate_state(state)
             state.pop('reviewed_head', None)
         if pr:
             pr = gh.api(f"pulls/{pr['number']}", {'body': pr_body(state)}, method='PATCH')
         else:
             pr = gh.api('pulls', {'title': TITLE, 'head': BRANCH, 'base': 'main',
-                                  'draft': True, 'body': pr_body(state)})
+                                  'draft': False, 'body': pr_body(state)})
         if changed or state.get('dispatched_head') != sha:
             dispatch_catalog(repo, gh, pr, state)
     except Exception as error:
@@ -1380,9 +1598,15 @@ def finish(repo, gh, plan_path, workspace, report_path, dry_run=False, output=No
 
 def dispatch_catalog(repo, gh, pr, state):
     baseline = json.loads((repo / 'build/baseline.json').read_text())
-    gh.dispatch('build-packages.yml', BRANCH, {'unraid_version': baseline['version'],
-                'unraid_sha256': baseline['image']['sha256'], 'unraid_url': baseline['image']['url'],
-                'channel': 'stable', 'publish': 'false'})
+    clear_candidate_state(state)
+    set_candidate_status(gh, pr, pr['head']['sha'], 'pending')
+    try:
+        gh.dispatch('build-packages.yml', BRANCH, {'unraid_version': baseline['version'],
+                    'unraid_sha256': baseline['image']['sha256'], 'unraid_url': baseline['image']['url'],
+                    'channel': 'stable', 'publish': 'false'})
+    except Exception:
+        set_candidate_status(gh, pr, pr['head']['sha'], 'failure')
+        raise
     state['dispatched_head'] = pr['head']['sha']
     gh.api(f"pulls/{pr['number']}", {'body': pr_body(state)}, method='PATCH')
 
@@ -1441,10 +1665,6 @@ def retry_issue(gh, number, run_url=None):
         index = next((index for index, item in enumerate(pr_state.get('candidate_issues', []))
                       if item.get('number') == number and item.get('candidate') == metadata['candidate']), None)
         if identity in frozen and index is not None:
-            if not pr.get('draft'):
-                run(['gh', 'api', 'graphql', '-f',
-                     'query=mutation($id:ID!){convertPullRequestToDraft(input:{pullRequestId:$id}){pullRequest{id}}}',
-                     '-f', f'id={pr["node_id"]}'])
             active = (pr, pr_state, index)
     set_issue_status(gh, record, 'queued', attempts=0, decision=None, failure=None,
                      run_url=run_url, build_url=None)
@@ -1460,9 +1680,10 @@ def retry_issue(gh, number, run_url=None):
         pr_state.update(attempts=0, feedback_digest='', issue_closures=[
             item for item in pr_state.get('issue_closures', []) if item != number], reviewed_head='',
             force_repair=True, retry_candidates=[metadata['candidate']])
-        pr_state.pop('build_url', None)
+        clear_candidate_state(pr_state)
         pr_state.pop('validation_error', None)
         gh.api(f"pulls/{pr['number']}", {'body': pr_body(pr_state)}, method='PATCH')
+        set_candidate_status(gh, pr, pr['head']['sha'], 'pending')
     return True
 
 
@@ -1500,12 +1721,9 @@ def retry_pr_batch(gh, number, run_url=None):
     state.update(attempts=0, report={'summary': 'Awaiting maintainer-requested reassessment', 'recipes': []},
                  feedback_digest='', issue_closures=[], reviewed_head='', force_repair=True,
                  retry_candidates=[item['candidate'] for item in reset])
-    state.pop('build_url', None)
-    if not pr.get('draft'):
-        run(['gh', 'api', 'graphql', '-f',
-             'query=mutation($id:ID!){convertPullRequestToDraft(input:{pullRequestId:$id}){pullRequest{id}}}',
-             '-f', f'id={pr["node_id"]}'])
+    clear_candidate_state(state)
     gh.api(f"pulls/{number}", {'body': pr_body(state)}, method='PATCH')
+    set_candidate_status(gh, pr, pr['head']['sha'], 'pending')
     return True
 
 
