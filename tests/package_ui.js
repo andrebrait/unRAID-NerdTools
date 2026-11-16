@@ -28,6 +28,8 @@ context.confirmingPlanId = null;
 assert.equal(context.canCancelConfirmation(), true, 'idle confirmation dialog may be cancelled');
 assert.equal(context.actionLabel('keep', false), '-', 'uninstalled Keep displays as -');
 assert.equal(context.actionLabel('keep', true), 'Keep', 'installed Keep keeps its label');
+assert.equal(context.packageDisplayName('nerdtools-vim'), 'vim', 'modal strips internal package prefix');
+assert.equal(context.packageDisplayName('vim'), 'vim', 'plain package names remain unchanged');
 assert.equal(context.actionIsEmphasized('keep'), false, 'Keep action is not emphasized');
 assert.equal(context.actionIsEmphasized('install'), true, 'non-keep action is emphasized');
 assert.deepEqual(

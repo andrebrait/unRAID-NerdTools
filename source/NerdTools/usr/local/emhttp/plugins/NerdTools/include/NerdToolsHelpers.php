@@ -268,7 +268,8 @@ function nt_plan($packages, $owned, $installed, $config, $actions, $hours, $cata
                 throw new RuntimeException('Required dependency is externally managed: '.$name);
             }
             if (!$states[$name]['installed']) {
-                $operations[$name] = ['change'=>'install','automatic'=>$name !== $root,'reason'=>$name === $root ? '' : 'Required by '.$root];
+                $operations[$name] = ['change'=>'install','automatic'=>$name !== $root,
+                    'reason'=>$name === $root ? '' : 'Required by '.nt_tool_name($root)];
             }
         }
     }
@@ -291,7 +292,7 @@ function nt_plan($packages, $owned, $installed, $config, $actions, $hours, $cata
             throw new RuntimeException('Required dependency downgrade must be selected explicitly: '.$name);
         }
         if (!isset($operations[$name]) || $operations[$name]['change'] !== $change) {
-            $operations[$name] = ['change'=>$change,'automatic'=>true,'reason'=>'Required by '.$root];
+            $operations[$name] = ['change'=>$change,'automatic'=>true,'reason'=>'Required by '.nt_tool_name($root)];
         }
         return true;
     };
@@ -303,7 +304,7 @@ function nt_plan($packages, $owned, $installed, $config, $actions, $hours, $cata
             }
             if (!$states[$name]['installed']) {
                 if (!isset($operations[$name])) {
-                    $operations[$name] = ['change'=>'install','automatic'=>true,'reason'=>'Required by '.$root];
+                    $operations[$name] = ['change'=>'install','automatic'=>true,'reason'=>'Required by '.nt_tool_name($root)];
                 }
             } elseif ($stageMove($name, $root) && !isset($seen[$name])) {
                 $seen[$name] = true; $queue[] = $name;
@@ -400,16 +401,18 @@ function nt_plan($packages, $owned, $installed, $config, $actions, $hours, $cata
 
     $rows = []; $changes = [];
     foreach ($states as $name => $state) {
-        $current = nt_package_version($state['record'], $state['owned_name']);
-        if ($current === null && $state['record'] !== null) $current = nt_package_version($state['record'], $name);
-        $target = $state['package']['version'] ?? null; $operation = $operations[$name] ?? null;
+        $current = nt_package_display_version($state['record'], $state['owned_name']);
+        if ($current === null && $state['record'] !== null) $current = nt_package_display_version($state['record'], $name);
+        $target = $state['package'] ? nt_package_display_version(nt_record($state['package']['file']),$name) : null;
+        $operation = $operations[$name] ?? null;
         if ($operation) {
             $change = $operation['change'];
             if ($change === 'remove') $target = null;
         } elseif ($state['external']) $change = 'external';
         elseif (!$state['package']) $change = 'unavailable';
-        elseif ($state['installed'] && $current !== $target) {
-            $change = version_compare($target, $current) > 0 ? 'update-available' : 'downgrade-available';
+        elseif ($state['installed'] && $state['owned']
+            && ($updateKind = nt_update_kind($state['record'],$state['owned_name'],$state['package'])) !== null) {
+            $change = $updateKind === 'upgrade' ? 'update-available' : 'downgrade-available';
         } else $change = 'no-change';
         $rows[$name] = [
             'intent'=>$intents[$name], 'change'=>$change, 'from'=>$current, 'to'=>$target,

@@ -182,6 +182,9 @@ $sameBuildPlan = nt_plan(['tool'=>$sameBuild],
     ['tool'=>['record'=>'tool-1.0-x86_64-1','dependencies'=>[]]],['tool-1.0-x86_64-1'],
     ['tool'=>'yes','update_check_hours'=>'24'],['tool'=>'upgrade'],24);
 check($sameBuildPlan['changes'][0]['change'] === 'upgrade', 'Same-version package build replacement can be planned');
+check($sameBuildPlan['changes'][0]['from'] === '1.0-1'
+    && $sameBuildPlan['changes'][0]['to'] === '1.0-2',
+    'Transaction preview shows full installed and target package revisions');
 $legacyPackage = $planPackage('nerdtools-tool','1.0'); $legacyPackage['tool'] = 'tool';
 $legacyRecord = 'tool-1.0-x86_64-1_nerdtools';
 check(nt_update_kind($legacyRecord,'tool',$legacyPackage) === 'upgrade',
@@ -217,7 +220,7 @@ $plan = nt_plan($planPackages,$removeOwned,$removeInstalled,$removeConfig,['dep'
 check(array_column($plan['changes'],'package') === ['app','dep']
     && $plan['rows']['app']['automatic'] && $plan['rows']['app']['change'] === 'remove',
     'Dependency removal automatically selects installed dependents for removal');
-check($plan['changes'][0]['from'] === '1.0' && $plan['changes'][0]['to'] === null, 'Removal preview ends with no installed version');
+check($plan['changes'][0]['from'] === '1.0-1' && $plan['changes'][0]['to'] === null, 'Removal preview ends with no installed version');
 $chainPackages = [
     'dep'=>$planPackage('dep','1.0'),
     'app'=>$planPackage('app','1.0',['dep']),

@@ -22,6 +22,9 @@ var changeLabels = {
 function actionLabel(action, installed) {
     return action === 'keep' && !installed ? '-' : actionLabels[action];
 }
+function packageDisplayName(name) {
+    return name && name.indexOf('nerdtools-') === 0 ? name.substring(10) : name;
+}
 function actionIsEmphasized(action) {
     return action !== 'keep';
 }
@@ -284,7 +287,7 @@ function Apply() {
         var from = change.from || '—'; var to = change.to || '—';
         body.append($('<tr>').append(
             $('<td>').text(changeLabels[change.change] || change.change),
-            $('<td>').text(change.package || 'Automatic catalog checks'),
+            $('<td>').text(change.package ? packageDisplayName(change.package) : 'Automatic catalog checks'),
             $('<td>', {'class': 'version-value'}).text(from + ' → ' + to),
             $('<td>').text(change.reason || (change.automatic ? 'Required dependency action' : 'Requested'))
         ));
