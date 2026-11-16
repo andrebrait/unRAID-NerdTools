@@ -16,7 +16,7 @@ on:
         default: sshfs
   workflow_run:
     workflows: ['Build native packages']
-    types: [completed]
+    types: [in_progress, completed]
 
 permissions:
   contents: read
@@ -43,6 +43,7 @@ jobs:
       pull-requests: write
       issues: write
       actions: write
+      statuses: write
     outputs:
       needed: ${{ steps.plan.outputs.needed }}
     steps:
@@ -259,6 +260,7 @@ jobs:
       pull-requests: write
       issues: write
       actions: write
+      statuses: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

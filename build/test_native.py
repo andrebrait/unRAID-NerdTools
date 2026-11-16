@@ -10,8 +10,10 @@ import shutil
 import subprocess
 import tarfile
 import tempfile
+import textwrap
 import unittest
 import zipfile
+from types import SimpleNamespace
 from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location("native", Path(__file__).with_name("native.py"))
@@ -561,6 +563,737 @@ class NativeBuildTests(unittest.TestCase):
                 native.recipe_inventory(recipes)
 
 
+
+
+class CandidateArtifactTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.package_dir = self.root / "packages"
+        self.package_dir.mkdir()
+        self.packages = [{"name": "zed", "version": "1.0"},
+                         {"name": "alpha", "version": "2.1"}]
+        self.plan = {"build": ["zed", "alpha"], "reuse": [],
+                     "builds": {"zed": 2, "alpha": 4}}
+        self.keys = {"zed": "a" * 64, "alpha": "b" * 64}
+        self.identity = {
+            "repository": "example/unraid-nerdtools", "pr": 17,
+            "head": "c" * 40, "tree": "d" * 40, "workflow": "build-packages.yml",
+            "run": 12345, "attempt": 2,
+            "artifact_name": "candidate-packages-pr-17-run-12345-attempt-2",
+        }
+        self.files = {
+            "zed": "nerdtools-zed-1.0-x86_64-2_NT73.txz",
+            "alpha": "nerdtools-alpha-2.1-x86_64-4_NT73.txz",
+        }
+        for package in self.packages:
+            self.write_package(self.package_dir / self.files[package["name"]], package["name"])
+
+    def write_package(self, path, name, member_name=None):
+        payload = b"verified package payload for " + name.encode()
+        info = tarfile.TarInfo(member_name or f"opt/nerdtools/bin/{name}")
+        info.mode, info.uid, info.gid, info.size = 0o755, 0, 0, len(payload)
+        with tarfile.open(path, "w:xz") as archive:
+            archive.addfile(info, io.BytesIO(payload))
+
+    def _make_normalized_cksfv(self):
+        source = self.root / "cksfv-source.txz"
+        payload = b"normalized cksfv executable"
+        with tarfile.open(source, "w:xz") as archive:
+            for name in ("opt", "opt/nerdtools", "opt/nerdtools/bin"):
+                directory = tarfile.TarInfo(name)
+                directory.type, directory.mode, directory.uid, directory.gid = tarfile.DIRTYPE, 0o755, 0, 0
+                archive.addfile(directory)
+            executable = tarfile.TarInfo("opt/nerdtools/bin/cksfv")
+            executable.mode, executable.uid, executable.gid, executable.size = 0o755, 0, 0, len(payload)
+            archive.addfile(executable, io.BytesIO(payload))
+        output = self.root / "normalized"
+        output.mkdir()
+        staging = self.root / "normalize-staging"
+        staging.mkdir()
+        staging.chmod(0o755)
+        package = {"name": "cksfv", "version": "1.3.14"}
+        original_umask = os.umask(0o022)
+        try:
+            with patch.object(native, "BUILDS", {"cksfv": 3}):
+                return native.normalize_package(package, source, output, staging)
+        finally:
+            os.umask(original_umask)
+
+    def _rewrite_package_archive(self, source, destination, *, remove_launcher=False,
+                                 extra_name=None, extra_type=tarfile.REGTYPE,
+                                 extra_payload=b"host launcher", launcher_metadata=None):
+        launcher = native.PurePosixPath("usr/local/bin/nerdtools-cksfv")
+        with tarfile.open(source, "r:xz") as original, tarfile.open(destination, "w:xz") as rewritten:
+            for member in original.getmembers():
+                if remove_launcher and native.checked_path(member.name) == launcher:
+                    continue
+                if launcher_metadata and native.checked_path(member.name) == launcher:
+                    for attribute, value in launcher_metadata.items():
+                        setattr(member, attribute, value)
+                stream = original.extractfile(member) if member.isfile() else None
+                rewritten.addfile(member, stream)
+            if extra_name is not None:
+                member = tarfile.TarInfo(extra_name)
+                member.mode, member.uid, member.gid = 0o755, 0, 0
+                member.type = extra_type
+                if extra_type == tarfile.SYMTYPE:
+                    member.linkname = "../../../opt/nerdtools/bin/cksfv"
+                elif extra_type in (tarfile.REGTYPE, tarfile.AREGTYPE):
+                    member.size = len(extra_payload)
+                    rewritten.addfile(member, io.BytesIO(extra_payload))
+                    return
+                rewritten.addfile(member)
+
+    def make_manifest(self, plan=None, package_dir=None):
+        self.assertTrue(callable(getattr(native, "candidate_manifest", None)))
+        with patch.object(native, "build_keys", return_value=self.keys):
+            return native.candidate_manifest(self.packages, plan or self.plan,
+                                             package_dir or self.package_dir, self.identity)
+
+    def verify(self, manifest, plan=None, package_dir=None, expected=None, keys=None):
+        self.assertTrue(callable(getattr(native, "verify_candidate_bundle", None)))
+        with patch.object(native, "build_keys", return_value=keys or self.keys):
+            return native.verify_candidate_bundle(
+                self.packages, plan or self.plan, package_dir or self.package_dir,
+                manifest, expected or self.identity)
+
+    def candidate_validation_script(self):
+        workflow = (native.REPO / ".github/workflows/build-packages.yml").read_text()
+        step = workflow.index("      - name: Validate exact candidate run and artifact identities\n")
+        start = workflow.index("        run: |\n", step) + len("        run: |\n")
+        end = workflow.index("\n      - name: Download the exact source-run candidate package artifact", start)
+        return "\n".join(line[10:] for line in workflow[start:end].splitlines())
+
+    def run_candidate_build(self, args, packages, events, inspections):
+        original_inspect = native.inspect_package
+        builds = json.loads(args.candidate_expected_json.read_text())["plan"]["builds"]
+
+        def inspect(archive, tool, **kwargs):
+            inspections.append((Path(archive), tool))
+            events.append("inspect")
+            return original_inspect(archive, tool, **kwargs)
+
+        with patch.object(native.os, "geteuid", return_value=0), \
+                patch.object(native, "validate_target"), \
+                patch.object(native, "load_packages", return_value=packages), \
+                patch.object(native, "publication_blockers", return_value=[]), \
+                patch.object(native, "prepared_roots", return_value=(self.root, self.root, self.root)), \
+                patch.object(native, "require_slocate_group"), \
+                patch.object(native, "require_provided"), \
+                patch.object(native, "fetch"), \
+                patch.object(native, "build_keys", return_value=self.keys), \
+                patch.object(native, "inspect_package", side_effect=inspect), \
+                patch.object(native, "prepare_image", side_effect=lambda *call_args, **kwargs:
+                             events.append("target-gate")), \
+                patch.object(native, "install_payload"), \
+                patch.object(native, "audit_runtime", return_value=1), \
+                patch.object(native, "kernel_smoke", return_value="target-kernel"), \
+                patch.object(native, "asset_limits"), \
+                patch.object(native, "BUILDS", builds):
+            native.build(args)
+
+    def candidate_build_fixture(self, name):
+        plan = {"build": ["zed"],
+                "reuse": [{"name": "alpha", "file": self.files["alpha"],
+                           "sha256": hashlib.sha256((self.package_dir / self.files["alpha"]).read_bytes()).hexdigest()}],
+                "builds": {"zed": 2, "alpha": 4}}
+        candidate_bundle = self.root / f"{name}-candidate"
+        candidate_packages = candidate_bundle / "packages"
+        candidate_packages.mkdir(parents=True)
+        shutil.copyfile(self.package_dir / self.files["zed"], candidate_packages / self.files["zed"])
+        reuse_dir = self.root / f"{name}-reuse"
+        reuse_dir.mkdir()
+        shutil.copyfile(self.package_dir / self.files["alpha"], reuse_dir / self.files["alpha"])
+        native.write_candidate_manifest(candidate_bundle / "candidate-manifest.json",
+                                        self.make_manifest(plan=plan, package_dir=candidate_packages))
+        expected_path = self.root / f"{name}-expected.json"
+        expected_path.write_text(json.dumps({"identity": self.identity, "plan": plan}))
+        packages = [{**package, "dependencies": [], "inputs": []} for package in self.packages]
+        args = SimpleNamespace(
+            unraid_version="7.3.4", unraid_url="https://example.invalid/image.zip",
+            unraid_sha256="a" * 64, publish=False, channel="stable",
+            output=self.root / f"{name}-dist", work=self.root / f"{name}-work",
+            baseline_root=self.root / "baseline", development_root=self.root / "development",
+            source_bundle=None, package_artifacts=self.root / f"{name}-package-artifacts",
+            candidate_artifacts=candidate_bundle, candidate_expected_json=expected_path,
+            reuse_artifacts=reuse_dir,
+        )
+        return plan, candidate_bundle, candidate_packages, reuse_dir, packages, args
+
+    def clone(self, value):
+        return json.loads(json.dumps(value))
+
+    def test_normalized_cksfv_launcher_is_rejected_by_default_and_allowed_when_normalized(self):
+        package = self._make_normalized_cksfv()
+        self.assertEqual(package.name, "nerdtools-cksfv-1.3.14-x86_64-3_NT73.txz")
+        with self.assertRaisesRegex(ValueError, "Package touches forbidden host paths: .*nerdtools-cksfv"):
+            native.inspect_package(package, "cksfv")
+        packages = [{"name": "cksfv", "version": "1.3.14"}]
+        plan = {"build": ["cksfv"], "reuse": [], "builds": {"cksfv": 3}}
+        candidate_dir = self.root / "normalized-candidate"
+        candidate_dir.mkdir()
+        shutil.copyfile(package, candidate_dir / package.name)
+        keys = {"cksfv": "a" * 64}
+        with patch.object(native, "build_keys", return_value=keys):
+            manifest = native.candidate_manifest(packages, plan, candidate_dir, self.identity)
+        with patch.object(native, "build_keys", return_value=keys):
+            result = native.verify_candidate_bundle(
+                packages, plan, candidate_dir, manifest, self.identity)
+        self.assertEqual(result, {"builds": {"cksfv": 3}, "files": [package.name]})
+        members = native.inspect_package(package, "cksfv", allow_normalizer_launchers=True)
+        launcher = next(member for member in members
+                        if native.checked_path(member.name)
+                        == native.PurePosixPath("usr/local/bin/nerdtools-cksfv"))
+        self.assertTrue(launcher.isfile())
+        self.assertEqual(launcher.mode & 0o7777, 0o755)
+        self.assertEqual(launcher.uid, 0)
+        self.assertEqual(launcher.gid, 0)
+        with tarfile.open(package) as archive:
+            self.assertIn(b"exec /opt/nerdtools/bin/cksfv", archive.extractfile(launcher).read())
+
+    def test_normalized_launcher_allowlist_rejects_unowned_paths_links_and_special_files(self):
+        package = self._make_normalized_cksfv()
+        cases = (
+            ("wrong-name", "usr/local/bin/nerdtools-cksfv-extra", False, tarfile.REGTYPE,
+             b"#!/bin/sh\n"),
+            ("cross-package", "usr/local/bin/nerdtools-alpha", False, tarfile.REGTYPE,
+             b"#!/bin/sh\n"),
+            ("launcher-symlink", "usr/local/bin/nerdtools-cksfv", True, tarfile.SYMTYPE, b""),
+            ("launcher-fifo", "usr/local/bin/nerdtools-cksfv", True, tarfile.FIFOTYPE, b""),
+            ("tampered-launcher", "usr/local/bin/nerdtools-cksfv", True, tarfile.REGTYPE,
+             b"#!/bin/sh\nmalicious\n"),
+        )
+        for name, path, remove, member_type, payload in cases:
+            with self.subTest(case=name):
+                hostile = self.root / f"{name}.txz"
+                self._rewrite_package_archive(package, hostile, remove_launcher=remove,
+                                             extra_name=path, extra_type=member_type,
+                                             extra_payload=payload)
+                with self.assertRaises(ValueError):
+                    native.inspect_package(hostile, "cksfv", allow_normalizer_launchers=True)
+
+    def test_candidate_rejects_normalized_launcher_with_invalid_mode_or_ownership(self):
+        package = self._make_normalized_cksfv()
+        packages = [{"name": "cksfv", "version": "1.3.14"}]
+        plan = {"build": ["cksfv"], "reuse": [], "builds": {"cksfv": 3}}
+        candidate_dir = self.root / "hostile-candidate"
+        candidate_dir.mkdir()
+        for attribute, value in (("mode", 0o700), ("uid", 1000), ("gid", 1000)):
+            with self.subTest(attribute=attribute, value=value):
+                self._rewrite_package_archive(
+                    package, candidate_dir / package.name,
+                    launcher_metadata={attribute: value})
+                with patch.object(native, "build_keys", return_value={"cksfv": "a" * 64}):
+                    manifest = native.candidate_manifest(
+                        packages, plan, candidate_dir, self.identity)
+                    with self.assertRaisesRegex(
+                            ValueError, "Invalid normalizer-generated launcher: .*nerdtools-cksfv"):
+                        native.verify_candidate_bundle(
+                            packages, plan, candidate_dir, manifest, self.identity)
+
+    def test_manifest_is_deterministic_sorted_and_binds_changed_packages(self):
+        manifest = self.make_manifest()
+        self.assertEqual(manifest, self.make_manifest())
+        self.assertEqual(manifest, {
+            "schema": 1,
+            **self.identity,
+            "baseline_version": native.BASELINE["version"],
+            "baseline_image_sha256": native.BASELINE["image"]["sha256"],
+            "toolchain_sha256": rootfs.digest(native.REPO / "build/locks/toolchain.json"),
+            "rebuild_generation": native.REBUILD_GENERATION,
+            "source_date_epoch": int(native.EPOCH),
+            "packages": [
+                {"name": "alpha", "build": 4, "build_key": self.keys["alpha"],
+                 "file": self.files["alpha"],
+                 "sha256": hashlib.sha256((self.package_dir / self.files["alpha"]).read_bytes()).hexdigest(),
+                 "size": (self.package_dir / self.files["alpha"]).stat().st_size},
+                {"name": "zed", "build": 2, "build_key": self.keys["zed"],
+                 "file": self.files["zed"],
+                 "sha256": hashlib.sha256((self.package_dir / self.files["zed"]).read_bytes()).hexdigest(),
+                 "size": (self.package_dir / self.files["zed"]).stat().st_size},
+            ],
+        })
+        self.assertEqual([item["name"] for item in manifest["packages"]], ["alpha", "zed"])
+
+    def test_manifest_writer_uses_stable_json(self):
+        manifest = self.make_manifest()
+        self.assertTrue(callable(getattr(native, "write_candidate_manifest", None)))
+        path = self.root / "candidate-manifest.json"
+        native.write_candidate_manifest(path, manifest)
+        self.assertEqual(path.read_text(), json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+
+    def test_empty_candidate_set_is_rejected(self):
+        plan = {"build": [], "reuse": [
+            {"name": "zed", "file": self.files["zed"], "sha256": "a" * 64},
+            {"name": "alpha", "file": self.files["alpha"], "sha256": "b" * 64}],
+            "builds": {"zed": 2, "alpha": 4}}
+        with self.assertRaisesRegex(ValueError, "Candidate plan does not partition"):
+            self.make_manifest(plan=plan)
+
+    def test_manifest_requires_exact_regular_package_files(self):
+        extra = self.package_dir / "unexpected.txz"
+        extra.write_bytes(b"extra")
+        with self.assertRaises(ValueError):
+            self.make_manifest()
+        extra.unlink()
+        path = self.package_dir / self.files["zed"]
+        path.unlink()
+        path.symlink_to(self.package_dir / self.files["alpha"])
+        with self.assertRaises(ValueError):
+            self.make_manifest()
+
+    def test_verification_checks_every_archive_and_returns_builds_and_sorted_files(self):
+        with patch.object(native, "inspect_package", wraps=native.inspect_package) as inspected:
+            result = self.verify(self.make_manifest())
+        self.assertEqual([call.args for call in inspected.call_args_list], [
+            (self.package_dir / self.files["alpha"], "alpha"),
+            (self.package_dir / self.files["zed"], "zed"),
+        ])
+        self.assertEqual(result, {"builds": {"alpha": 4, "zed": 2},
+                                  "files": sorted(self.files.values())})
+
+    def test_wrong_run_attempt_head_or_tree_is_rejected(self):
+        manifest = self.make_manifest()
+        for field, value in (("run", 99999), ("attempt", 3), ("head", "e" * 40), ("tree", "f" * 40)):
+            with self.subTest(field=field):
+                changed = self.clone(manifest)
+                changed[field] = value
+                with self.assertRaises(ValueError):
+                    self.verify(changed)
+
+    def test_changed_compatibility_key_or_build_number_is_rejected(self):
+        manifest = self.make_manifest()
+        for field, value in (("build_key", "e" * 64), ("build", 8)):
+            with self.subTest(field=field):
+                changed = self.clone(manifest)
+                changed["packages"][0][field] = value
+                with self.assertRaises(ValueError):
+                    self.verify(changed)
+
+    def test_missing_extra_and_duplicate_manifest_packages_are_rejected(self):
+        manifest = self.make_manifest()
+        variants = []
+        missing = self.clone(manifest)
+        missing["packages"].pop()
+        variants.append(missing)
+        extra = self.clone(manifest)
+        extra["packages"].append({"name": "new", "build": 1, "build_key": "f" * 64,
+                                  "file": "nerdtools-new-1.0-x86_64-1_NT73.txz",
+                                  "sha256": "a" * 64, "size": 1})
+        variants.append(extra)
+        duplicate = self.clone(manifest)
+        duplicate["packages"].append(self.clone(duplicate["packages"][0]))
+        variants.append(duplicate)
+        for changed in variants:
+            with self.subTest(records=changed["packages"]):
+                with self.assertRaises(ValueError):
+                    self.verify(changed)
+
+    def test_missing_and_extra_artifact_files_are_rejected(self):
+        manifest = self.make_manifest()
+        path = self.package_dir / self.files["zed"]
+        path.unlink()
+        with self.assertRaises(ValueError):
+            self.verify(manifest)
+        self.write_package(path, "zed")
+        (self.package_dir / "unexpected.txz").write_bytes(b"extra")
+        with self.assertRaises(ValueError):
+            self.verify(manifest)
+
+    def test_symlink_and_special_package_files_are_rejected(self):
+        manifest = self.make_manifest()
+        path = self.package_dir / self.files["zed"]
+        path.unlink()
+        path.symlink_to(self.package_dir / self.files["alpha"])
+        with self.assertRaises(ValueError):
+            self.verify(manifest)
+        path.unlink()
+        os.mkfifo(path)
+        with self.assertRaises(ValueError):
+            self.verify(manifest)
+
+    def test_hard_linked_candidate_files_are_rejected_on_creation_and_verification(self):
+        manifest = self.make_manifest()
+        candidate = self.package_dir / self.files["zed"]
+        os.link(candidate, self.root / "external-link.txz")
+        with self.assertRaisesRegex(ValueError, "regular file"):
+            self.make_manifest()
+        with self.assertRaisesRegex(ValueError, "regular file"):
+            self.verify(manifest)
+
+    def test_filename_sha256_and_size_mismatches_are_rejected(self):
+        manifest = self.make_manifest()
+        variants = []
+        filename = self.clone(manifest)
+        filename["packages"][0]["file"] = self.files["zed"]
+        variants.append(filename)
+        sha = self.clone(manifest)
+        sha["packages"][0]["sha256"] = "e" * 64
+        variants.append(sha)
+        size = self.clone(manifest)
+        size["packages"][0]["size"] += 1
+        variants.append(size)
+        for changed in variants:
+            with self.subTest(record=changed["packages"][0]):
+                with self.assertRaises(ValueError):
+                    self.verify(changed)
+
+    def test_malformed_manifest_schema_is_rejected(self):
+        manifest = self.make_manifest()
+        variants = []
+        missing = self.clone(manifest)
+        del missing["tree"]
+        variants.append(missing)
+        extra = self.clone(manifest)
+        extra["target_evidence"] = {}
+        variants.append(extra)
+        version = self.clone(manifest)
+        version["schema"] = 2
+        variants.append(version)
+        for changed in variants:
+            with self.subTest(manifest=changed):
+                with self.assertRaises(ValueError):
+                    self.verify(changed)
+
+    def test_non_object_records_and_boolean_schema_values_fail_closed(self):
+        manifest = self.make_manifest()
+        variants = []
+        non_object = self.clone(manifest)
+        non_object["packages"].append(None)
+        variants.append(non_object)
+        boolean_schema = self.clone(manifest)
+        boolean_schema["schema"] = True
+        variants.append(boolean_schema)
+        boolean_generation = self.clone(manifest)
+        boolean_generation["rebuild_generation"] = True
+        variants.append(boolean_generation)
+        for changed in variants:
+            with self.subTest(manifest=changed):
+                with self.assertRaises(ValueError):
+                    self.verify(changed)
+
+    def test_empty_candidate_file_is_rejected(self):
+        (self.package_dir / self.files["zed"]).write_bytes(b"")
+        with self.assertRaises(ValueError):
+            self.make_manifest()
+
+    def test_candidate_and_reuse_plan_overlap_is_rejected(self):
+        manifest = self.make_manifest()
+        overlap = {"build": ["zed", "alpha"],
+                   "reuse": [{"name": "alpha", "file": "old.txz", "sha256": "a" * 64}],
+                   "builds": {"zed": 2, "alpha": 4}}
+        with self.assertRaises(ValueError):
+            self.verify(manifest, plan=overlap)
+
+    def test_current_plan_drift_is_rejected(self):
+        manifest = self.make_manifest()
+        drift = {"build": ["alpha"], "reuse": [{"name": "zed", "file": self.files["zed"],
+                                                 "sha256": "a" * 64}],
+                 "builds": {"zed": 2, "alpha": 4}}
+        with self.assertRaises(ValueError):
+            self.verify(manifest, plan=drift)
+
+    def test_invalid_archive_is_inspected_and_rejected_in_package_order(self):
+        path = self.package_dir / self.files["zed"]
+        self.write_package(path, "zed", "opt/nerdtools/../../etc/shadow")
+        manifest = self.make_manifest()
+        with patch.object(native, "inspect_package", wraps=native.inspect_package) as inspected:
+            with self.assertRaises(ValueError):
+                self.verify(manifest)
+        self.assertEqual([call.args for call in inspected.call_args_list], [
+            (self.package_dir / self.files["alpha"], "alpha"),
+            (self.package_dir / self.files["zed"], "zed"),
+        ])
+
+    def test_cli_creates_and_verifies_candidate_manifest(self):
+        plan_path = self.root / "plan.json"
+        manifest_path = self.root / "manifest.json"
+        expected_path = self.root / "expected.json"
+        plan_path.write_text(json.dumps(self.plan))
+        expected_path.write_text(json.dumps({"identity": self.identity, "plan": self.plan}))
+        create_args = ["native.py", "candidate-create", "--package-artifacts", str(self.package_dir),
+                       "--plan", str(plan_path), "--output", str(manifest_path),
+                       "--repository", self.identity["repository"], "--pr", str(self.identity["pr"]),
+                       "--head", self.identity["head"], "--tree", self.identity["tree"],
+                       "--workflow", self.identity["workflow"], "--run", str(self.identity["run"]),
+                       "--attempt", str(self.identity["attempt"]), "--artifact-name", self.identity["artifact_name"]]
+        with patch.object(native, "load_packages", return_value=self.packages), \
+                patch.object(native, "build_keys", return_value=self.keys), \
+                patch("sys.argv", create_args), patch("sys.stdout", new=io.StringIO()):
+            try:
+                native.main()
+            except SystemExit as error:
+                exit_code = error.code
+            else:
+                exit_code = 0
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(json.loads(manifest_path.read_text()), self.make_manifest())
+        verify_args = ["native.py", "candidate-verify", "--package-artifacts", str(self.package_dir),
+                       "--manifest", str(manifest_path), "--expected-json", str(expected_path)]
+        with patch.object(native, "load_packages", return_value=self.packages), \
+                patch.object(native, "build_keys", return_value=self.keys), \
+                patch("sys.argv", verify_args), patch("sys.stdout", new=io.StringIO()) as output:
+            try:
+                native.main()
+            except SystemExit as error:
+                exit_code = error.code
+            else:
+                exit_code = 0
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(json.loads(output.getvalue()),
+                         {"builds": {"alpha": 4, "zed": 2}, "files": sorted(self.files.values())})
+
+    def test_candidate_mode_suppresses_compile_only_after_validation(self):
+        workflow = (native.REPO / ".github/workflows/build-packages.yml").read_text()
+        self.assertIn("artifact-ids: ${{ inputs.candidate_package_artifact_id }}", workflow)
+        self.assertIn("needs.candidate.outputs.compile_names", workflow)
+        self.assertNotIn("names='[]'", workflow)
+        self.assertIn('echo "compile_names=[]"', workflow)
+        self.assertEqual(self.job_permissions(workflow, "candidate-authorization"),
+                         {"pull-requests": "read"})
+        self.assertEqual(self.job_permissions(workflow, "candidate"),
+                         {"actions": "read", "contents": "read"})
+        self.assertEqual(self.job_permissions(workflow, "build"),
+                         {"contents": "read", "actions": "read"})
+        self.assertNotIn("/pulls/", self.candidate_validation_script())
+
+    @staticmethod
+    def job_permissions(workflow, job):
+        lines = workflow[workflow.index(f"\n  {job}:\n") + 1:].splitlines()[1:]
+        permissions = {}
+        seen = False
+        for line in lines:
+            if line.startswith("  ") and not line.startswith("    "):
+                break
+            if line.strip() == "permissions:":
+                seen = True
+                continue
+            if not seen:
+                continue
+            if not line.startswith("      "):
+                break
+            key, value = line.strip().split(": ", 1)
+            permissions[key] = value
+        return permissions
+
+    @unittest.skipUnless(shutil.which("jq"), "requires real jq to verify workflow predicates")
+    def test_candidate_authorization_rejects_unmerged_pull(self):
+        workflow = (native.REPO / ".github/workflows/build-packages.yml").read_text()
+        step = workflow.index("      - name: Authorize merged candidate pull request\n")
+        start = workflow.index("        run: |\n", step) + len("        run: |\n")
+        end = workflow.index("\n  candidate:\n", start)
+        script = "\n".join(line[10:] for line in workflow[start:end].splitlines())
+        mock = self.root / "auth-bin"
+        mock.mkdir()
+        gh = mock / "gh"
+        gh.write_text("#!/bin/sh\nprintf '%s\\n' \"$MOCK_PULL\"\n")
+        gh.chmod(0o755)
+        head, merge = "a" * 40, "b" * 40
+        pull = {"number": 17, "state": "closed", "merged": False, "merge_commit_sha": merge,
+                "head": {"sha": head, "repo": {"full_name": "example/repo"}}}
+        output = self.root / "auth-out"
+        environment = os.environ.copy()
+        environment.update({
+            "PATH": str(mock) + os.pathsep + os.environ["PATH"],
+            "GH_TOKEN": "test-token", "GH_REPO": "example/repo", "CANDIDATE_MODE": "true",
+            "CANDIDATE_PR": "17", "CANDIDATE_HEAD_SHA": head, "CANDIDATE_MERGE_SHA": merge,
+            "GITHUB_OUTPUT": str(output), "MOCK_PULL": json.dumps(pull),
+        })
+        result = subprocess.run(["bash", "-c", script], env=environment, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertFalse(output.exists())
+
+    @unittest.skipUnless(shutil.which("jq"), "requires real jq to verify workflow predicates")
+    def test_candidate_workflow_validation_checks_exact_run_attempt_and_artifacts(self):
+        script = self.candidate_validation_script()
+        mock_bin = self.root / "mock-bin"
+        mock_bin.mkdir()
+        gh_path = mock_bin / "gh"
+        gh_path.write_text(textwrap.dedent("""\
+            #!/usr/bin/env python3
+            import json, os, sys
+            args = sys.argv[1:]
+            endpoint = args[1]
+            with open(os.environ["MOCK_GH_LOG"], "a") as log:
+                log.write(endpoint + "\\n")
+            if "--jq" in args:
+                selector = args[args.index("--jq") + 1]
+                if selector == ".path":
+                    print(os.environ["MOCK_WORKFLOW_PATH"])
+                elif selector == ".commit.tree.sha":
+                    print(os.environ["MOCK_TREE"])
+                else:
+                    raise SystemExit("unexpected gh --jq selector: " + selector)
+            elif "/attempts/" in endpoint:
+                print(os.environ["MOCK_RUN"])
+            elif "/pulls/" in endpoint:
+                print(os.environ["MOCK_PULL"])
+            elif "/actions/artifacts/" in endpoint:
+                artifact_id = endpoint.rsplit("/", 1)[1]
+                print(json.dumps(json.loads(os.environ["MOCK_ARTIFACTS"])[artifact_id]))
+            else:
+                raise SystemExit("unexpected gh endpoint: " + endpoint)
+        """))
+        gh_path.chmod(0o755)
+
+        repository, head, tree, merge = "example/unraid-nerdtools", "c" * 40, "d" * 40, "e" * 40
+        package_name, manifest_name = "candidate-packages-12345-2", "candidate-manifest-12345-2"
+        run = {"id": 12345, "run_attempt": 2, "head_sha": head, "head_branch": "automation/upstream-recipes",
+               "event": "workflow_dispatch", "status": "completed", "conclusion": "success", "workflow_id": 99}
+        pull = {"number": 17, "state": "closed", "merged": True, "merge_commit_sha": merge,
+                "head": {"sha": head, "repo": {"full_name": repository}}}
+        workflow_run = {"id": 12345, "head_sha": head, "head_branch": "automation/upstream-recipes"}
+        artifacts = {
+            "551": {"id": 551, "name": package_name, "expired": False, "workflow_run": workflow_run},
+            "552": {"id": 552, "name": manifest_name, "expired": False, "workflow_run": workflow_run},
+        }
+        inputs = {
+            "CANDIDATE_PR": "17", "CANDIDATE_HEAD_SHA": head, "CANDIDATE_RUN_ID": "12345",
+            "CANDIDATE_RUN_ATTEMPT": "2", "CANDIDATE_PACKAGE_ARTIFACT_ID": "551",
+            "CANDIDATE_PACKAGE_ARTIFACT_NAME": package_name, "CANDIDATE_MANIFEST_ARTIFACT_ID": "552",
+            "CANDIDATE_MANIFEST_ARTIFACT_NAME": manifest_name, "CANDIDATE_MANIFEST_SHA256": "a" * 64,
+            "CANDIDATE_MERGE_SHA": merge,
+        }
+
+        def run_case(name, run_changes=None, artifact_changes=None, input_changes=None, script_to_run=None):
+            case = self.root / name
+            case.mkdir()
+            source_run = {**run, **(run_changes or {})}
+            source_artifacts = self.clone(artifacts)
+            for artifact_id, changes in (artifact_changes or {}).items():
+                source_artifacts[artifact_id].update(changes)
+            environment = os.environ.copy()
+            environment.update({
+                **inputs, **(input_changes or {}),
+                "PATH": str(mock_bin) + os.pathsep + os.environ["PATH"],
+                "GH_TOKEN": "test-token", "GH_REPO": repository, "CANDIDATE_MODE": "true",
+                "CANDIDATE_AUTHORIZED": "true", "AUTHORIZED_MERGE_SHA": merge,
+                "NAMES": '["zed"]',
+                "BUILDS": '{"alpha":4,"zed":2}',
+                "PLAN": '{"build":["zed"],"reuse":[],"builds":{"alpha":4,"zed":2}}',
+                "RUNNER_TEMP": str(case), "GITHUB_OUTPUT": str(case / "outputs"),
+                "MOCK_RUN": json.dumps(source_run), "MOCK_PULL": json.dumps(pull),
+                "MOCK_ARTIFACTS": json.dumps(source_artifacts), "MOCK_WORKFLOW_PATH": ".github/workflows/build-packages.yml",
+                "MOCK_TREE": tree, "MOCK_GH_LOG": str(case / "gh.log"),
+            })
+            environment.update(input_changes or {})
+            result = subprocess.run(["bash", "-c", script if script_to_run is None else script_to_run],
+                                    env=environment, capture_output=True, text=True)
+            return result, case
+
+        valid, valid_case = run_case("valid")
+        self.assertEqual(valid.returncode, 0, valid.stderr)
+        outputs = dict(line.split("=", 1) for line in (valid_case / "outputs").read_text().splitlines())
+        identity = json.loads(outputs["candidate_identity"])
+        self.assertEqual(identity, {
+            "repository": repository, "pr": 17, "head": head, "tree": tree, "workflow": "build-packages.yml",
+            "run": 12345, "attempt": 2, "artifact_name": package_name,
+        })
+        self.assertEqual(json.loads((valid_case / "candidate-expected.json").read_text()),
+                         {"identity": identity, "plan": json.loads('{"build":["zed"],"reuse":[],"builds":{"alpha":4,"zed":2}}')})
+        calls = (valid_case / "gh.log").read_text().splitlines()
+        self.assertEqual(outputs["compile_names"], "[]")
+        self.assertIn(f"repos/{repository}/actions/runs/12345/attempts/2", calls)
+        self.assertIn(f"repos/{repository}/actions/artifacts/551", calls)
+        self.assertIn(f"repos/{repository}/actions/artifacts/552", calls)
+        self.assertFalse(any("/pulls/" in call for call in calls))
+        mutated_script = script.replace(".run_attempt == $attempt", ".run_attempt != $attempt", 1)
+        self.assertNotEqual(mutated_script, script)
+        mutated, _ = run_case("mutated-attempt-predicate", script_to_run=mutated_script)
+        self.assertNotEqual(mutated.returncode, 0, mutated.stdout)
+
+        invalid_cases = (
+            ("wrong-run", {"id": 99999}, None, None),
+            ("wrong-attempt", {"run_attempt": 3}, None, None),
+            ("wrong-artifact-id", None, {"551": {"id": 999}}, None),
+            ("wrong-artifact-name", None, {"551": {"name": "other-artifact"}}, None),
+            ("incomplete-inputs", None, None, {"CANDIDATE_MANIFEST_SHA256": ""}),
+            ("unauthorized", None, None, {"CANDIDATE_AUTHORIZED": "false"}),
+            ("failed-source-run", {"conclusion": "failure"}, None, None),
+        )
+        for name, run_changes, artifact_changes, input_changes in invalid_cases:
+            with self.subTest(case=name):
+                result, _ = run_case(name, run_changes, artifact_changes, input_changes)
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+
+    def test_candidate_final_build_merges_verified_bytes_before_target_gates(self):
+        plan, candidate_bundle, candidate_packages, reuse_dir, packages, args = self.candidate_build_fixture("final")
+        package_artifacts, output = args.package_artifacts, args.output
+        events, inspections = [], []
+        self.run_candidate_build(args, packages, events, inspections)
+
+        self.assertEqual(inspections, [
+            (candidate_packages / self.files["zed"], "zed"),
+            (package_artifacts / self.files["alpha"], "alpha"),
+            (package_artifacts / self.files["zed"], "zed"),
+        ])
+        self.assertEqual(events, ["inspect", "inspect", "inspect", "target-gate"])
+
+        self.assertEqual(events[0], "inspect")
+        self.assertLess(events.index("inspect"), events.index("target-gate"))
+        self.assertEqual({path.name for path in package_artifacts.iterdir()},
+                         {self.files["zed"], self.files["alpha"]})
+        self.assertEqual((package_artifacts / self.files["zed"]).read_bytes(),
+                         (candidate_packages / self.files["zed"]).read_bytes())
+        self.assertEqual((package_artifacts / self.files["alpha"]).read_bytes(),
+                         (reuse_dir / self.files["alpha"]).read_bytes())
+        bad_reuse = self.clone(plan)
+        bad_reuse["reuse"][0]["sha256"] = "f" * 64
+        with patch.object(native, "build_keys", return_value=self.keys):
+            with self.assertRaisesRegex(ValueError, "Previous-release package digest mismatch"):
+                native.assemble_candidate_artifacts(
+                    packages, {"identity": self.identity, "plan": bad_reuse}, candidate_bundle,
+                    reuse_dir, self.root / "bad-reuse")
+        overlap = self.clone(plan)
+        overlap["build"] = ["zed", "alpha"]
+        overlap_destination = self.root / "overlap"
+        with patch.object(native, "build_keys", return_value=self.keys):
+            with self.assertRaisesRegex(ValueError, "does not partition"):
+                native.assemble_candidate_artifacts(
+                    packages, {"identity": self.identity, "plan": overlap}, candidate_bundle,
+                    reuse_dir, overlap_destination)
+        self.assertFalse(overlap_destination.exists())
+        self.assertEqual((output / "candidate-manifest.json").read_bytes(),
+                         (candidate_bundle / "candidate-manifest.json").read_bytes())
+        provenance = json.loads((output / "provenance-7.3.json").read_text())
+        self.assertEqual(provenance["candidate_identity"], self.identity)
+        self.assertEqual(provenance["candidate_manifest_sha256"],
+                         hashlib.sha256((output / "candidate-manifest.json").read_bytes()).hexdigest())
+        self.assertIn("candidate-manifest.json", (output / "SHA256SUMS").read_text())
+        self.assertFalse((self.root / "bad-reuse").exists())
+
+    def test_final_candidate_build_reverifies_package_and_manifest_before_target_preparation(self):
+        for name, error, tamper in (
+                ("package", "Candidate package digest mismatch", "package"),
+                ("manifest", "Candidate identity mismatch", "manifest")):
+            with self.subTest(artifact=name):
+                _, candidate_bundle, candidate_packages, _, packages, args = self.candidate_build_fixture(name)
+                manifest_path = candidate_bundle / "candidate-manifest.json"
+                if tamper == "package":
+                    (candidate_packages / self.files["zed"]).write_bytes(b"corrupted reuploaded package")
+                else:
+                    manifest = json.loads(manifest_path.read_text())
+                    manifest["head"] = "e" * 40
+                    manifest_path.write_text(json.dumps(manifest))
+                events, inspections = [], []
+                with self.assertRaisesRegex(ValueError, error):
+                    self.run_candidate_build(args, packages, events, inspections)
+                self.assertNotIn("target-gate", events)
+                self.assertEqual(inspections, [])
+                self.assertFalse(args.package_artifacts.exists())
+
+    def test_build_and_build_one_cli_keep_dist_output_default(self):
+        for command, handler in (("build", "build"), ("build-one", "build_one")):
+            with self.subTest(command=command):
+                arguments = ["native.py", command]
+                if command == "build-one":
+                    arguments += ["--package", "alpha", "--baseline-root", "/baseline",
+                                  "--development-root", "/development"]
+                with patch.object(native, handler) as invoked, patch("sys.argv", arguments):
+                    native.main()
+                self.assertEqual(invoked.call_args.args[0].output, Path("dist"))
 
 
 if __name__ == "__main__":

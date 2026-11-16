@@ -4,6 +4,47 @@ on:
   schedule:
     - cron: '17 5 * * *'
   workflow_dispatch:
+    inputs:
+      candidate_pr:
+        description: Candidate pull request number
+        required: false
+        type: string
+      candidate_head_sha:
+        description: Candidate pull request head SHA
+        required: false
+        type: string
+      candidate_run_id:
+        description: Candidate build workflow run ID
+        required: false
+        type: string
+      candidate_run_attempt:
+        description: Candidate build workflow run attempt
+        required: false
+        type: string
+      candidate_package_artifact_id:
+        description: Candidate package artifact ID
+        required: false
+        type: string
+      candidate_package_artifact_name:
+        description: Candidate package artifact name
+        required: false
+        type: string
+      candidate_manifest_artifact_id:
+        description: Candidate manifest artifact ID
+        required: false
+        type: string
+      candidate_manifest_artifact_name:
+        description: Candidate manifest artifact name
+        required: false
+        type: string
+      candidate_manifest_sha256:
+        description: Candidate manifest SHA256
+        required: false
+        type: string
+      candidate_merge_sha:
+        description: Merge commit SHA that authorized the candidate
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -22,6 +63,30 @@ jobs:
     outputs:
       matrix: ${{ steps.dispatch.outputs.matrix }}
     steps:
+      - name: Reject partial candidate identity before discovery
+        env:
+          CANDIDATE_PR: ${{ inputs.candidate_pr }}
+          CANDIDATE_HEAD_SHA: ${{ inputs.candidate_head_sha }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          CANDIDATE_RUN_ATTEMPT: ${{ inputs.candidate_run_attempt }}
+          CANDIDATE_PACKAGE_ARTIFACT_ID: ${{ inputs.candidate_package_artifact_id }}
+          CANDIDATE_PACKAGE_ARTIFACT_NAME: ${{ inputs.candidate_package_artifact_name }}
+          CANDIDATE_MANIFEST_ARTIFACT_ID: ${{ inputs.candidate_manifest_artifact_id }}
+          CANDIDATE_MANIFEST_ARTIFACT_NAME: ${{ inputs.candidate_manifest_artifact_name }}
+          CANDIDATE_MANIFEST_SHA256: ${{ inputs.candidate_manifest_sha256 }}
+          CANDIDATE_MERGE_SHA: ${{ inputs.candidate_merge_sha }}
+        run: |
+          present=0
+          for value in "$CANDIDATE_PR" "$CANDIDATE_HEAD_SHA" "$CANDIDATE_RUN_ID" "$CANDIDATE_RUN_ATTEMPT" \
+            "$CANDIDATE_PACKAGE_ARTIFACT_ID" "$CANDIDATE_PACKAGE_ARTIFACT_NAME" \
+            "$CANDIDATE_MANIFEST_ARTIFACT_ID" "$CANDIDATE_MANIFEST_ARTIFACT_NAME" \
+            "$CANDIDATE_MANIFEST_SHA256" "$CANDIDATE_MERGE_SHA"; do
+            [[ -z "$value" ]] || ((present += 1))
+          done
+          if (( present != 0 && present != 10 )); then
+            echo "Release discovery requires either no candidate inputs or the complete candidate tuple." >&2
+            exit 1
+          fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -43,6 +108,20 @@ jobs:
         with:
           script: |
             const fs = require('node:fs');
+            const candidateKeys = [
+              'candidate_pr', 'candidate_head_sha', 'candidate_run_id', 'candidate_run_attempt',
+              'candidate_package_artifact_id', 'candidate_package_artifact_name',
+              'candidate_manifest_artifact_id', 'candidate_manifest_artifact_name',
+              'candidate_manifest_sha256', 'candidate_merge_sha',
+            ];
+            const eventInputs = context.payload.inputs || {};
+            const suppliedCandidateKeys = candidateKeys.filter(key => eventInputs[key]);
+            if (suppliedCandidateKeys.length !== 0 && suppliedCandidateKeys.length !== candidateKeys.length) {
+              throw new Error('Release discovery requires either no candidate inputs or the complete candidate tuple.');
+            }
+            const candidate = suppliedCandidateKeys.length
+              ? Object.fromEntries(candidateKeys.map(key => [key, eventInputs[key]]))
+              : null;
             const report = JSON.parse(fs.readFileSync('unraid-releases.json', 'utf8'));
             for (const release of report.blocked) {
               core.warning(`${release.checksum_error}; compatibility build not dispatched and not verified.`);
@@ -68,7 +147,8 @@ jobs:
             const pending = [];
             report.checks = [];
             for (const release of report.matrix.include) {
-              const title = `Unraid compatibility ${release.version} ${release.sha256} publish=true`;
+              const candidateSuffix = candidate ? ` candidate=${candidate.candidate_run_id}/${candidate.candidate_run_attempt}` : '';
+              const title = `Unraid compatibility ${release.version} ${release.sha256} publish=true${candidateSuffix}`;
               const matching = runs.filter(run => run.display_title === title && run.head_sha === context.sha);
               const successful = matching.find(run => run.conclusion === 'success');
               const active = matching.find(run => run.status !== 'completed');
@@ -90,17 +170,19 @@ jobs:
             for (const release of pending) {
               const check = report.checks.find(item => item.channel === release.channel && item.version === release.version);
               try {
+                const dispatchInputs = {
+                  unraid_version: release.version,
+                  unraid_sha256: release.sha256,
+                  unraid_url: release.url,
+                  channel: release.channel,
+                  publish: 'true',
+                };
+                if (candidate) Object.assign(dispatchInputs, candidate);
                 await github.rest.actions.createWorkflowDispatch({
                   ...repository,
                   workflow_id: 'build-packages.yml',
                   ref: repo.default_branch,
-                  inputs: {
-                    unraid_version: release.version,
-                    unraid_sha256: release.sha256,
-                    unraid_url: release.url,
-                    channel: release.channel,
-                    publish: 'true',
-                  },
+                  inputs: dispatchInputs,
                 });
               } catch (error) {
                 check.status = 'dispatch_failed';

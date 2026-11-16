@@ -39,8 +39,8 @@ EPOCH = os.environ.get("SOURCE_DATE_EPOCH") or str(BASELINE["source_date_epoch"]
 BUILDS = json.loads(os.environ.get("NERDTOOLS_BUILDS") or "{}")
 
 
-def artifact_name(package):
-    build = int(BUILDS.get(package["name"], 1))
+def artifact_name(package, build=None):
+    build = int(BUILDS.get(package["name"], 1) if build is None else build)
     return f"nerdtools-{package['name']}-{package['version'].replace('-', '_')}-x86_64-{build}_NT73.txz"
 
 
@@ -195,9 +195,44 @@ def load_packages():
 
 
 
-def inspect_package(archive, tool):
+def _normalizer_launcher_script(target):
+    return (
+        '#!/bin/sh\n'
+        'export PATH=/opt/nerdtools/bin:/opt/nerdtools/sbin:$PATH\n'
+        'export LD_LIBRARY_PATH=/opt/nerdtools/lib64:/opt/nerdtools/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}\n'
+        'export GI_TYPELIB_PATH=/opt/nerdtools/lib64/girepository-1.0${GI_TYPELIB_PATH:+:$GI_TYPELIB_PATH}\n'
+        'exec ' + shlex.quote(target) + ' "$@"\n'
+    )
+
+
+def _normalizer_launchers(members):
+    directories = {PRIVATE / "bin": "bin", PRIVATE / "sbin": "sbin"}
+    launchers = {}
+    names = set()
+    for member in members:
+        path = checked_path(member.name)
+        directory = directories.get(path.parent)
+        if directory is None or member.isdir():
+            continue
+        if not (member.issym() or (member.isfile() or member.islnk()) and member.mode & 0o111):
+            continue
+        name = path.name
+        if not NAME.fullmatch(name):
+            raise ValueError(f"Unsafe launcher name: {name}")
+        if name in names:
+            raise ValueError(f"Ambiguous launcher name: {name}")
+        names.add(name)
+        launcher = PurePosixPath("usr/local/bin") / ("nerdtools-" + name)
+        target = f"/opt/nerdtools/{directory}/{name}"
+        launchers[launcher] = _normalizer_launcher_script(target).encode()
+    return launchers
+
+
+def inspect_package(archive, tool, *, allow_normalizer_launchers=False):
     with tarfile.open(archive) as tar:
         members = tar.getmembers()
+        normalizer_launchers = (_normalizer_launchers(members)
+                                if allow_normalizer_launchers and tool != "rar" else {})
         regular = {checked_path(member.name) for member in members if member.isfile()}
         seen = set()
         locate_binaries = {PRIVATE / "bin" / name for name in ("plocate", "mlocate")}
@@ -208,7 +243,15 @@ def inspect_package(archive, tool):
             if not re.fullmatch(r"[A-Za-z0-9_+.,/ @%()-]+", member.name) or path in seen:
                 raise ValueError(f"Unsupported or duplicate package path: {member.name}")
             seen.add(path)
-            check_destination(tool, member, path)
+            launcher = normalizer_launchers.get(path)
+            if launcher is None:
+                check_destination(tool, member, path)
+            else:
+                contents = tar.extractfile(member) if member.isfile() else None
+                if (not member.isfile() or member.uid != 0 or member.gid != 0
+                        or member.mode & 0o7777 != 0o755 or contents is None
+                        or contents.read(len(launcher) + 1) != launcher):
+                    raise ValueError(f"Invalid normalizer-generated launcher: {member.name}")
             if member.isdir():
                 safe_directory(member)
             if member.name.lstrip("./") in INTEGRATION_DIGESTS:
@@ -296,7 +339,7 @@ def normalize_package(package, original, output, staging):
     for name, target in launchers.items():
         launcher = staging / "usr/local/bin" / ("nerdtools-" + name)
         launcher.parent.mkdir(parents=True, exist_ok=True)
-        launcher.write_text('#!/bin/sh\nexport PATH=/opt/nerdtools/bin:/opt/nerdtools/sbin:$PATH\nexport LD_LIBRARY_PATH=/opt/nerdtools/lib64:/opt/nerdtools/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}\nexport GI_TYPELIB_PATH=/opt/nerdtools/lib64/girepository-1.0${GI_TYPELIB_PATH:+:$GI_TYPELIB_PATH}\nexec ' + shlex.quote(target) + ' "$@"\n')
+        launcher.write_text(_normalizer_launcher_script(target))
         launcher.chmod(0o755)
     configs = sorted(str(path.relative_to(staging)) for path in staging.rglob("*.new") if path.is_file() and not path.is_symlink())
     if configs:
@@ -765,6 +808,260 @@ def checked_artifacts(packages, directory):
         raise ValueError("Incomplete or unexpected package artifact set")
     return {expected[entry.name]["name"]: entry for entry in entries}
 
+CANDIDATE_IDENTITY_FIELDS = ("repository", "pr", "head", "tree", "workflow", "run", "attempt", "artifact_name")
+CANDIDATE_MANIFEST_FIELDS = frozenset((
+    "schema", *CANDIDATE_IDENTITY_FIELDS, "baseline_version", "baseline_image_sha256",
+    "toolchain_sha256", "rebuild_generation", "source_date_epoch", "packages"))
+CANDIDATE_PACKAGE_FIELDS = frozenset(("name", "build", "build_key", "file", "sha256", "size"))
+
+
+def _candidate_identity(identity):
+    if not isinstance(identity, dict) or set(identity) != set(CANDIDATE_IDENTITY_FIELDS):
+        raise ValueError("Candidate identity has an invalid schema")
+    repository, workflow = identity["repository"], identity["workflow"]
+    if not isinstance(repository, str) or not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):
+        raise ValueError("Invalid candidate repository")
+    if not isinstance(workflow, str) or not workflow or "\0" in workflow:
+        raise ValueError("Invalid candidate workflow")
+    for field in ("pr", "run", "attempt"):
+        if type(identity[field]) is not int or identity[field] < 1:
+            raise ValueError(f"Invalid candidate {field}")
+    for field in ("head", "tree"):
+        if not isinstance(identity[field], str) or not re.fullmatch(r"(?:[a-f0-9]{40}|[a-f0-9]{64})", identity[field]):
+            raise ValueError(f"Invalid candidate {field} SHA")
+    if not isinstance(identity["artifact_name"], str) or not re.fullmatch(r"[A-Za-z0-9_.-]+", identity["artifact_name"]):
+        raise ValueError("Invalid candidate artifact name")
+    return {field: identity[field] for field in CANDIDATE_IDENTITY_FIELDS}
+
+
+def _candidate_plan(packages, plan):
+    if (not isinstance(packages, list) or not isinstance(plan, dict)
+            or set(plan) != {"build", "reuse", "builds"}):
+        raise ValueError("Invalid candidate build plan")
+    catalog = {}
+    all_names = set()
+    for package in packages:
+        if (not isinstance(package, dict) or not isinstance(package.get("name"), str)
+                or not NAME.fullmatch(package["name"]) or not isinstance(package.get("version"), str)
+                or not NAME.fullmatch(package["version"])):
+            raise ValueError("Invalid candidate package definition")
+        name = package["name"]
+        if name in all_names:
+            raise ValueError(f"Duplicate candidate package: {name}")
+        all_names.add(name)
+        if package.get("catalog", True):
+            catalog[name] = package
+
+    build = plan["build"]
+    reuse = plan["reuse"]
+    builds = plan["builds"]
+    if (not isinstance(build, list) or any(not isinstance(name, str) for name in build)
+            or len(set(build)) != len(build) or not isinstance(reuse, list) or not isinstance(builds, dict)):
+        raise ValueError("Invalid candidate build plan")
+    reuse_names, reuse_files = set(), set()
+    for record in reuse:
+        if not isinstance(record, dict) or set(record) != {"name", "file", "sha256"}:
+            raise ValueError("Invalid candidate reuse plan")
+        name, filename, sha256 = record["name"], record["file"], record["sha256"]
+        if (not isinstance(name, str) or not isinstance(filename, str)
+                or not re.fullmatch(r"[A-Za-z0-9_.+-]+\.txz", filename)
+                or not isinstance(sha256, str) or not SHA256.fullmatch(sha256)
+                or name in reuse_names or filename in reuse_files):
+            raise ValueError("Invalid candidate reuse plan")
+        reuse_names.add(name)
+        reuse_files.add(filename)
+
+    build_names = set(build)
+    if (not build_names or build_names & reuse_names
+            or build_names | reuse_names != set(catalog)
+            or set(builds) != set(catalog)
+            or any(type(number) is not int or number < 1 for number in builds.values())):
+        raise ValueError("Candidate plan does not partition the current catalog")
+    for record in reuse:
+        if record["file"] != artifact_name(catalog[record["name"]], builds[record["name"]]):
+            raise ValueError("Candidate reuse package does not match the current build")
+    expected_files = {}
+    for name in sorted(build_names):
+        filename = artifact_name(catalog[name], builds[name])
+        if filename in expected_files.values() or filename in reuse_files:
+            raise ValueError("Candidate and reuse package files overlap")
+        expected_files[name] = filename
+    return catalog, sorted(build_names), dict(sorted(builds.items())), expected_files
+
+
+def _candidate_file_hashes(package_dir, filenames):
+    try:
+        directory_fd = os.open(package_dir, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    except OSError as error:
+        raise ValueError("Candidate package directory is not a real directory") from error
+    try:
+        if set(os.listdir(directory_fd)) != set(filenames):
+            raise ValueError("Candidate package files do not match the plan")
+        hashes = {}
+        for filename in sorted(filenames):
+            try:
+                file_fd = os.open(filename, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                                  dir_fd=directory_fd)
+            except OSError as error:
+                raise ValueError(f"Candidate package is not a regular file: {filename}") from error
+            with os.fdopen(file_fd, "rb") as archive:
+                info = os.fstat(archive.fileno())
+                if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                    raise ValueError(f"Candidate package is not a regular file: {filename}")
+                if info.st_size < 1:
+                    raise ValueError(f"Candidate package is empty: {filename}")
+                sha256 = hashlib.file_digest(archive, "sha256").hexdigest()
+                final = os.fstat(archive.fileno())
+                if not stat.S_ISREG(final.st_mode) or final.st_nlink != 1 or final.st_size != info.st_size:
+                    raise ValueError(f"Candidate package changed while reading: {filename}")
+                hashes[filename] = {"sha256": sha256, "size": final.st_size}
+        return hashes
+    except OSError as error:
+        raise ValueError("Could not read candidate package files") from error
+    finally:
+        os.close(directory_fd)
+
+
+def _candidate_inputs(packages, plan, package_dir):
+    _, build_names, builds, filenames = _candidate_plan(packages, plan)
+    keys = build_keys(packages)
+    if not isinstance(keys, dict):
+        raise ValueError("Invalid package build keys")
+    for name in build_names:
+        if not isinstance(keys.get(name), str) or not SHA256.fullmatch(keys[name]):
+            raise ValueError(f"Invalid candidate build key: {name}")
+    hashes = _candidate_file_hashes(package_dir, set(filenames.values()))
+    return build_names, builds, filenames, keys, hashes
+
+
+def candidate_manifest(packages, plan, package_dir, identity):
+    """Seal the exact changed package set with its reuse keys and byte identities."""
+    identity = _candidate_identity(identity)
+    names, builds, filenames, keys, hashes = _candidate_inputs(packages, plan, package_dir)
+    records = []
+    for name in names:
+        filename = filenames[name]
+        records.append({"name": name, "build": builds[name], "build_key": keys[name],
+                        "file": filename, **hashes[filename]})
+    return {"schema": 1, **identity, "baseline_version": BASELINE["version"],
+            "baseline_image_sha256": BASELINE["image"]["sha256"],
+            "toolchain_sha256": digest(REPO / "build/locks/toolchain.json"),
+            "rebuild_generation": REBUILD_GENERATION, "source_date_epoch": int(EPOCH),
+            "packages": records}
+
+
+def write_candidate_manifest(path, manifest):
+    Path(path).write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+
+
+def verify_candidate_bundle(packages, plan, package_dir, manifest, expected):
+    """Verify a complete candidate against the current plan and return workflow outputs."""
+    expected = _candidate_identity(expected)
+    if not isinstance(manifest, dict) or set(manifest) != CANDIDATE_MANIFEST_FIELDS:
+        raise ValueError("Candidate manifest has an invalid schema")
+    identity = _candidate_identity({field: manifest[field] for field in CANDIDATE_IDENTITY_FIELDS})
+    if type(manifest["schema"]) is not int or manifest["schema"] != 1 or identity != expected:
+        raise ValueError("Candidate identity mismatch")
+    if (manifest["baseline_version"] != BASELINE["version"]
+            or manifest["baseline_image_sha256"] != BASELINE["image"]["sha256"]
+            or manifest["toolchain_sha256"] != digest(REPO / "build/locks/toolchain.json")
+            or type(manifest["rebuild_generation"]) is not int or manifest["rebuild_generation"] != REBUILD_GENERATION
+            or type(manifest["source_date_epoch"]) is not int or manifest["source_date_epoch"] < 0):
+        raise ValueError("Candidate build environment mismatch")
+
+    names, builds, filenames, keys, hashes = _candidate_inputs(packages, plan, package_dir)
+    records = manifest["packages"]
+    if (not isinstance(records, list) or len(records) != len(names)
+            or any(not isinstance(record, dict) for record in records)
+            or [record.get("name") for record in records] != names):
+        raise ValueError("Candidate package set does not match the current plan")
+    for record, name in zip(records, names):
+        if (not isinstance(record, dict) or set(record) != CANDIDATE_PACKAGE_FIELDS
+                or type(record["build"]) is not int or record["build"] != builds[name]
+                or not isinstance(record["build_key"], str) or record["build_key"] != keys[name]
+                or not isinstance(record["file"], str) or record["file"] != filenames[name]
+                or not isinstance(record["sha256"], str) or not SHA256.fullmatch(record["sha256"])
+                or type(record["size"]) is not int or record["size"] < 1):
+            raise ValueError(f"Invalid candidate package record: {name}")
+        actual = hashes[filenames[name]]
+        if record["sha256"] != actual["sha256"] or record["size"] != actual["size"]:
+            raise ValueError(f"Candidate package digest mismatch: {name}")
+    for name in names:
+        inspect_package(Path(package_dir) / filenames[name], name, allow_normalizer_launchers=True)
+    return {"builds": builds, "files": sorted(filenames.values())}
+
+
+def _json_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"Duplicate JSON key: {key}")
+        result[key] = value
+    return result
+
+
+def _read_json(path):
+    return json.loads(Path(path).read_text(), object_pairs_hook=_json_object)
+
+
+def assemble_candidate_artifacts(packages, expected_data, candidate_bundle, reuse_dir, destination):
+    """Reverify candidate bytes, then combine them with exact checksummed reuse artifacts."""
+    if not isinstance(expected_data, dict) or set(expected_data) != {"identity", "plan"}:
+        raise ValueError("Expected candidate JSON must contain identity and plan")
+    candidate_bundle = Path(candidate_bundle)
+    manifest_path = candidate_bundle / "candidate-manifest.json"
+    package_dir = candidate_bundle / "packages"
+    if (candidate_bundle.is_symlink() or not candidate_bundle.is_dir()
+            or {entry.name for entry in candidate_bundle.iterdir()} != {"candidate-manifest.json", "packages"}
+            or manifest_path.is_symlink() or not manifest_path.is_file()):
+        raise ValueError("Candidate artifact has an invalid layout")
+    manifest = _read_json(manifest_path)
+    result = verify_candidate_bundle(packages, expected_data["plan"], package_dir,
+                                     manifest, expected_data["identity"])
+    catalog, build_names, builds, candidate_filenames = _candidate_plan(packages, expected_data["plan"])
+    reuse = expected_data["plan"]["reuse"]
+    reuse_filenames = {record["file"] for record in reuse}
+    reuse_hashes = _candidate_file_hashes(reuse_dir, reuse_filenames)
+    for record in reuse:
+        if reuse_hashes[record["file"]]["sha256"] != record["sha256"]:
+            raise ValueError(f"Previous-release package digest mismatch: {record['file']}")
+
+    expected_files = set(candidate_filenames.values()) | reuse_filenames
+    if len(expected_files) != len(packages) - sum(not package.get("catalog", True) for package in packages):
+        raise ValueError("Candidate and reuse packages do not cover the current catalog")
+    destination = Path(destination)
+    if destination.exists():
+        if destination.is_symlink() or not destination.is_dir() or any(destination.iterdir()):
+            raise ValueError("Candidate package destination must be an empty real directory")
+    else:
+        destination.mkdir(parents=True)
+    manifest_records = {record["name"]: record for record in manifest["packages"]}
+    sources = [(package_dir / candidate_filenames[name], candidate_filenames[name],
+                manifest_records[name]["sha256"]) for name in build_names]
+    sources.extend((Path(reuse_dir) / record["file"], record["file"], record["sha256"])
+                   for record in reuse)
+    for source, filename, sha256 in sources:
+        target = destination / filename
+        if target.exists() or target.is_symlink():
+            raise ValueError(f"Refusing to overwrite package artifact: {filename}")
+        shutil.copyfile(source, target)
+        if digest(target) != sha256:
+            raise ValueError(f"Package artifact changed while assembling: {filename}")
+    if {entry.name for entry in destination.iterdir()} != expected_files:
+        raise ValueError("Candidate and reuse packages do not form the complete catalog")
+    for name in sorted(catalog):
+        inspect_package(destination / artifact_name(catalog[name], builds[name]), name,
+                        allow_normalizer_launchers=True)
+    return {"identity": expected_data["identity"], "manifest_sha256": digest(manifest_path),
+            "builds": result["builds"], "files": sorted(expected_files)}
+
+
+def _read_candidate_expected(path):
+    expected = _read_json(path)
+    if not isinstance(expected, dict) or set(expected) != {"identity", "plan"}:
+        raise ValueError("Expected candidate JSON must contain identity and plan")
+    return expected
+
 
 def build(args):
     if os.geteuid() != 0 or sys.platform != "linux" or os.uname().machine != "x86_64":
@@ -781,6 +1078,19 @@ def build(args):
     output.mkdir(parents=True, exist_ok=True)
     if any(output.iterdir()):
         raise ValueError("Output directory must be empty")
+    candidate_origin = None
+    if getattr(args, "candidate_artifacts", None) is not None:
+        if (args.package_artifacts is None or args.reuse_artifacts is None
+                or args.candidate_expected_json is None):
+            raise ValueError("Candidate builds require candidate, reuse, and expected artifacts")
+        candidate_origin = assemble_candidate_artifacts(
+            packages, _read_candidate_expected(args.candidate_expected_json), args.candidate_artifacts,
+            args.reuse_artifacts, args.package_artifacts)
+        shutil.copyfile(Path(args.candidate_artifacts) / "candidate-manifest.json",
+                        output / "candidate-manifest.json")
+    elif (getattr(args, "candidate_expected_json", None) is not None
+          or getattr(args, "reuse_artifacts", None) is not None):
+        raise ValueError("Candidate build options must be supplied together")
     args.work.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="nerdtools-", dir=args.work) as temporary:
         work = Path(temporary)
@@ -846,6 +1156,9 @@ def build(args):
                       "carried_over_from": os.environ.get("NERDTOOLS_PREVIOUS_RELEASE") or None,
                       "baseline": BASELINE, "packages": packages,
                       "toolchain": json.loads((REPO / "build/locks/toolchain.json").read_text())}
+        if candidate_origin:
+            provenance["candidate_identity"] = candidate_origin["identity"]
+            provenance["candidate_manifest_sha256"] = candidate_origin["manifest_sha256"]
         (output / f"provenance-{fam}.json").write_text(json.dumps(provenance, indent=2) + "\n")
         report = {"status": "passed", "target_version": args.unraid_version, "target_sha256": args.unraid_sha256,
                   "channel": args.channel, "baseline": BASELINE["version"], "elf_files_checked": checked,
@@ -865,7 +1178,8 @@ def build(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("build", "build-one", "validate", "pin-recipes", "sandbox-check", "plan", "keys"))
+    parser.add_argument("command", choices=("build", "build-one", "validate", "pin-recipes", "sandbox-check",
+                                            "plan", "keys", "candidate-create", "candidate-verify"))
     parser.add_argument("--previous", type=Path, help="Directory holding a published release's build-keys.json and catalog (plan only)")
     parser.add_argument("--package", help="Package to build with its transitive dependencies (build-one only)")
     parser.add_argument("--unraid-version", default=BASELINE["version"])
@@ -873,16 +1187,65 @@ def main():
     parser.add_argument("--unraid-sha256", default=BASELINE["image"]["sha256"])
     parser.add_argument("--channel", choices=("stable", "next"), default="stable")
     parser.add_argument("--publish", action="store_true")
-    parser.add_argument("--output", type=Path, default=Path("dist"))
+    parser.add_argument("--output", type=Path)
     parser.add_argument("--baseline-root", type=Path)
     parser.add_argument("--development-root", type=Path)
     parser.add_argument("--source-bundle", type=Path)
-    parser.add_argument("--package-artifacts", type=Path, help="Complete same-run normalized package artifacts (full-catalog build only)")
+    parser.add_argument("--package-artifacts", type=Path, help="Same-run normalized package artifacts")
     parser.add_argument("--reuse", type=Path, help="Verified unchanged dependency packages from the previous release (build-one only)")
+    parser.add_argument("--candidate-artifacts", type=Path, help="Same-run verified candidate artifact bundle (build only)")
+    parser.add_argument("--candidate-expected-json", type=Path, help="Current plan and candidate identity (build only)")
+    parser.add_argument("--reuse-artifacts", type=Path, help="Checksum-verified previous-release packages (candidate build only)")
     parser.add_argument("--work", type=Path, default=Path(os.environ.get("RUNNER_TEMP", tempfile.gettempdir())))
+    parser.add_argument("--plan", type=Path)
+    parser.add_argument("--manifest", type=Path)
+    parser.add_argument("--expected-json", type=Path)
+    parser.add_argument("--repository")
+    parser.add_argument("--pr", type=int)
+    parser.add_argument("--head")
+    parser.add_argument("--tree")
+    parser.add_argument("--workflow")
+    parser.add_argument("--run", type=int)
+    parser.add_argument("--attempt", type=int)
+    parser.add_argument("--artifact-name")
     args = parser.parse_args()
+    candidate_fields = (args.plan, args.manifest, args.expected_json, args.repository, args.pr,
+                        args.head, args.tree, args.workflow, args.run, args.attempt, args.artifact_name)
+    if args.command not in ("candidate-create", "candidate-verify") and any(value is not None for value in candidate_fields):
+        parser.error("Candidate options require candidate-create or candidate-verify")
+    candidate_build_fields = (args.candidate_artifacts, args.candidate_expected_json, args.reuse_artifacts)
+    if any(value is not None for value in candidate_build_fields):
+        if args.command != "build":
+            parser.error("Candidate build artifacts require the full-catalog build gate")
+        if any(value is None for value in candidate_build_fields) or args.package_artifacts is None:
+            parser.error("Candidate builds require package, candidate, reuse, and expected artifacts")
     if args.package and args.command != "build-one":
         parser.error("--package is only valid with build-one; full-catalog builds cannot be narrowed")
+    if args.package_artifacts and args.command not in ("build", "candidate-create", "candidate-verify"):
+        parser.error("--package-artifacts requires the full-catalog or candidate command")
+    if args.command == "candidate-create":
+        required = (args.package_artifacts, args.plan, args.output, args.repository, args.pr, args.head,
+                    args.tree, args.workflow, args.run, args.attempt, args.artifact_name)
+        if any(value is None for value in required) or args.manifest or args.expected_json or args.publish:
+            parser.error("candidate-create requires package artifacts, plan, output and complete identity; publication is not allowed")
+        identity = {field: getattr(args, field) for field in CANDIDATE_IDENTITY_FIELDS}
+        identity["artifact_name"] = args.artifact_name
+        write_candidate_manifest(args.output, candidate_manifest(load_packages(), _read_json(args.plan),
+                                                                  args.package_artifacts, identity))
+        return
+    if args.command == "candidate-verify":
+        if (args.package_artifacts is None or args.manifest is None or args.expected_json is None
+                or any(value is not None for value in (args.plan, args.output, args.repository, args.pr,
+                                                       args.head, args.tree, args.workflow, args.run,
+                                                       args.attempt, args.artifact_name)) or args.publish):
+            parser.error("candidate-verify requires package artifacts, manifest and expected JSON only")
+        expected_data = _read_candidate_expected(args.expected_json)
+        result = verify_candidate_bundle(load_packages(), expected_data["plan"], args.package_artifacts,
+                                         _read_json(args.manifest), expected_data["identity"])
+        print(json.dumps(result, sort_keys=True))
+        return
+    if args.output is None and args.command in ("build", "build-one"):
+        args.output = Path("dist")
     if args.package_artifacts and args.command != "build":
         parser.error("--package-artifacts requires the full-catalog build gate")
     if args.command == "build-one":

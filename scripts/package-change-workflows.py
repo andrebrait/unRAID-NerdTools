@@ -57,11 +57,12 @@ def catalog_jobs(packages):
     graph = catalog_dependencies(packages)
     jobs = [BEGIN]
     for name, deps in graph.items():
-        needs = ", ".join(["package-list"] + [f"package-{dep}" for dep in deps])
-        same_run = " || ".join(f"contains(needs.package-list.outputs.names, '\"{dep}\"')" for dep in deps)
+        needs = ", ".join(["package-list", "candidate"] + [f"package-{dep}" for dep in deps])
+        same_run = " || ".join(
+            f"contains(needs.candidate.outputs.compile_names, '\"{dep}\"')" for dep in deps)
         jobs.append(f"""  package-{name}:
     needs: [{needs}]
-    if: ${{{{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.package-list.outputs.names, '"{name}"') }}}}
+    if: ${{{{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && contains(needs.candidate.outputs.compile_names, '"{name}"') }}}}
     uses: ./.github/workflows/package-build.yml
     with:
       package: "{name}"
@@ -74,8 +75,8 @@ def catalog_jobs(packages):
 """)
     jobs.append(f"""  # Fails when any package job failed or was cancelled; skipped jobs are carried over.
   packages:
-    needs: [package-list, {", ".join(f"package-{name}" for name in graph)}]
-    if: ${{{{ !cancelled() && needs.package-list.result == 'success' }}}}
+    needs: [package-list, candidate, {", ".join(f"package-{name}" for name in graph)}]
+    if: ${{{{ !cancelled() && needs.package-list.result == 'success' && needs.candidate.result == 'success' }}}}
     runs-on: ubuntu-24.04
     steps:
       - name: Require every planned package job to succeed
