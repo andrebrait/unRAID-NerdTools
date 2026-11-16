@@ -1,27 +1,99 @@
-.package {
-    cursor: pointer;
-}
 #package_form {
     margin-top: -10px;
 }
-.switch-button-label.off {
-    color: inherit;
+#package_form .wrapper {
+    overflow-x: auto;
 }
-.uptodate {
-    color:#44B012;
-    white-space:nowrap;
+.catalog-status {
+    list-style: none;
+    padding: 0;
+    margin: 0.5rem 0 1rem;
 }
-.updateready, .update {
-    white-space:nowrap;
-    cursor: pointer;
+.catalog-status li {
+    margin: 0.125rem 0;
 }
-.uninstalled, .installed {
-    white-space:nowrap;
-    cursor: inherit;
+.catalog-status strong {
+    font-weight: 600;
 }
-table.tablesorter tbody td.wrapper  {
+.pkgaction {
+    min-width: 7rem;
+}
+.version-value {
+    white-space: nowrap;
+    font-weight: 400;
+}
+.planned-change {
     white-space: nowrap;
 }
-table.tablesorter .checked  {
-    width: 90px;
+.package-action-changed .pkgaction {
+    font-weight: 700;
+}
+table.tablesorter tbody tr td.package-remove {
+    background-color: rgb(198 40 40 / 22%) !important;
+}
+table.tablesorter tbody tr td.package-install {
+    background-color: rgb(46 125 50 / 22%) !important;
+}
+table.tablesorter tbody tr td.package-upgrade {
+    background-color: rgb(21 101 192 / 22%) !important;
+}
+table.tablesorter tbody tr td.package-update-available {
+    background-color: rgb(249 168 37 / 22%) !important;
+}
+table.tablesorter tbody tr td.package-remove:first-child {
+    border-left: 0.25rem solid rgb(198 40 40);
+}
+table.tablesorter tbody tr td.package-install:first-child {
+    border-left: 0.25rem solid rgb(46 125 50);
+}
+table.tablesorter tbody tr td.package-upgrade:first-child {
+    border-left: 0.25rem solid rgb(21 101 192);
+}
+table.tablesorter tbody tr td.package-update-available:first-child {
+    border-left: 0.25rem solid rgb(249 168 37);
+}
+.package-version-update {
+    font-weight: 600;
+}
+.package-change-selected {
+    font-weight: 600;
+}
+#package_plan_dialog {
+    width: min(50rem, calc(100vw - 2rem));
+    max-height: calc(100vh - 2rem);
+    padding: 0;
+    color: CanvasText;
+    background: Canvas;
+    border: 1px solid ButtonBorder;
+}
+#package_plan_dialog::backdrop {
+    background: rgb(0 0 0 / 55%);
+}
+.package-plan-dialog {
+    padding: 1rem;
+}
+#package_plan_table {
+    width: 100%;
+    border-collapse: collapse;
+}
+#package_plan_table th,
+#package_plan_table td {
+    padding: 0.5rem;
+    text-align: left;
+    border-bottom: 1px solid ButtonBorder;
+}
+.package-plan-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+@media (max-width: 40rem) {
+    #package_plan_dialog {
+        width: calc(100vw - 1rem);
+        max-height: calc(100vh - 1rem);
+    }
+    .package-plan-dialog {
+        padding: 0.75rem;
+    }
 }

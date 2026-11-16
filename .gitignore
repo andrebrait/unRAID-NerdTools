@@ -7,3 +7,6 @@ develop/rsync.txt
 __pycache__/
 *.py[cod]
 dist/
+
+graphify-out/cache/hook_sessions/
+graphify-out/cache/last_query_stamp
