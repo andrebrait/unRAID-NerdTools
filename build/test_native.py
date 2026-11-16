@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import tarfile
 import tempfile
+import textwrap
 import unittest
 import zipfile
 from types import SimpleNamespace
@@ -609,6 +610,69 @@ class CandidateArtifactTests(unittest.TestCase):
                 self.packages, plan or self.plan, package_dir or self.package_dir,
                 manifest, expected or self.identity)
 
+    def candidate_validation_script(self):
+        workflow = (native.REPO / ".github/workflows/build-packages.yml").read_text()
+        step = workflow.index("      - name: Validate exact candidate run and artifact identities\n")
+        start = workflow.index("        run: |\n", step) + len("        run: |\n")
+        end = workflow.index("\n      - name: Download the exact source-run candidate package artifact", start)
+        return "\n".join(line[10:] for line in workflow[start:end].splitlines())
+
+    def run_candidate_build(self, args, packages, events, inspections):
+        original_inspect = native.inspect_package
+        builds = json.loads(args.candidate_expected_json.read_text())["plan"]["builds"]
+
+        def inspect(archive, tool):
+            inspections.append((Path(archive), tool))
+            events.append("inspect")
+            return original_inspect(archive, tool)
+
+        with patch.object(native.os, "geteuid", return_value=0), \
+                patch.object(native, "validate_target"), \
+                patch.object(native, "load_packages", return_value=packages), \
+                patch.object(native, "publication_blockers", return_value=[]), \
+                patch.object(native, "prepared_roots", return_value=(self.root, self.root, self.root)), \
+                patch.object(native, "require_slocate_group"), \
+                patch.object(native, "require_provided"), \
+                patch.object(native, "fetch"), \
+                patch.object(native, "build_keys", return_value=self.keys), \
+                patch.object(native, "inspect_package", side_effect=inspect), \
+                patch.object(native, "prepare_image", side_effect=lambda *call_args, **kwargs:
+                             events.append("target-gate")), \
+                patch.object(native, "install_payload"), \
+                patch.object(native, "audit_runtime", return_value=1), \
+                patch.object(native, "kernel_smoke", return_value="target-kernel"), \
+                patch.object(native, "asset_limits"), \
+                patch.object(native, "BUILDS", builds):
+            native.build(args)
+
+    def candidate_build_fixture(self, name):
+        plan = {"build": ["zed"],
+                "reuse": [{"name": "alpha", "file": self.files["alpha"],
+                           "sha256": hashlib.sha256((self.package_dir / self.files["alpha"]).read_bytes()).hexdigest()}],
+                "builds": {"zed": 2, "alpha": 4}}
+        candidate_bundle = self.root / f"{name}-candidate"
+        candidate_packages = candidate_bundle / "packages"
+        candidate_packages.mkdir(parents=True)
+        shutil.copyfile(self.package_dir / self.files["zed"], candidate_packages / self.files["zed"])
+        reuse_dir = self.root / f"{name}-reuse"
+        reuse_dir.mkdir()
+        shutil.copyfile(self.package_dir / self.files["alpha"], reuse_dir / self.files["alpha"])
+        native.write_candidate_manifest(candidate_bundle / "candidate-manifest.json",
+                                        self.make_manifest(plan=plan, package_dir=candidate_packages))
+        expected_path = self.root / f"{name}-expected.json"
+        expected_path.write_text(json.dumps({"identity": self.identity, "plan": plan}))
+        packages = [{**package, "dependencies": [], "inputs": []} for package in self.packages]
+        args = SimpleNamespace(
+            unraid_version="7.3.4", unraid_url="https://example.invalid/image.zip",
+            unraid_sha256="a" * 64, publish=False, channel="stable",
+            output=self.root / f"{name}-dist", work=self.root / f"{name}-work",
+            baseline_root=self.root / "baseline", development_root=self.root / "development",
+            source_bundle=None, package_artifacts=self.root / f"{name}-package-artifacts",
+            candidate_artifacts=candidate_bundle, candidate_expected_json=expected_path,
+            reuse_artifacts=reuse_dir,
+        )
+        return plan, candidate_bundle, candidate_packages, reuse_dir, packages, args
+
     def clone(self, value):
         return json.loads(json.dumps(value))
 
@@ -894,57 +958,181 @@ class CandidateArtifactTests(unittest.TestCase):
         subprocess.run(["bash", "-c", script], check=True, env=environment)
         self.assertIn("names=[]\n", output.read_text())
 
-    def test_candidate_final_build_merges_verified_bytes_before_target_gates(self):
-        plan = {"build": ["zed"],
-                "reuse": [{"name": "alpha", "file": self.files["alpha"],
-                           "sha256": hashlib.sha256((self.package_dir / self.files["alpha"]).read_bytes()).hexdigest()}],
-                "builds": {"zed": 2, "alpha": 4}}
-        candidate_bundle = self.root / "candidate-bundle"
-        candidate_packages = candidate_bundle / "packages"
-        candidate_packages.mkdir(parents=True)
-        shutil.copyfile(self.package_dir / self.files["zed"], candidate_packages / self.files["zed"])
-        reuse_dir = self.root / "reuse"
-        reuse_dir.mkdir()
-        shutil.copyfile(self.package_dir / self.files["alpha"], reuse_dir / self.files["alpha"])
-        manifest = self.make_manifest(plan=plan, package_dir=candidate_packages)
-        native.write_candidate_manifest(candidate_bundle / "candidate-manifest.json", manifest)
-        expected_path = self.root / "expected.json"
-        expected_path.write_text(json.dumps({"identity": self.identity, "plan": plan}))
-        package_artifacts = self.root / "package-artifacts"
-        output = self.root / "dist"
-        work = self.root / "work"
-        packages = [{**package, "dependencies": [], "inputs": []} for package in self.packages]
-        events = []
-        original_inspect = native.inspect_package
-        args = SimpleNamespace(
-            unraid_version="7.3.4", unraid_url="https://example.invalid/image.zip",
-            unraid_sha256="a" * 64, publish=False, channel="stable", output=output, work=work,
-            baseline_root=self.root / "baseline", development_root=self.root / "development",
-            source_bundle=None, package_artifacts=package_artifacts,
-            candidate_artifacts=candidate_bundle, candidate_expected_json=expected_path,
-            reuse_artifacts=reuse_dir,
-        )
+    def test_candidate_workflow_validation_checks_exact_run_attempt_and_artifacts(self):
+        script = self.candidate_validation_script()
+        mock_bin = self.root / "mock-bin"
+        mock_bin.mkdir()
+        gh_path = mock_bin / "gh"
+        gh_path.write_text(textwrap.dedent("""\
+            #!/usr/bin/env python3
+            import json, os, sys
+            args = sys.argv[1:]
+            endpoint = args[1]
+            with open(os.environ["MOCK_GH_LOG"], "a") as log:
+                log.write(endpoint + "\\n")
+            if "--jq" in args:
+                selector = args[args.index("--jq") + 1]
+                if selector == ".path":
+                    print(os.environ["MOCK_WORKFLOW_PATH"])
+                elif selector == ".commit.tree.sha":
+                    print(os.environ["MOCK_TREE"])
+                else:
+                    raise SystemExit("unexpected gh --jq selector: " + selector)
+            elif "/attempts/" in endpoint:
+                print(os.environ["MOCK_RUN"])
+            elif "/pulls/" in endpoint:
+                print(os.environ["MOCK_PULL"])
+            elif "/actions/artifacts/" in endpoint:
+                artifact_id = endpoint.rsplit("/", 1)[1]
+                print(json.dumps(json.loads(os.environ["MOCK_ARTIFACTS"])[artifact_id]))
+            else:
+                raise SystemExit("unexpected gh endpoint: " + endpoint)
+        """))
+        jq_path = mock_bin / "jq"
+        jq_path.write_text(textwrap.dedent("""\
+            #!/usr/bin/env python3
+            import json, sys
+            args = sys.argv[1:]
+            variables, flags = {}, set()
+            expression = None
+            index = 0
+            while index < len(args):
+                token = args[index]
+                if token in ("--arg", "--argjson"):
+                    key, value = args[index + 1:index + 3]
+                    variables[key] = json.loads(value) if token == "--argjson" else value
+                    index += 3
+                elif token.startswith("-"):
+                    flags.add(token)
+                    index += 1
+                else:
+                    expression = token
+                    index += 1
+            if "-cn" in flags or "-n" in flags:
+                if "repository:$repository" in expression:
+                    value = {key: variables[key] for key in
+                             ("repository", "pr", "head", "tree", "workflow", "run", "attempt", "artifact")}
+                    value["artifact_name"] = value.pop("artifact")
+                elif "identity:$identity" in expression:
+                    value = {"identity": variables["identity"], "plan": variables["plan"]}
+                else:
+                    raise SystemExit("unexpected jq constructor")
+                print(json.dumps(value, separators=(",", ":")))
+                raise SystemExit(0)
+            data = json.load(sys.stdin)
+            if expression == ".workflow_id":
+                value = data["workflow_id"]
+            elif ".workflow_run.id" in expression:
+                value = (data.get("id") == variables["id"]
+                         and data.get("name") == variables["name"]
+                         and data.get("expired") is False
+                         and data.get("workflow_run", {}).get("id") == variables["run"]
+                         and data.get("workflow_run", {}).get("head_sha") == variables["head"]
+                         and data.get("workflow_run", {}).get("head_branch") == "automation/upstream-recipes")
+            elif ".number == $pr" in expression:
+                value = (data.get("number") == variables["pr"] and data.get("state") == "closed"
+                         and data.get("merged") is True and data.get("merge_commit_sha") == variables["merge"]
+                         and data.get("head", {}).get("sha") == variables["head"]
+                         and data.get("head", {}).get("repo", {}).get("full_name") == variables["repo"])
+            elif ".id == $run" in expression:
+                value = (data.get("id") == variables["run"]
+                         and data.get("run_attempt") == variables["attempt"]
+                         and data.get("head_sha") == variables["head"]
+                         and data.get("head_branch") == "automation/upstream-recipes"
+                         and data.get("event") == "workflow_dispatch"
+                         and data.get("status") == "completed"
+                         and data.get("conclusion") == "success")
+            else:
+                raise SystemExit("unexpected jq filter: " + expression)
+            if "-e" in flags:
+                print("true" if value else "false")
+                raise SystemExit(0 if value else 1)
+            print(value if "-r" in flags else json.dumps(value))
+        """))
+        gh_path.chmod(0o755)
+        jq_path.chmod(0o755)
 
-        with patch.object(native.os, "geteuid", return_value=0), \
-                patch.object(native, "validate_target"), \
-                patch.object(native, "load_packages", return_value=packages), \
-                patch.object(native, "publication_blockers", return_value=[]), \
-                patch.object(native, "prepared_roots", return_value=(self.root, self.root, self.root)), \
-                patch.object(native, "require_slocate_group"), \
-                patch.object(native, "require_provided"), \
-                patch.object(native, "fetch"), \
-                patch.object(native, "build_keys", return_value=self.keys), \
-                patch.object(native, "inspect_package",
-                             side_effect=lambda *call_args: (events.append("inspect"),
-                                                             original_inspect(*call_args))[1]), \
-                patch.object(native, "prepare_image", side_effect=lambda *call_args, **kwargs:
-                             events.append("target-gate")), \
-                patch.object(native, "install_payload"), \
-                patch.object(native, "audit_runtime", return_value=1), \
-                patch.object(native, "kernel_smoke", return_value="target-kernel"), \
-                patch.object(native, "asset_limits"), \
-                patch.object(native, "BUILDS", plan["builds"]):
-            native.build(args)
+        repository, head, tree, merge = "example/unraid-nerdtools", "c" * 40, "d" * 40, "e" * 40
+        package_name, manifest_name = "candidate-packages-12345-2", "candidate-manifest-12345-2"
+        run = {"id": 12345, "run_attempt": 2, "head_sha": head, "head_branch": "automation/upstream-recipes",
+               "event": "workflow_dispatch", "status": "completed", "conclusion": "success", "workflow_id": 99}
+        pull = {"number": 17, "state": "closed", "merged": True, "merge_commit_sha": merge,
+                "head": {"sha": head, "repo": {"full_name": repository}}}
+        workflow_run = {"id": 12345, "head_sha": head, "head_branch": "automation/upstream-recipes"}
+        artifacts = {
+            "551": {"id": 551, "name": package_name, "expired": False, "workflow_run": workflow_run},
+            "552": {"id": 552, "name": manifest_name, "expired": False, "workflow_run": workflow_run},
+        }
+        inputs = {
+            "CANDIDATE_PR": "17", "CANDIDATE_HEAD_SHA": head, "CANDIDATE_RUN_ID": "12345",
+            "CANDIDATE_RUN_ATTEMPT": "2", "CANDIDATE_PACKAGE_ARTIFACT_ID": "551",
+            "CANDIDATE_PACKAGE_ARTIFACT_NAME": package_name, "CANDIDATE_MANIFEST_ARTIFACT_ID": "552",
+            "CANDIDATE_MANIFEST_ARTIFACT_NAME": manifest_name, "CANDIDATE_MANIFEST_SHA256": "a" * 64,
+            "CANDIDATE_MERGE_SHA": merge,
+        }
+
+        def run_case(name, run_changes=None, artifact_changes=None, input_changes=None):
+            case = self.root / name
+            case.mkdir()
+            source_run = {**run, **(run_changes or {})}
+            source_artifacts = self.clone(artifacts)
+            for artifact_id, changes in (artifact_changes or {}).items():
+                source_artifacts[artifact_id].update(changes)
+            environment = os.environ.copy()
+            environment.update({
+                **inputs, **(input_changes or {}),
+                "PATH": str(mock_bin) + os.pathsep + os.environ["PATH"],
+                "GH_TOKEN": "test-token", "GH_REPO": repository, "CANDIDATE_MODE": "true",
+                "BUILDS": '{"alpha":4,"zed":2}',
+                "PLAN": '{"build":["zed"],"reuse":[],"builds":{"alpha":4,"zed":2}}',
+                "RUNNER_TEMP": str(case), "GITHUB_OUTPUT": str(case / "outputs"),
+                "MOCK_RUN": json.dumps(source_run), "MOCK_PULL": json.dumps(pull),
+                "MOCK_ARTIFACTS": json.dumps(source_artifacts), "MOCK_WORKFLOW_PATH": ".github/workflows/build-packages.yml",
+                "MOCK_TREE": tree, "MOCK_GH_LOG": str(case / "gh.log"),
+            })
+            result = subprocess.run(["bash", "-c", script], env=environment, capture_output=True, text=True)
+            return result, case
+
+        valid, valid_case = run_case("valid")
+        self.assertEqual(valid.returncode, 0, valid.stderr)
+        outputs = dict(line.split("=", 1) for line in (valid_case / "outputs").read_text().splitlines())
+        identity = json.loads(outputs["candidate_identity"])
+        self.assertEqual(identity, {
+            "repository": repository, "pr": 17, "head": head, "tree": tree, "workflow": "build-packages.yml",
+            "run": 12345, "attempt": 2, "artifact_name": package_name,
+        })
+        self.assertEqual(json.loads((valid_case / "candidate-expected.json").read_text()),
+                         {"identity": identity, "plan": json.loads('{"build":["zed"],"reuse":[],"builds":{"alpha":4,"zed":2}}')})
+        calls = (valid_case / "gh.log").read_text().splitlines()
+        self.assertIn(f"repos/{repository}/actions/runs/12345/attempts/2", calls)
+        self.assertIn(f"repos/{repository}/actions/artifacts/551", calls)
+        self.assertIn(f"repos/{repository}/actions/artifacts/552", calls)
+
+        invalid_cases = (
+            ("wrong-run", {"id": 99999}, None, None),
+            ("wrong-attempt", {"run_attempt": 3}, None, None),
+            ("wrong-artifact-id", None, {"551": {"id": 999}}, None),
+            ("wrong-artifact-name", None, {"551": {"name": "other-artifact"}}, None),
+            ("incomplete-inputs", None, None, {"CANDIDATE_MANIFEST_SHA256": ""}),
+            ("failed-source-run", {"conclusion": "failure"}, None, None),
+        )
+        for name, run_changes, artifact_changes, input_changes in invalid_cases:
+            with self.subTest(case=name):
+                result, _ = run_case(name, run_changes, artifact_changes, input_changes)
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+
+    def test_candidate_final_build_merges_verified_bytes_before_target_gates(self):
+        plan, candidate_bundle, candidate_packages, reuse_dir, packages, args = self.candidate_build_fixture("final")
+        package_artifacts, output = args.package_artifacts, args.output
+        events, inspections = [], []
+        self.run_candidate_build(args, packages, events, inspections)
+
+        self.assertEqual(inspections, [
+            (candidate_packages / self.files["zed"], "zed"),
+            (package_artifacts / self.files["alpha"], "alpha"),
+            (package_artifacts / self.files["zed"], "zed"),
+        ])
+        self.assertEqual(events, ["inspect", "inspect", "inspect", "target-gate"])
 
         self.assertEqual(events[0], "inspect")
         self.assertLess(events.index("inspect"), events.index("target-gate"))
@@ -978,6 +1166,26 @@ class CandidateArtifactTests(unittest.TestCase):
                          hashlib.sha256((output / "candidate-manifest.json").read_bytes()).hexdigest())
         self.assertIn("candidate-manifest.json", (output / "SHA256SUMS").read_text())
         self.assertFalse((self.root / "bad-reuse").exists())
+
+    def test_final_candidate_build_reverifies_package_and_manifest_before_target_preparation(self):
+        for name, error, tamper in (
+                ("package", "Candidate package digest mismatch", "package"),
+                ("manifest", "Candidate identity mismatch", "manifest")):
+            with self.subTest(artifact=name):
+                _, candidate_bundle, candidate_packages, _, packages, args = self.candidate_build_fixture(name)
+                manifest_path = candidate_bundle / "candidate-manifest.json"
+                if tamper == "package":
+                    (candidate_packages / self.files["zed"]).write_bytes(b"corrupted reuploaded package")
+                else:
+                    manifest = json.loads(manifest_path.read_text())
+                    manifest["head"] = "e" * 40
+                    manifest_path.write_text(json.dumps(manifest))
+                events, inspections = [], []
+                with self.assertRaisesRegex(ValueError, error):
+                    self.run_candidate_build(args, packages, events, inspections)
+                self.assertNotIn("target-gate", events)
+                self.assertEqual(inspections, [])
+                self.assertFalse(args.package_artifacts.exists())
 
     def test_build_and_build_one_cli_keep_dist_output_default(self):
         for command, handler in (("build", "build"), ("build-one", "build_one")):

@@ -975,7 +975,7 @@ def assemble_candidate_artifacts(packages, expected_data, candidate_bundle, reus
     manifest = _read_json(manifest_path)
     result = verify_candidate_bundle(packages, expected_data["plan"], package_dir,
                                      manifest, expected_data["identity"])
-    _, build_names, _, candidate_filenames = _candidate_plan(packages, expected_data["plan"])
+    catalog, build_names, builds, candidate_filenames = _candidate_plan(packages, expected_data["plan"])
     reuse = expected_data["plan"]["reuse"]
     reuse_filenames = {record["file"] for record in reuse}
     reuse_hashes = _candidate_file_hashes(reuse_dir, reuse_filenames)
@@ -1006,6 +1006,8 @@ def assemble_candidate_artifacts(packages, expected_data, candidate_bundle, reus
             raise ValueError(f"Package artifact changed while assembling: {filename}")
     if {entry.name for entry in destination.iterdir()} != expected_files:
         raise ValueError("Candidate and reuse packages do not form the complete catalog")
+    for name in sorted(catalog):
+        inspect_package(destination / artifact_name(catalog[name], builds[name]), name)
     return {"identity": expected_data["identity"], "manifest_sha256": digest(manifest_path),
             "builds": result["builds"], "files": sorted(expected_files)}
 
