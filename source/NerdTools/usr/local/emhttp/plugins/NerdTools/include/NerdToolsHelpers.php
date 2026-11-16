@@ -156,6 +156,19 @@ function nt_update_kind($record, $name, $package) {
     if ($current === null) return null;
     return version_compare($package['version'], $current, '<') ? 'downgrade' : 'upgrade';
 }
+function nt_package_actions($current, $ownedName, $package, $external, $owned) {
+    $updateKind = $current !== null && !$external && $owned
+        ? nt_update_kind($current, $ownedName, $package) : null;
+    $actions = ['keep'];
+    if (!$external) {
+        if ($current === null) $actions[] = 'install';
+        else {
+            if ($updateKind !== null) $actions[] = $updateKind;
+            if ($owned) $actions[] = 'remove';
+        }
+    }
+    return ['update_kind'=>$updateKind, 'actions'=>$actions];
+}
 function nt_canonical($value) {
     if (!is_array($value)) return $value;
     if (!array_is_list($value)) ksort($value, SORT_STRING);

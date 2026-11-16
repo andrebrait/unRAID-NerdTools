@@ -158,6 +158,9 @@ $legacyPackage = $planPackage('nerdtools-tool','1.0'); $legacyPackage['tool'] = 
 $legacyRecord = 'tool-1.0-x86_64-1_nerdtools';
 check(nt_update_kind($legacyRecord,'tool',$legacyPackage) === 'upgrade',
     'Same-version legacy migration is offered as an upgrade action');
+$legacyActions = nt_package_actions($legacyRecord,'tool',$legacyPackage,false,true);
+check($legacyActions['update_kind'] === 'upgrade' && in_array('upgrade',$legacyActions['actions'],true),
+    'Legacy migration query response offers Upgrade');
 $legacyPlan = nt_plan(['nerdtools-tool'=>$legacyPackage],
     ['tool'=>['record'=>$legacyRecord,'dependencies'=>[]]],[$legacyRecord],
     ['tool'=>'yes','update_check_hours'=>'24'],['nerdtools-tool'=>'upgrade'],24);

@@ -18,16 +18,8 @@ try {
         }
         $installedVersion = $current === null ? null : nt_package_version($current, $current === ($entry['record'] ?? null) ? $ownedName : $name);
         $exact = $current === nt_record($package['file']);
-        $updateKind = $current !== null && !$external && $entry
-            ? nt_update_kind($current, $ownedName, $package) : null;
-        $actions = ['keep'];
-        if (!$external) {
-            if ($current === null) $actions[] = 'install';
-            else {
-                if ($updateKind !== null) $actions[] = $updateKind;
-                if ($entry) $actions[] = 'remove';
-            }
-        }
+        $packageActions = nt_package_actions($current,$ownedName,$package,$external,$entry !== null);
+        $updateKind = $packageActions['update_kind']; $actions = $packageActions['actions'];
         $selected = nt_preference($config,$name) === 'yes';
         $packages[] = [
             'name'=>$name, 'tool'=>$tool, 'file'=>$package['file'], 'version'=>$package['version'],
