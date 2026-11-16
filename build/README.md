@@ -165,7 +165,7 @@ Notifications for the same workflow and source revision are serialized with GitH
 
 Preparation, publication and maintainer retry jobs share the `upstream-recipe-issue-writes` concurrency group. Only these issue-writing jobs wait for one another; provider execution does not hold that lock. A retry during provider execution invalidates the saved plan, while a retry during publication runs after the writer finishes. This prevents a publication failure from overwriting the retry between its issue read and write.
 
-Under **Settings → Actions → General**, enable **Allow GitHub Actions to create and approve pull requests**; the controller uses creation only. Protect `main` with required CI and human approval, dismiss stale approvals and give automation no bypass.
+Under **Settings → Actions → General**, enable **Allow GitHub Actions to create and approve pull requests**; the controller uses creation only. Protect `main` with human approval, dismiss stale approvals and give automation no bypass.
 
 ### Candidate promotion for maintainers
 
