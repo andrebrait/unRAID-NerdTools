@@ -112,9 +112,19 @@ jobs:
       - name: Validate checked recipes, pins, dependency closure, and complete catalog
         run: python3 build/native.py validate
 
+  candidate-workflow-validation:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Exercise candidate run validation with hosted jq
+        working-directory: build
+        run: python3 -m unittest test_native.CandidateArtifactTests.test_candidate_workflow_validation_checks_exact_run_attempt_and_artifacts
+
   package-list:
     if: github.event_name == 'workflow_dispatch'
-    needs: validate
+    needs: [validate, candidate-workflow-validation]
     runs-on: ubuntu-24.04
     outputs:
       names: ${{ steps.packages.outputs.names }}
