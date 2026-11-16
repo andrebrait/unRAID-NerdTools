@@ -1268,9 +1268,19 @@ jobs:
           )
           tree=$(git rev-parse "$HEAD^{tree}")
           mkdir candidate-packages
-          while IFS= read -r package; do
-            cp package-artifacts/nerdtools-"$package"-*.txz candidate-packages/
-          done < <(jq -r '.build[]' "$plan")
+          python3 - "$plan" <<'PY'
+          import json, shutil, sys
+          from pathlib import Path
+          sys.path.insert(0, "build")
+          import native
+          packages = {package["name"]: package for package in native.load_packages()}
+          plan = json.loads(Path(sys.argv[1]).read_text())
+          for name in plan["build"]:
+              package = packages[name]
+              filename = native.artifact_name(package, plan["builds"][name])
+              shutil.copyfile(Path("package-artifacts") / filename,
+                              Path("candidate-packages") / filename)
+          PY
           python3 build/native.py candidate-create \
             --package-artifacts candidate-packages --plan "$plan" --output candidate-manifest.json \
             --repository "$REPOSITORY" --pr "$pr" --head "$HEAD" --tree "$tree" \
