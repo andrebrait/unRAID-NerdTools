@@ -189,7 +189,7 @@
   },
   "cksfv/cksfv.SlackBuild": {
     "executable": true,
-    "sha256": "46c1bf154e5bc47d31f058f04b1cb21d1fb0cc51d4d6f63c63c1405bac3c07c5",
+    "sha256": "7564779554cc820c0cbbe7513a29139ad72fad3b32f988c0a1ea37ff6f2b7847",
     "type": "file"
   },
   "cksfv/slack-desc": {

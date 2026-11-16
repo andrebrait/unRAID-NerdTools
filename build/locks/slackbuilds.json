@@ -233,7 +233,7 @@
     "name": "cksfv",
     "version": "1.3.14",
     "recipe": "build/recipes/cksfv/cksfv.SlackBuild",
-    "recipe_sha256": "46c1bf154e5bc47d31f058f04b1cb21d1fb0cc51d4d6f63c63c1405bac3c07c5",
+    "recipe_sha256": "7564779554cc820c0cbbe7513a29139ad72fad3b32f988c0a1ea37ff6f2b7847",
     "provenance": {
       "kind": "source",
       "url": "https://git.slackbuilds.org/slackbuilds/tree/misc/cksfv?id=61c20c2400f83c5911a54921b62682cc38410afc",
