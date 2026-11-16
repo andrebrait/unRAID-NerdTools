@@ -30,7 +30,7 @@ function automaticAction(state) {
         ? state.change : null;
 }
 function syncActionDisplay(row, action) {
-    row.attr('data-action', action).toggleClass('package-changed', actionIsEmphasized(action));
+    row.toggleClass('package-changed', actionIsEmphasized(action));
     row.find('.pkgaction').val(action)
         .toggleClass('package-action-selected', actionIsEmphasized(action));
 }

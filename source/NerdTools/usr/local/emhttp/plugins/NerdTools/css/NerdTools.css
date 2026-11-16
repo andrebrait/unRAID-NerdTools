@@ -16,38 +16,41 @@
 .pkgaction.package-action-selected {
     font-weight: 700;
 }
-table.tablesorter tbody tr[data-action="remove"] {
+table.tablesorter tbody tr:has(.pkgaction option[value="remove"]:checked) {
     background-color: rgb(198 40 40 / 22%) !important;
 }
-table.tablesorter tbody tr[data-action="install"] {
+table.tablesorter tbody tr:has(.pkgaction option[value="install"]:checked) {
     background-color: rgb(46 125 50 / 22%) !important;
 }
-table.tablesorter tbody tr[data-action="upgrade"],
-table.tablesorter tbody tr[data-action="downgrade"] {
+table.tablesorter tbody tr:has(.pkgaction option[value="upgrade"]:checked),
+table.tablesorter tbody tr:has(.pkgaction option[value="downgrade"]:checked) {
     background-color: rgb(21 101 192 / 22%) !important;
 }
-table.tablesorter tbody tr.package-has-update[data-action="keep"] {
+table.tablesorter tbody tr.package-has-update:has(.pkgaction option[value="keep"]:checked) {
     background-color: rgb(249 168 37 / 22%) !important;
 }
-table.tablesorter tbody tr[data-action="remove"] td:first-child {
+table.tablesorter tbody tr:has(.pkgaction option[value="remove"]:checked) td:first-child {
     border-left: 0.25rem solid rgb(198 40 40);
 }
-table.tablesorter tbody tr[data-action="install"] td:first-child {
+table.tablesorter tbody tr:has(.pkgaction option[value="install"]:checked) td:first-child {
     border-left: 0.25rem solid rgb(46 125 50);
 }
-table.tablesorter tbody tr[data-action="upgrade"] td:first-child,
-table.tablesorter tbody tr[data-action="downgrade"] td:first-child {
+table.tablesorter tbody tr:has(.pkgaction option[value="upgrade"]:checked) td:first-child,
+table.tablesorter tbody tr:has(.pkgaction option[value="downgrade"]:checked) td:first-child {
     border-left: 0.25rem solid rgb(21 101 192);
 }
-table.tablesorter tbody tr.package-has-update[data-action="keep"] td:first-child {
+table.tablesorter tbody tr.package-has-update:has(.pkgaction option[value="keep"]:checked) td:first-child {
     border-left: 0.25rem solid rgb(249 168 37);
 }
-.package-has-update[data-action="keep"] .version-value,
-[data-action="upgrade"] .version-value,
-[data-action="downgrade"] .version-value {
+.package-has-update:has(.pkgaction option[value="keep"]:checked) .version-value,
+tr:has(.pkgaction option[value="upgrade"]:checked) .version-value,
+tr:has(.pkgaction option[value="downgrade"]:checked) .version-value {
     font-weight: 600;
 }
-[data-action]:not([data-action="keep"]) .planned-change {
+tr:has(.pkgaction option[value="remove"]:checked) .planned-change,
+tr:has(.pkgaction option[value="install"]:checked) .planned-change,
+tr:has(.pkgaction option[value="upgrade"]:checked) .planned-change,
+tr:has(.pkgaction option[value="downgrade"]:checked) .planned-change {
     font-weight: 600;
 }
 #package_plan_dialog {

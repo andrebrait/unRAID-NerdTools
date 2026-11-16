@@ -30,22 +30,21 @@ assert.equal(context.actionLabel('keep', false), '-', 'uninstalled Keep displays
 assert.equal(context.actionLabel('keep', true), 'Keep', 'installed Keep keeps its label');
 assert.equal(context.actionIsEmphasized('keep'), false, 'Keep action is not emphasized');
 assert.equal(context.actionIsEmphasized('install'), true, 'non-keep action is emphasized');
-const visual = {action: null, selected: null, emphasized: null};
+const visual = {selected: null, emphasized: null};
 const fakeSelect = {
     val: value => { visual.selected = value; return fakeSelect; },
     toggleClass: (_name, value) => { visual.emphasized = value; return fakeSelect; },
 };
 const fakeRow = {
-    attr: (_name, value) => { visual.action = value; return fakeRow; },
     toggleClass: () => fakeRow,
     find: () => fakeSelect,
 };
 context.syncActionDisplay(fakeRow, 'remove');
-assert.deepEqual(visual, {action: 'remove', selected: 'remove', emphasized: true},
-    'row action attribute, selector, and emphasis update atomically');
+assert.deepEqual(visual, {selected: 'remove', emphasized: true},
+    'selector and emphasis update atomically');
 context.syncActionDisplay(fakeRow, 'keep');
-assert.deepEqual(visual, {action: 'keep', selected: 'keep', emphasized: false},
-    'Keep atomically clears action visuals');
+assert.deepEqual(visual, {selected: 'keep', emphasized: false},
+    'Keep atomically clears action emphasis');
 assert.equal(context.automaticAction({automatic: true, change: 'remove'}), 'remove',
     'automatic removal selects Remove');
 assert.equal(context.automaticAction({automatic: true, change: 'upgrade'}), 'upgrade',
