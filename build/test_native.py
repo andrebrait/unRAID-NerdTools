@@ -958,6 +958,7 @@ class CandidateArtifactTests(unittest.TestCase):
         subprocess.run(["bash", "-c", script], check=True, env=environment)
         self.assertIn("names=[]\n", output.read_text())
 
+    @unittest.skipUnless(shutil.which("jq"), "requires real jq to verify workflow predicates")
     def test_candidate_workflow_validation_checks_exact_run_attempt_and_artifacts(self):
         script = self.candidate_validation_script()
         mock_bin = self.root / "mock-bin"
@@ -988,69 +989,7 @@ class CandidateArtifactTests(unittest.TestCase):
             else:
                 raise SystemExit("unexpected gh endpoint: " + endpoint)
         """))
-        jq_path = mock_bin / "jq"
-        jq_path.write_text(textwrap.dedent("""\
-            #!/usr/bin/env python3
-            import json, sys
-            args = sys.argv[1:]
-            variables, flags = {}, set()
-            expression = None
-            index = 0
-            while index < len(args):
-                token = args[index]
-                if token in ("--arg", "--argjson"):
-                    key, value = args[index + 1:index + 3]
-                    variables[key] = json.loads(value) if token == "--argjson" else value
-                    index += 3
-                elif token.startswith("-"):
-                    flags.add(token)
-                    index += 1
-                else:
-                    expression = token
-                    index += 1
-            if "-cn" in flags or "-n" in flags:
-                if "repository:$repository" in expression:
-                    value = {key: variables[key] for key in
-                             ("repository", "pr", "head", "tree", "workflow", "run", "attempt", "artifact")}
-                    value["artifact_name"] = value.pop("artifact")
-                elif "identity:$identity" in expression:
-                    value = {"identity": variables["identity"], "plan": variables["plan"]}
-                else:
-                    raise SystemExit("unexpected jq constructor")
-                print(json.dumps(value, separators=(",", ":")))
-                raise SystemExit(0)
-            data = json.load(sys.stdin)
-            if expression == ".workflow_id":
-                value = data["workflow_id"]
-            elif ".workflow_run.id" in expression:
-                value = (data.get("id") == variables["id"]
-                         and data.get("name") == variables["name"]
-                         and data.get("expired") is False
-                         and data.get("workflow_run", {}).get("id") == variables["run"]
-                         and data.get("workflow_run", {}).get("head_sha") == variables["head"]
-                         and data.get("workflow_run", {}).get("head_branch") == "automation/upstream-recipes")
-            elif ".number == $pr" in expression:
-                value = (data.get("number") == variables["pr"] and data.get("state") == "closed"
-                         and data.get("merged") is True and data.get("merge_commit_sha") == variables["merge"]
-                         and data.get("head", {}).get("sha") == variables["head"]
-                         and data.get("head", {}).get("repo", {}).get("full_name") == variables["repo"])
-            elif ".id == $run" in expression:
-                value = (data.get("id") == variables["run"]
-                         and data.get("run_attempt") == variables["attempt"]
-                         and data.get("head_sha") == variables["head"]
-                         and data.get("head_branch") == "automation/upstream-recipes"
-                         and data.get("event") == "workflow_dispatch"
-                         and data.get("status") == "completed"
-                         and data.get("conclusion") == "success")
-            else:
-                raise SystemExit("unexpected jq filter: " + expression)
-            if "-e" in flags:
-                print("true" if value else "false")
-                raise SystemExit(0 if value else 1)
-            print(value if "-r" in flags else json.dumps(value))
-        """))
         gh_path.chmod(0o755)
-        jq_path.chmod(0o755)
 
         repository, head, tree, merge = "example/unraid-nerdtools", "c" * 40, "d" * 40, "e" * 40
         package_name, manifest_name = "candidate-packages-12345-2", "candidate-manifest-12345-2"
@@ -1071,7 +1010,7 @@ class CandidateArtifactTests(unittest.TestCase):
             "CANDIDATE_MERGE_SHA": merge,
         }
 
-        def run_case(name, run_changes=None, artifact_changes=None, input_changes=None):
+        def run_case(name, run_changes=None, artifact_changes=None, input_changes=None, script_to_run=None):
             case = self.root / name
             case.mkdir()
             source_run = {**run, **(run_changes or {})}
@@ -1090,7 +1029,8 @@ class CandidateArtifactTests(unittest.TestCase):
                 "MOCK_ARTIFACTS": json.dumps(source_artifacts), "MOCK_WORKFLOW_PATH": ".github/workflows/build-packages.yml",
                 "MOCK_TREE": tree, "MOCK_GH_LOG": str(case / "gh.log"),
             })
-            result = subprocess.run(["bash", "-c", script], env=environment, capture_output=True, text=True)
+            result = subprocess.run(["bash", "-c", script if script_to_run is None else script_to_run],
+                                    env=environment, capture_output=True, text=True)
             return result, case
 
         valid, valid_case = run_case("valid")
@@ -1107,6 +1047,10 @@ class CandidateArtifactTests(unittest.TestCase):
         self.assertIn(f"repos/{repository}/actions/runs/12345/attempts/2", calls)
         self.assertIn(f"repos/{repository}/actions/artifacts/551", calls)
         self.assertIn(f"repos/{repository}/actions/artifacts/552", calls)
+        mutated_script = script.replace(".run_attempt == $attempt", ".run_attempt != $attempt", 1)
+        self.assertNotEqual(mutated_script, script)
+        mutated, _ = run_case("mutated-attempt-predicate", script_to_run=mutated_script)
+        self.assertNotEqual(mutated.returncode, 0, mutated.stdout)
 
         invalid_cases = (
             ("wrong-run", {"id": 99999}, None, None),
