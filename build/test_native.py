@@ -623,12 +623,15 @@ class CandidateArtifactTests(unittest.TestCase):
 
     def _rewrite_package_archive(self, source, destination, *, remove_launcher=False,
                                  extra_name=None, extra_type=tarfile.REGTYPE,
-                                 extra_payload=b"host launcher"):
+                                 extra_payload=b"host launcher", launcher_metadata=None):
         launcher = native.PurePosixPath("usr/local/bin/nerdtools-cksfv")
         with tarfile.open(source, "r:xz") as original, tarfile.open(destination, "w:xz") as rewritten:
             for member in original.getmembers():
                 if remove_launcher and native.checked_path(member.name) == launcher:
                     continue
+                if launcher_metadata and native.checked_path(member.name) == launcher:
+                    for attribute, value in launcher_metadata.items():
+                        setattr(member, attribute, value)
                 stream = original.extractfile(member) if member.isfile() else None
                 rewritten.addfile(member, stream)
             if extra_name is not None:
@@ -770,6 +773,25 @@ class CandidateArtifactTests(unittest.TestCase):
                                              extra_payload=payload)
                 with self.assertRaises(ValueError):
                     native.inspect_package(hostile, "cksfv", allow_normalizer_launchers=True)
+
+    def test_candidate_rejects_normalized_launcher_with_invalid_mode_or_ownership(self):
+        package = self._make_normalized_cksfv()
+        packages = [{"name": "cksfv", "version": "1.3.14"}]
+        plan = {"build": ["cksfv"], "reuse": [], "builds": {"cksfv": 3}}
+        candidate_dir = self.root / "hostile-candidate"
+        candidate_dir.mkdir()
+        for attribute, value in (("mode", 0o700), ("uid", 1000), ("gid", 1000)):
+            with self.subTest(attribute=attribute, value=value):
+                self._rewrite_package_archive(
+                    package, candidate_dir / package.name,
+                    launcher_metadata={attribute: value})
+                with patch.object(native, "build_keys", return_value={"cksfv": "a" * 64}):
+                    manifest = native.candidate_manifest(
+                        packages, plan, candidate_dir, self.identity)
+                    with self.assertRaisesRegex(
+                            ValueError, "Invalid normalizer-generated launcher: .*nerdtools-cksfv"):
+                        native.verify_candidate_bundle(
+                            packages, plan, candidate_dir, manifest, self.identity)
 
     def test_manifest_is_deterministic_sorted_and_binds_changed_packages(self):
         manifest = self.make_manifest()
