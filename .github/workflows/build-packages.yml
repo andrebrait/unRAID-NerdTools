@@ -192,12 +192,14 @@ jobs:
     outputs:
       authorized: ${{ steps.authorize.outputs.authorized }}
       merge_sha: ${{ steps.authorize.outputs.merge_sha }}
+      source_pr: ${{ steps.authorize.outputs.source_pr }}
     steps:
       - name: Authorize merged candidate pull request
         id: authorize
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
           CANDIDATE_MODE: ${{ needs.package-list.outputs.candidate_mode }}
           CANDIDATE_PR: ${{ inputs.candidate_pr }}
           CANDIDATE_HEAD_SHA: ${{ inputs.candidate_head_sha }}
@@ -205,9 +207,14 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "$CANDIDATE_MODE" != true ]]; then
+            pulls=$(gh api -H "Accept: application/vnd.github+json" \
+              "repos/$GH_REPO/commits/${GITHUB_SHA}/pulls?per_page=100")
+            source_pr=$(jq -r --arg head "$GITHUB_SHA" --arg repo "$GH_REPO" \
+              '[.[] | select(.state == "open" and .head.ref == "automation/upstream-recipes" and .head.sha == $head and .head.repo.full_name == $repo)] | if length == 1 then .[0].number else "" end' <<<"$pulls")
             {
               echo "authorized=false"
               echo "merge_sha="
+              echo "source_pr=$source_pr"
             } >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -222,6 +229,7 @@ jobs:
           {
             echo "authorized=true"
             echo "merge_sha=$CANDIDATE_MERGE_SHA"
+            echo "source_pr="
           } >> "$GITHUB_OUTPUT"
 
   candidate:
@@ -1380,7 +1388,7 @@ jobs:
 
   build:
     if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && needs.package-list.result == 'success' && needs.packages.result == 'success' && needs.candidate.result == 'success' }}
-    needs: [package-list, candidate, packages]
+    needs: [package-list, candidate, candidate-authorization, packages]
     permissions:
       contents: read
       actions: read
@@ -1502,11 +1510,11 @@ jobs:
           if-no-files-found: error
           retention-days: 90
       - name: Seal plan build packages for candidate promotion
-        if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/upstream-recipes' && inputs.publish == false && needs.package-list.outputs.names != '[]' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/upstream-recipes' && inputs.publish == false && needs.candidate.outputs.active != 'true' && needs.package-list.outputs.names != '[]' }}
         env:
-          GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           HEAD: ${{ github.sha }}
+          SOURCE_PR: ${{ needs.candidate-authorization.outputs.source_pr }}
           RUN_ID: ${{ github.run_id }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
           ARTIFACT_NAME: candidate-packages-${{ github.run_id }}-${{ github.run_attempt }}
@@ -1514,26 +1522,8 @@ jobs:
         run: |
           plan="$RUNNER_TEMP/candidate-plan.json"
           printf '%s\n' "$PLAN" > "$plan"
-          pr=$(python3 - <<'PY'
-          import json, os, urllib.request
-          repository, head = os.environ['REPOSITORY'], os.environ['HEAD']
-          request = urllib.request.Request(
-              f"https://api.github.com/repos/{repository}/commits/{head}/pulls?per_page=100",
-              headers={"Accept": "application/vnd.github+json",
-                       "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
-                       "X-GitHub-Api-Version": "2022-11-28"})
-          with urllib.request.urlopen(request, timeout=30) as response:
-              pulls = json.load(response)
-          matches = [pull for pull in pulls
-                     if pull.get("state") == "open"
-                     and pull.get("head", {}).get("ref") == "automation/upstream-recipes"
-                     and pull.get("head", {}).get("sha") == head
-                     and (pull.get("head", {}).get("repo") or {}).get("full_name") == repository]
-          if len(matches) != 1:
-              raise SystemExit("Expected exactly one open automation/upstream-recipes PR for this commit")
-          print(matches[0]["number"])
-          PY
-          )
+          [[ "$SOURCE_PR" =~ ^[1-9][0-9]*$ ]]
+          pr=$SOURCE_PR
           tree=$(git rev-parse "$HEAD^{tree}")
           mkdir candidate-packages
           python3 - "$plan" <<'PY'
@@ -1555,7 +1545,7 @@ jobs:
             --workflow build-packages.yml --run "$RUN_ID" --attempt "$RUN_ATTEMPT" \
             --artifact-name "$ARTIFACT_NAME"
       - name: Upload changed-package candidate artifact
-        if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/upstream-recipes' && inputs.publish == false && needs.package-list.outputs.names != '[]' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/upstream-recipes' && inputs.publish == false && needs.candidate.outputs.active != 'true' && needs.package-list.outputs.names != '[]' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: candidate-packages-${{ github.run_id }}-${{ github.run_attempt }}
@@ -1563,7 +1553,7 @@ jobs:
           if-no-files-found: error
           retention-days: 90
       - name: Upload candidate manifest artifact
-        if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/upstream-recipes' && inputs.publish == false && needs.package-list.outputs.names != '[]' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/upstream-recipes' && inputs.publish == false && needs.candidate.outputs.active != 'true' && needs.package-list.outputs.names != '[]' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: candidate-manifest-${{ github.run_id }}-${{ github.run_attempt }}

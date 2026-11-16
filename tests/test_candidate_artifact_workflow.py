@@ -11,6 +11,7 @@ WORKFLOW = Path(__file__).resolve().parents[1] / '.github/workflows/build-packag
 TRUSTED_GUARD = (
     "github.event_name == 'workflow_dispatch' && "
     "github.ref == 'refs/heads/automation/upstream-recipes' && inputs.publish == false && "
+    "needs.candidate.outputs.active != 'true' && "
     "needs.package-list.outputs.names != '[]'"
 )
 
