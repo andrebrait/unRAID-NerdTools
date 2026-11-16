@@ -38,14 +38,14 @@ Unraid's plugin boot hook restores only selected, previously owned versions whos
 
 The **Package release** selector lists retained published package releases. Select a tag, choose **Use Release**, select Downgrade for the packages you want, then choose **Apply** and review the transaction. An incompatible or invalid catalog is rejected without changing the current cache. A specific release stays pinned across reboot and scheduled checks. Choose **Latest compatible release** to resume following new releases. Packages unavailable in the chosen release retain their preferences; an owned selected package absent from that catalog remains installed until explicitly removed.
 
-The equivalent CLI is:
+The CLI can perform a bulk reconciliation against a retained release:
 
 ```
 /usr/local/emhttp/plugins/NerdTools/scripts/packagemanager --release=packages-<retained-tag>
 /usr/local/emhttp/plugins/NerdTools/scripts/packagemanager --download --uninstall
 ```
 
-Use `--release=latest` to unpin, `--check --force` to refresh the current selection, and `--help` for all commands. These commands are intended only on the supported Unraid host.
+`--download --uninstall` processes every selected package against the retained catalog and can downgrade packages not individually chosen in the GUI. It does not use the selective confirmation plan. Use `--release=latest` to unpin, `--check --force` to refresh the current selection, and `--help` for all commands. These commands are intended only on the supported Unraid host.
 
 ## Upgrades and removal
 

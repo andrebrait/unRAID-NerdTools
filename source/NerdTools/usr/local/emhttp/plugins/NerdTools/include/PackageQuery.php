@@ -17,10 +17,9 @@ try {
             if ($record !== ($entry['record'] ?? null)) $external = true;
         }
         $installedVersion = $current === null ? null : nt_package_version($current, $current === ($entry['record'] ?? null) ? $ownedName : $name);
-        $exact = $current === nt_record($package['file']); $updateKind = null;
-        if ($current !== null && !$exact && !$external && $installedVersion !== null) {
-            $updateKind = version_compare($package['version'], $installedVersion) > 0 ? 'upgrade' : 'downgrade';
-        }
+        $exact = $current === nt_record($package['file']);
+        $updateKind = $current !== null && !$external && $entry
+            ? nt_update_kind($current, $ownedName, $package) : null;
         $actions = ['keep'];
         if (!$external) {
             if ($current === null) $actions[] = 'install';

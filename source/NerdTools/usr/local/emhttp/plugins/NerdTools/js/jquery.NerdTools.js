@@ -5,6 +5,8 @@ var planRevision = 0;
 var catalogRevision = 0;
 var planQueued = false;
 var confirmingPlanId = null;
+var displayedPlanId = null;
+var displayedPlanRevision = null;
 var actionLabels = {keep: 'Keep', install: 'Install', upgrade: 'Upgrade', downgrade: 'Downgrade', remove: 'Remove'};
 var changeLabels = {
     'no-change': 'No change',
@@ -42,6 +44,7 @@ $(function() {
     $('#package_plan_dialog').on('cancel', function(event) {
         if (!canCancelConfirmation()) event.preventDefault();
     }).on('close', function() {
+        displayedPlanId = null; displayedPlanRevision = null;
         $('#package_plan_error').text('').prop('hidden', true);
     });
     $('#btnRelease').on('click', function() {
@@ -85,6 +88,9 @@ function isCatalogResponseCurrent(revision) {
 }
 function isConfirmationCurrent(revision, id) {
     return revision === planRevision && nerdPlan !== null && nerdPlan.id === id;
+}
+function isDisplayedPlanCurrent() {
+    return displayedPlanRevision === planRevision && nerdPlan !== null && displayedPlanId === nerdPlan.id;
 }
 function canCancelConfirmation() {
     return confirmingPlanId === null;
@@ -206,6 +212,7 @@ function renderPlan(plan) {
 function Apply() {
     if (!nerdLoaded || !nerdPlan) { packageError('Wait for the package plan to finish.'); return; }
     if (!nerdPlan.changes.length) return;
+    displayedPlanId = nerdPlan.id; displayedPlanRevision = planRevision;
     var body = $('#package_plan_table tbody').empty();
     $.each(nerdPlan.changes, function(_, change) {
         var from = change.from || '—'; var to = change.to || '—';
@@ -222,8 +229,12 @@ function Apply() {
     document.getElementById('btnPlanCancel').focus();
 }
 function confirmPlan() {
-    if (!nerdPlan) return;
-    var revision = planRevision; var planId = nerdPlan.id;
+    if (!isDisplayedPlanCurrent()) {
+        document.getElementById('package_plan_dialog').close();
+        packageError('Package state changed. Review the refreshed plan before confirming.');
+        return;
+    }
+    var revision = displayedPlanRevision; var planId = displayedPlanId;
     var data = planData('confirm'); data.plan = planId; confirmingPlanId = planId;
     $('#btnPlanCancel, #btnPlanConfirm').prop('disabled', true);
     $.post('/plugins/NerdTools/include/Settings.php', data).done(function(response) {

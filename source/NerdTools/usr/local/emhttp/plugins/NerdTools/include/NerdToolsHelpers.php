@@ -148,6 +148,14 @@ function nt_package_version($record, $name) {
         && preg_match('/^'.preg_quote($name, '/').'-([A-Za-z0-9][A-Za-z0-9+_.]*)-(?:x86_64|noarch|i[3-6]86)-[^-]+$/D', $record, $match)
         ? $match[1] : null;
 }
+function nt_update_kind($record, $name, $package) {
+    if (!is_string($record) || !is_string($name) || !is_array($package)
+        || !is_string($package['file'] ?? null) || !is_string($package['version'] ?? null)
+        || $record === nt_record($package['file'])) return null;
+    $current = nt_package_version($record, $name);
+    if ($current === null) return null;
+    return version_compare($package['version'], $current, '<') ? 'downgrade' : 'upgrade';
+}
 function nt_canonical($value) {
     if (!is_array($value)) return $value;
     if (!array_is_list($value)) ksort($value, SORT_STRING);
@@ -204,10 +212,9 @@ function nt_plan($packages, $owned, $installed, $config, $actions, $hours, $cata
         if ($state['external'] && $intent !== 'keep') throw new RuntimeException('Externally managed packages cannot be changed');
         if ($intent === 'install' && (!$package || $state['installed'])) throw new RuntimeException('Package cannot be installed');
         if (in_array($intent, ['upgrade','downgrade'], true)) {
-            if (!$package || !$state['installed'] || !$state['owned'] || $current === null || $current === $target) {
-                throw new RuntimeException('Package cannot be updated');
-            }
-            $direction = version_compare($target, $current) > 0 ? 'upgrade' : 'downgrade';
+            $direction = $package && $state['installed'] && $state['owned']
+                ? nt_update_kind($state['record'], $state['owned_name'], $package) : null;
+            if ($direction === null) throw new RuntimeException('Package cannot be updated');
             if ($intent !== $direction) throw new RuntimeException('Package update direction changed');
         }
         if ($intent === 'remove' && !$state['owned']) throw new RuntimeException('Package cannot be removed');
@@ -216,9 +223,12 @@ function nt_plan($packages, $owned, $installed, $config, $actions, $hours, $cata
         elseif ($intent === 'remove') $preferences[$name] = 'no';
         $intents[$name] = $intent;
     }
-    $graph = $packages;
+    $graph = [];
     foreach ($states as $name => $state) {
-        if (!isset($graph[$name])) $graph[$name] = ['dependencies'=>$state['owned']['dependencies'] ?? []];
+        $replace = in_array($intents[$name], ['install','upgrade','downgrade'], true);
+        $dependencies = $state['package'] && (!$state['installed'] || $replace)
+            ? $state['package']['dependencies'] : ($state['owned']['dependencies'] ?? []);
+        $graph[$name] = ['dependencies'=>$dependencies];
     }
     $selected = [];
     foreach ($preferences as $name => $value) if ($value === 'yes') $selected[] = $name;
@@ -240,6 +250,9 @@ function nt_plan($packages, $owned, $installed, $config, $actions, $hours, $cata
     }
     foreach ($requestedRoots as $root) {
         foreach (nt_resolve([$root], $packages) as $name) {
+            if ($states[$name]['external']) {
+                throw new RuntimeException('Required dependency is externally managed: '.$name);
+            }
             if (!$states[$name]['installed']) {
                 $operations[$name] = ['change'=>'install','automatic'=>$name !== $root,'reason'=>$name === $root ? '' : 'Required by '.$root];
             }
@@ -258,10 +271,8 @@ function nt_plan($packages, $owned, $installed, $config, $actions, $hours, $cata
         if (!isset($packages[$name])) {
             throw new RuntimeException('Installed dependent is unavailable from this release: '.$name);
         }
-        $current = nt_package_version($states[$name]['record'], $states[$name]['owned_name']);
-        if ($current === null) throw new RuntimeException('Cannot determine installed package version: '.$name);
-        if ($current === $packages[$name]['version']) return false;
-        $change = version_compare($packages[$name]['version'], $current) > 0 ? 'upgrade' : 'downgrade';
+        $change = nt_update_kind($states[$name]['record'], $states[$name]['owned_name'], $packages[$name]);
+        if ($change === null) return false;
         if ($change === 'downgrade' && ($intents[$name] ?? 'keep') !== 'downgrade') {
             throw new RuntimeException('Required dependency downgrade must be selected explicitly: '.$name);
         }
@@ -269,6 +280,21 @@ function nt_plan($packages, $owned, $installed, $config, $actions, $hours, $cata
             $operations[$name] = ['change'=>$change,'automatic'=>true,'reason'=>'Required by '.$root];
         }
         return true;
+    };
+    $stageDependencies = function($target, $root, &$queue, &$seen) use (&$operations, $packages, $states, $stageMove) {
+        foreach (nt_resolve([$target], $packages) as $name) {
+            if ($name === $target) continue;
+            if ($states[$name]['external']) {
+                throw new RuntimeException('Required dependency is externally managed: '.$name);
+            }
+            if (!$states[$name]['installed']) {
+                if (!isset($operations[$name])) {
+                    $operations[$name] = ['change'=>'install','automatic'=>true,'reason'=>'Required by '.$root];
+                }
+            } elseif ($stageMove($name, $root) && !isset($seen[$name])) {
+                $seen[$name] = true; $queue[] = $name;
+            }
+        }
     };
     foreach ($installRoots as $root) {
         $closure = nt_resolve([$root], $packages); $queue = [];
@@ -281,8 +307,9 @@ function nt_plan($packages, $owned, $installed, $config, $actions, $hours, $cata
             $dependency = array_shift($queue);
             foreach ($reverse[$dependency] ?? [] as $dependent) {
                 if (isset($seen[$dependent]) || empty($states[$dependent]['installed']) || empty($states[$dependent]['owned'])) continue;
+                if (!$stageMove($dependent, $root)) continue;
                 $seen[$dependent] = true; $queue[] = $dependent;
-                $stageMove($dependent, $root);
+                $stageDependencies($dependent, $root, $queue, $seen);
             }
         }
     }

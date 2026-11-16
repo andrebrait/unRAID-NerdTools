@@ -105,6 +105,49 @@ rejects(function() use ($availablePackages,$unavailableOwned) {
     nt_plan($availablePackages,$unavailableOwned,array_column($unavailableOwned,'record'),
         ['dep'=>'yes','consumer'=>'yes','update_check_hours'=>'24'],['app'=>'install'],24);
 });
+$keptPackages = [
+    'dep'=>$planPackage('dep','1.0'),
+    'consumer'=>$planPackage('consumer','2.0'),
+];
+$keptOwned = [
+    'dep'=>['record'=>'dep-1.0-x86_64-1','dependencies'=>[]],
+    'consumer'=>['record'=>'consumer-1.0-x86_64-1','dependencies'=>['dep']],
+];
+$keptConfig = ['dep'=>'yes','consumer'=>'yes','update_check_hours'=>'24'];
+rejects(function() use ($keptPackages,$keptOwned,$keptConfig) {
+    nt_plan($keptPackages,$keptOwned,array_column($keptOwned,'record'),$keptConfig,['dep'=>'remove'],24);
+});
+$replacementPlan = nt_plan($keptPackages,$keptOwned,array_column($keptOwned,'record'),$keptConfig,
+    ['dep'=>'remove','consumer'=>'upgrade'],24);
+check(array_column($replacementPlan['changes'],'package') === ['consumer','dep'],
+    'Replacement uses catalog dependencies while kept package uses owned dependencies');
+$externalPackages = ['dep'=>$planPackage('dep','1.0'),'app'=>$planPackage('app','1.0',['dep'])];
+rejects(function() use ($externalPackages) {
+    nt_plan($externalPackages,[],['dep-1.0-x86_64-1'],
+        ['dep'=>'no','app'=>'no','update_check_hours'=>'24'],['app'=>'install'],24);
+});
+$expandedPackages = [
+    'dep'=>$planPackage('dep','2.0'),
+    'app'=>$planPackage('app','1.0',['dep']),
+    'extra'=>$planPackage('extra','1.0'),
+    'consumer'=>$planPackage('consumer','2.0',['dep','extra']),
+];
+$expandedOwned = [
+    'dep'=>['record'=>'dep-1.0-x86_64-1','dependencies'=>[]],
+    'consumer'=>['record'=>'consumer-1.0-x86_64-1','dependencies'=>['dep']],
+];
+$expandedPlan = nt_plan($expandedPackages,$expandedOwned,array_column($expandedOwned,'record'),
+    ['dep'=>'yes','consumer'=>'yes','update_check_hours'=>'24'],['app'=>'install'],24);
+check(array_column($expandedPlan['changes'],'package') === ['dep','app','extra','consumer']
+    && $expandedPlan['rows']['extra']['change'] === 'install',
+    'Automatically upgraded dependent stages its new dependencies');
+$sameBuild = $planPackage('tool','1.0'); $sameBuild['file'] = 'tool-1.0-x86_64-2.txz';
+check(nt_update_kind('tool-1.0-x86_64-1','tool',$sameBuild) === 'upgrade',
+    'Same-version package build replacement is an upgrade action');
+$sameBuildPlan = nt_plan(['tool'=>$sameBuild],
+    ['tool'=>['record'=>'tool-1.0-x86_64-1','dependencies'=>[]]],['tool-1.0-x86_64-1'],
+    ['tool'=>'yes','update_check_hours'=>'24'],['tool'=>'upgrade'],24);
+check($sameBuildPlan['changes'][0]['change'] === 'upgrade', 'Same-version package build replacement can be planned');
 $removeOwned = [
     'dep'=>['record'=>'dep-1.0-x86_64-1','dependencies'=>[]],
     'app'=>['record'=>'app-1.0-x86_64-1','dependencies'=>['dep']],
