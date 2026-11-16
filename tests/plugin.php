@@ -39,6 +39,7 @@ check(nt_resolve(['tool'], $packages) === ['dep','tool'], 'Dependency-first orde
 check(nt_preference(['tool-1__1'=>'yes'], 'tool') === 'yes', 'Legacy version preference retained');
 check(nt_preference(['tool-1__1'=>'yes','tool'=>'no'], 'tool') === 'no', 'Stable preference wins');
 check(nt_preference(['tool-extra-1__1'=>'yes'], 'tool') === 'no', 'No package prefix collision');
+check(nt_preference(['nerdtools-tool'=>'yes'], 'tool') === 'yes', 'Namespaced preference restores legacy ownership key');
 check(nt_next_check(1000, 24, false, 0) === 87400, 'Daily default interval');
 check(nt_next_check(1000, 24, true, 0) === 4600, 'Hourly failure retry');
 check(nt_next_check(1000, 24, true, 9000) === 9000, 'Rate limit reset wins');
@@ -222,6 +223,10 @@ check(array_column($plan['changes'],'package') === ['app','dep']
     && $plan['rows']['app']['automatic'] && $plan['rows']['app']['change'] === 'remove',
     'Dependency removal automatically selects installed dependents for removal');
 check($plan['changes'][0]['from'] === '1.0-1' && $plan['changes'][0]['to'] === null, 'Removal preview ends with no installed version');
+$missingDependentInstalled = ['dep-1.0-x86_64-1'];
+rejects(function() use ($planPackages,$removeOwned,$missingDependentInstalled,$removeConfig) {
+    nt_plan($planPackages,$removeOwned,$missingDependentInstalled,$removeConfig,['dep'=>'remove'],24);
+});
 $chainPackages = [
     'dep'=>$planPackage('dep','1.0'),
     'app'=>$planPackage('app','1.0',['dep']),

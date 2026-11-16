@@ -17,6 +17,23 @@
 <tr data-case="ruby"><td><select class="pkgaction"><option value="keep">Keep</option><option value="remove">Remove</option></select></td><td>ruby</td><td class="planned-change">No change</td></tr>
 <tr data-case="vim"><td><select class="pkgaction"><option value="keep">Keep</option><option value="remove">Remove</option></select></td><td>vim</td><td class="planned-change">No change</td></tr>
 </tbody></table>
+<script>
+(function () {
+    class Mini {
+        constructor(nodes) { this.nodes = nodes; this.length = nodes.length; }
+        hasClass(name) { return this.nodes[0] ? this.nodes[0].classList.contains(name) : false; }
+        children(selector) { return new Mini(this.nodes.flatMap(node => [...node.children]).filter(node => !selector || node.matches(selector))); }
+        find(selector) { return new Mini(this.nodes.flatMap(node => [...node.querySelectorAll(selector)])); }
+        closest(selector) { return new Mini(this.nodes.map(node => node.closest(selector)).filter(Boolean)); }
+        removeClass(names) { this.nodes.forEach(node => names.split(' ').forEach(name => node.classList.remove(name))); return this; }
+        addClass(names) { this.nodes.forEach(node => names.split(' ').forEach(name => node.classList.add(name))); return this; }
+        toggleClass(name, value) { this.nodes.forEach(node => node.classList.toggle(name, value)); return this; }
+        val(value) { if (value === undefined) return this.nodes[0] ? this.nodes[0].value : undefined; this.nodes.forEach(node => { node.value = value; }); return this; }
+    }
+    window.$ = input => typeof input === 'function' ? new Mini([]) : new Mini(input instanceof Element ? [input] : [...document.querySelectorAll(input)]);
+}());
+</script>
+<script src="../source/NerdTools/usr/local/emhttp/plugins/NerdTools/js/jquery.NerdTools.js"></script>
 <pre id="result"></pre>
 <script>
 (function () {
@@ -31,22 +48,7 @@
     const background = name => getComputedStyle(row(name).cells[0]).backgroundColor;
     const weight = (name, index) => getComputedStyle(row(name).querySelectorAll('.version-value')[index]).fontWeight;
     const assert = (condition, message) => { if (!condition) throw new Error(message); };
-    const applyAction = (name, action, hasUpdate = false) => {
-        const element = row(name); const changed = action !== 'keep';
-        const stateClass = action === 'remove' ? 'package-remove'
-            : (action === 'install' ? 'package-install'
-            : (['upgrade', 'downgrade'].includes(action) ? 'package-upgrade'
-            : (hasUpdate ? 'package-update-available' : '')));
-        element.querySelectorAll('td').forEach(cell => {
-            cell.classList.remove('package-remove', 'package-install', 'package-upgrade', 'package-update-available');
-            if (stateClass) cell.classList.add(stateClass);
-        });
-        element.querySelector('td').classList.toggle('package-action-changed', changed);
-        element.querySelectorAll('.version-value').forEach(cell =>
-            cell.classList.toggle('package-version-update', hasUpdate && ['keep', 'upgrade', 'downgrade'].includes(action)));
-        element.querySelector('.planned-change').classList.toggle('package-change-selected', changed);
-        select(name).value = action;
-    };
+    const applyAction = (name, action) => syncActionDisplay($(row(name)), action);
     try {
         applyAction('current', 'keep');
         applyAction('available', 'keep', true);

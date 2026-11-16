@@ -164,6 +164,12 @@ $commandCount = count($commands);
 refused(function() use ($manager) { $manager->installMissing(true,true); }, 'confirmed GUI plan');
 expect(count($commands) === $commandCount && in_array('tool-1.0-x86_64-1',$manager->installed(),true),
     'Unconfirmed CLI install cannot replace an installed package');
+unlink($root.'/var/log/packages/tool-1.0-x86_64-1');
+unlink($root.'/opt/nerdtools/bin/tool');
+$manager->installMissing(true,true);
+expect(in_array('tool-2.0-x86_64-1',$manager->installed(),true)
+    && $manager->owned()['tool']['record'] === 'tool-2.0-x86_64-1',
+    'Missing owned package installs the current catalog version');
 file_put_contents($root.'/boot/extra/tool-other-unrelated.txz','not owned');
 $manager->apply(true,true);
 expect(in_array('tool-2.0-x86_64-1',$manager->installed(),true), 'New package installed');

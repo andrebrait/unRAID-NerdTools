@@ -123,7 +123,8 @@ function nt_validate_catalog($catalog, $assets, $version) {
     return $catalog;
 }
 function nt_preference($config, $name) {
-    foreach (array_unique([$name, nt_tool_name($name)]) as $identity) {
+    $tool = nt_tool_name($name);
+    foreach (array_unique([$name, $tool, 'nerdtools-'.$tool]) as $identity) {
         if (isset($config[$identity])) return $config[$identity] === 'yes' ? 'yes' : 'no';
         foreach ($config as $key => $value) {
             if (preg_match('/^'.preg_quote($identity, '/').'-[0-9][A-Za-z0-9_+.]*$/D', $key)) return $value === 'yes' ? 'yes' : 'no';
@@ -367,7 +368,8 @@ function nt_plan($packages, $owned, $installed, $config, $actions, $hours, $cata
     $validationRoots = [];
     foreach ($states as $name => $state) {
         $operation = $operations[$name] ?? null;
-        if (($state['installed'] || ($operation && $operation['change'] !== 'remove'))
+        if (($state['installed'] || ($state['owned'] && $preferences[$name] === 'yes')
+            || ($operation && $operation['change'] !== 'remove'))
             && (!$operation || $operation['change'] !== 'remove')) $validationRoots[] = $name;
     }
     $remainingRequired = array_fill_keys(nt_resolve($validationRoots, $finalGraph), true);
@@ -972,14 +974,15 @@ class NerdTools {
                 throw new RuntimeException('Selected package is absent from catalog: '.$name);
             }
         }
-        $install = [];
+        $install = []; $installed = $this->installed();
         foreach ($required as $name) {
             $entry = $owned[$name] ?? (isset($migrations[$name]) ? $owned[$migrations[$name]] : null);
-            if ($entry && ($entry['record'] !== nt_record($packages[$name]['file'])
+            $isInstalled = $entry && in_array($entry['record'], $installed, true);
+            if ($isInstalled && ($entry['record'] !== nt_record($packages[$name]['file'])
                 || ($entry['sha256'] ?? '') !== $packages[$name]['sha256'])) {
                 throw new RuntimeException('Installed package changes require a confirmed GUI plan: '.$name);
             }
-            if (!$entry || !in_array($entry['record'], $this->installed(), true)) $install[] = $name;
+            if (!$isInstalled) $install[] = $name;
         }
         $migrated = array_values($migrations);
         $remove = $uninstall ? array_values(array_diff(array_keys($owned), $required, $migrated)) : [];
