@@ -1131,6 +1131,9 @@ jobs:
   build:
     if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && needs.packages.result == 'success' }}
     needs: [package-list, packages]
+    permissions:
+      contents: read
+      pull-requests: read
     runs-on: ubuntu-24.04
     # Debian builder image with all tools (build/runner/Dockerfile), pinned by digest. Privileged for
     # Bubblewrap user namespaces, mknod and /dev/kvm. Update the digest after builder-image.yml republishes it.
@@ -1228,6 +1231,65 @@ jobs:
             dist/compatibility-*.json
             dist/provenance-*.json
             dist/kernel-smoke-*.log
+          if-no-files-found: error
+          retention-days: 90
+      - name: Seal plan build packages for candidate promotion
+        if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/upstream-recipes' && inputs.publish == false && needs.package-list.outputs.names != '[]' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          HEAD: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          ARTIFACT_NAME: candidate-packages-${{ github.run_id }}-${{ github.run_attempt }}
+          PLAN: ${{ needs.package-list.outputs.plan }}
+        run: |
+          plan="$RUNNER_TEMP/candidate-plan.json"
+          printf '%s\n' "$PLAN" > "$plan"
+          pr=$(python3 - <<'PY'
+          import json, os, urllib.request
+          repository, head = os.environ['REPOSITORY'], os.environ['HEAD']
+          request = urllib.request.Request(
+              f"https://api.github.com/repos/{repository}/commits/{head}/pulls?per_page=100",
+              headers={"Accept": "application/vnd.github+json",
+                       "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
+                       "X-GitHub-Api-Version": "2022-11-28"})
+          with urllib.request.urlopen(request, timeout=30) as response:
+              pulls = json.load(response)
+          matches = [pull for pull in pulls
+                     if pull.get("state") == "open"
+                     and pull.get("head", {}).get("ref") == "automation/upstream-recipes"
+                     and pull.get("head", {}).get("sha") == head
+                     and (pull.get("head", {}).get("repo") or {}).get("full_name") == repository]
+          if len(matches) != 1:
+              raise SystemExit("Expected exactly one open automation/upstream-recipes PR for this commit")
+          print(matches[0]["number"])
+          PY
+          )
+          tree=$(git rev-parse "$HEAD^{tree}")
+          mkdir candidate-packages
+          while IFS= read -r package; do
+            cp package-artifacts/nerdtools-"$package"-*.txz candidate-packages/
+          done < <(jq -r '.build[]' "$plan")
+          python3 build/native.py candidate-create \
+            --package-artifacts candidate-packages --plan "$plan" --output candidate-manifest.json \
+            --repository "$REPOSITORY" --pr "$pr" --head "$HEAD" --tree "$tree" \
+            --workflow build-packages.yml --run "$RUN_ID" --attempt "$RUN_ATTEMPT" \
+            --artifact-name "$ARTIFACT_NAME"
+      - name: Upload changed-package candidate artifact
+        if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/upstream-recipes' && inputs.publish == false && needs.package-list.outputs.names != '[]' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: candidate-packages-${{ github.run_id }}-${{ github.run_attempt }}
+          path: candidate-packages/
+          if-no-files-found: error
+          retention-days: 90
+      - name: Upload candidate manifest artifact
+        if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/upstream-recipes' && inputs.publish == false && needs.package-list.outputs.names != '[]' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: candidate-manifest-${{ github.run_id }}-${{ github.run_attempt }}
+          path: candidate-manifest.json
           if-no-files-found: error
           retention-days: 90
       # Neither the proprietary Unraid ZIP nor any extracted rootfs is uploaded or cached.
