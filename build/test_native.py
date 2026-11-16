@@ -1045,35 +1045,65 @@ class CandidateArtifactTests(unittest.TestCase):
         self.assertEqual(json.loads(output.getvalue()),
                          {"builds": {"alpha": 4, "zed": 2}, "files": sorted(self.files.values())})
 
-    def test_candidate_mode_workflow_verifies_exact_ids_and_suppresses_compilation(self):
+    def test_candidate_mode_suppresses_compile_only_after_validation(self):
         workflow = (native.REPO / ".github/workflows/build-packages.yml").read_text()
-        self.assertIn("actions: read", workflow)
         self.assertIn("artifact-ids: ${{ inputs.candidate_package_artifact_id }}", workflow)
-        self.assertIn("artifact-ids: ${{ inputs.candidate_manifest_artifact_id }}", workflow)
-        self.assertIn("run-id: ${{ inputs.candidate_run_id }}", workflow)
-        self.assertIn("candidate-verify", workflow)
-        self.assertIn("verified-candidate-${{ github.run_id }}-${{ github.run_attempt }}", workflow)
-        self.assertIn('--candidate-artifacts "$GITHUB_WORKSPACE/candidate-artifacts"', workflow)
-        self.assertIn('--reuse-artifacts "$GITHUB_WORKSPACE/reuse-artifacts"', workflow)
-        self.assertIn("needs.candidate.outputs.active", workflow)
-        self.assertIn('.status == "completed"', workflow)
-        self.assertIn('.conclusion == "success"', workflow)
+        self.assertIn("needs.candidate.outputs.compile_names", workflow)
+        self.assertNotIn("names='[]'", workflow)
+        self.assertIn('echo "compile_names=[]"', workflow)
+        self.assertEqual(self.job_permissions(workflow, "candidate-authorization"),
+                         {"pull-requests": "read"})
+        self.assertEqual(self.job_permissions(workflow, "candidate"),
+                         {"actions": "read", "contents": "read"})
+        self.assertEqual(self.job_permissions(workflow, "build"),
+                         {"contents": "read", "actions": "read"})
+        self.assertNotIn("/pulls/", self.candidate_validation_script())
 
-        start = workflow.index("          candidate_mode=false\n")
-        end = workflow.index('\n          {\n            echo "tag=', start)
+    @staticmethod
+    def job_permissions(workflow, job):
+        lines = workflow[workflow.index(f"\n  {job}:\n") + 1:].splitlines()[1:]
+        permissions = {}
+        seen = False
+        for line in lines:
+            if line.startswith("  ") and not line.startswith("    "):
+                break
+            if line.strip() == "permissions:":
+                seen = True
+                continue
+            if not seen:
+                continue
+            if not line.startswith("      "):
+                break
+            key, value = line.strip().split(": ", 1)
+            permissions[key] = value
+        return permissions
+
+    @unittest.skipUnless(shutil.which("jq"), "requires real jq to verify workflow predicates")
+    def test_candidate_authorization_rejects_unmerged_pull(self):
+        workflow = (native.REPO / ".github/workflows/build-packages.yml").read_text()
+        step = workflow.index("      - name: Authorize merged candidate pull request\n")
+        start = workflow.index("        run: |\n", step) + len("        run: |\n")
+        end = workflow.index("\n  candidate:\n", start)
         script = "\n".join(line[10:] for line in workflow[start:end].splitlines())
-        output = self.root / "package-list-output"
+        mock = self.root / "auth-bin"
+        mock.mkdir()
+        gh = mock / "gh"
+        gh.write_text("#!/bin/sh\nprintf '%s\\n' \"$MOCK_PULL\"\n")
+        gh.chmod(0o755)
+        head, merge = "a" * 40, "b" * 40
+        pull = {"number": 17, "state": "closed", "merged": False, "merge_commit_sha": merge,
+                "head": {"sha": head, "repo": {"full_name": "example/repo"}}}
+        output = self.root / "auth-out"
         environment = os.environ.copy()
-        for name in ("CANDIDATE_PR", "CANDIDATE_HEAD_SHA", "CANDIDATE_RUN_ID",
-                     "CANDIDATE_RUN_ATTEMPT", "CANDIDATE_PACKAGE_ARTIFACT_ID",
-                     "CANDIDATE_PACKAGE_ARTIFACT_NAME", "CANDIDATE_MANIFEST_ARTIFACT_ID",
-                     "CANDIDATE_MANIFEST_ARTIFACT_NAME", "CANDIDATE_MANIFEST_SHA256",
-                     "CANDIDATE_MERGE_SHA"):
-            environment[name] = ""
-        environment["CANDIDATE_PR"] = "17"
-        environment["GITHUB_OUTPUT"] = str(output)
-        subprocess.run(["bash", "-c", script], check=True, env=environment)
-        self.assertIn("names=[]\n", output.read_text())
+        environment.update({
+            "PATH": str(mock) + os.pathsep + os.environ["PATH"],
+            "GH_TOKEN": "test-token", "GH_REPO": "example/repo", "CANDIDATE_MODE": "true",
+            "CANDIDATE_PR": "17", "CANDIDATE_HEAD_SHA": head, "CANDIDATE_MERGE_SHA": merge,
+            "GITHUB_OUTPUT": str(output), "MOCK_PULL": json.dumps(pull),
+        })
+        result = subprocess.run(["bash", "-c", script], env=environment, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertFalse(output.exists())
 
     @unittest.skipUnless(shutil.which("jq"), "requires real jq to verify workflow predicates")
     def test_candidate_workflow_validation_checks_exact_run_attempt_and_artifacts(self):
@@ -1139,6 +1169,8 @@ class CandidateArtifactTests(unittest.TestCase):
                 **inputs, **(input_changes or {}),
                 "PATH": str(mock_bin) + os.pathsep + os.environ["PATH"],
                 "GH_TOKEN": "test-token", "GH_REPO": repository, "CANDIDATE_MODE": "true",
+                "CANDIDATE_AUTHORIZED": "true", "AUTHORIZED_MERGE_SHA": merge,
+                "NAMES": '["zed"]',
                 "BUILDS": '{"alpha":4,"zed":2}',
                 "PLAN": '{"build":["zed"],"reuse":[],"builds":{"alpha":4,"zed":2}}',
                 "RUNNER_TEMP": str(case), "GITHUB_OUTPUT": str(case / "outputs"),
@@ -1146,6 +1178,7 @@ class CandidateArtifactTests(unittest.TestCase):
                 "MOCK_ARTIFACTS": json.dumps(source_artifacts), "MOCK_WORKFLOW_PATH": ".github/workflows/build-packages.yml",
                 "MOCK_TREE": tree, "MOCK_GH_LOG": str(case / "gh.log"),
             })
+            environment.update(input_changes or {})
             result = subprocess.run(["bash", "-c", script if script_to_run is None else script_to_run],
                                     env=environment, capture_output=True, text=True)
             return result, case
@@ -1161,9 +1194,11 @@ class CandidateArtifactTests(unittest.TestCase):
         self.assertEqual(json.loads((valid_case / "candidate-expected.json").read_text()),
                          {"identity": identity, "plan": json.loads('{"build":["zed"],"reuse":[],"builds":{"alpha":4,"zed":2}}')})
         calls = (valid_case / "gh.log").read_text().splitlines()
+        self.assertEqual(outputs["compile_names"], "[]")
         self.assertIn(f"repos/{repository}/actions/runs/12345/attempts/2", calls)
         self.assertIn(f"repos/{repository}/actions/artifacts/551", calls)
         self.assertIn(f"repos/{repository}/actions/artifacts/552", calls)
+        self.assertFalse(any("/pulls/" in call for call in calls))
         mutated_script = script.replace(".run_attempt == $attempt", ".run_attempt != $attempt", 1)
         self.assertNotEqual(mutated_script, script)
         mutated, _ = run_case("mutated-attempt-predicate", script_to_run=mutated_script)
@@ -1175,6 +1210,7 @@ class CandidateArtifactTests(unittest.TestCase):
             ("wrong-artifact-id", None, {"551": {"id": 999}}, None),
             ("wrong-artifact-name", None, {"551": {"name": "other-artifact"}}, None),
             ("incomplete-inputs", None, None, {"CANDIDATE_MANIFEST_SHA256": ""}),
+            ("unauthorized", None, None, {"CANDIDATE_AUTHORIZED": "false"}),
             ("failed-source-run", {"conclusion": "failure"}, None, None),
         )
         for name, run_changes, artifact_changes, input_changes in invalid_cases:
