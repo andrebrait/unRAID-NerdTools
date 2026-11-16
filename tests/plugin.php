@@ -147,6 +147,11 @@ rejects(function() use ($expandedPackages,$removalOwned) {
         ['dep'=>'yes','consumer'=>'yes','extra'=>'yes','update_check_hours'=>'24'],
         ['app'=>'install','extra'=>'remove'],24);
 });
+rejects(function() use ($expandedPackages,$removalOwned) {
+    nt_plan($expandedPackages,$removalOwned,array_column($removalOwned,'record'),
+        ['dep'=>'yes','consumer'=>'no','extra'=>'yes','update_check_hours'=>'24'],
+        ['app'=>'install','extra'=>'remove'],24);
+});
 $sameBuild = $planPackage('tool','1.0'); $sameBuild['file'] = 'tool-1.0-x86_64-2.txz';
 check(nt_update_kind('tool-1.0-x86_64-1','tool',$sameBuild) === 'upgrade',
     'Same-version package build replacement is an upgrade action');

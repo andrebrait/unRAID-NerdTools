@@ -327,15 +327,21 @@ function nt_plan($packages, $owned, $installed, $config, $actions, $hours, $cata
             ? $state['package']['dependencies'] : ($state['owned']['dependencies'] ?? []);
         $finalGraph[$name] = ['dependencies'=>$dependencies];
     }
+    $validationRoots = [];
+    foreach ($states as $name => $state) {
+        $operation = $operations[$name] ?? null;
+        if (($state['installed'] || ($operation && $operation['change'] !== 'remove'))
+            && (!$operation || $operation['change'] !== 'remove')) $validationRoots[] = $name;
+    }
+    $remainingRequired = array_fill_keys(nt_resolve($validationRoots, $finalGraph), true);
+    foreach ($operations as $name => $operation) {
+        if ($operation['change'] === 'remove' && isset($remainingRequired[$name])) {
+            throw new RuntimeException('Package is required by a package that will remain installed: '.$name);
+        }
+    }
     $selected = [];
     foreach ($preferences as $name => $value) if ($value === 'yes') $selected[] = $name;
     $required = nt_resolve($selected, $finalGraph);
-    $requiredSet = array_fill_keys($required, true);
-    foreach ($intents as $name => $intent) {
-        if ($intent === 'remove' && isset($requiredSet[$name])) {
-            throw new RuntimeException('Package is required by a selected package: '.$name);
-        }
-    }
     foreach ($required as $name) $preferences[$name] = 'yes';
 
     $installNames = [];
