@@ -190,7 +190,7 @@ function nt_plan($packages, $owned, $installed, $config, $actions, $hours, $cata
     foreach ($packages as $name => $package) {
         $ownedName = $name;
         if (!isset($owned[$name]) && $package['tool'] !== $name && isset($owned[$package['tool']])) {
-            $ownedName = $package['tool']; $migrated[$ownedName] = true;
+            $ownedName = $package['tool']; $migrated[$ownedName] = $name;
         }
         $entry = $owned[$ownedName] ?? null;
         $record = $entry && in_array($entry['record'], $installed, true) ? $entry['record'] : null;
@@ -236,12 +236,17 @@ function nt_plan($packages, $owned, $installed, $config, $actions, $hours, $cata
         elseif ($intent === 'remove') $preferences[$name] = 'no';
         $intents[$name] = $intent;
     }
+    $normalizeDependencies = function($dependencies) use ($migrated) {
+        $normalized = [];
+        foreach ($dependencies as $dependency) $normalized[] = $migrated[$dependency] ?? $dependency;
+        return array_values(array_unique($normalized));
+    };
     $graph = [];
     foreach ($states as $name => $state) {
         $replace = in_array($intents[$name], ['install','upgrade','downgrade'], true);
         $dependencies = $state['package'] && (!$state['installed'] || $replace)
             ? $state['package']['dependencies'] : ($state['owned']['dependencies'] ?? []);
-        $graph[$name] = ['dependencies'=>$dependencies];
+        $graph[$name] = ['dependencies'=>$normalizeDependencies($dependencies)];
     }
 
     $operations = []; $requestedRoots = []; $installRoots = [];
@@ -309,7 +314,8 @@ function nt_plan($packages, $owned, $installed, $config, $actions, $hours, $cata
         while ($queue) {
             $dependency = array_shift($queue);
             foreach ($reverse[$dependency] ?? [] as $dependent) {
-                if (isset($seen[$dependent]) || empty($states[$dependent]['installed']) || empty($states[$dependent]['owned'])) continue;
+                if (isset($seen[$dependent]) || ($intents[$dependent] ?? 'keep') === 'remove'
+                    || empty($states[$dependent]['installed']) || empty($states[$dependent]['owned'])) continue;
                 if (!$stageMove($dependent, $root)) continue;
                 $seen[$dependent] = true; $queue[] = $dependent;
                 $stageDependencies($dependent, $root, $queue, $seen);
@@ -325,7 +331,7 @@ function nt_plan($packages, $owned, $installed, $config, $actions, $hours, $cata
         $replace = $operation && $operation['change'] !== 'remove';
         $dependencies = $state['package'] && (!$state['installed'] || $replace)
             ? $state['package']['dependencies'] : ($state['owned']['dependencies'] ?? []);
-        $finalGraph[$name] = ['dependencies'=>$dependencies];
+        $finalGraph[$name] = ['dependencies'=>$normalizeDependencies($dependencies)];
     }
     $validationRoots = [];
     foreach ($states as $name => $state) {
@@ -353,10 +359,10 @@ function nt_plan($packages, $owned, $installed, $config, $actions, $hours, $cata
     $removeNames = [];
     foreach ($operations as $name => $operation) if ($operation['change'] === 'remove') $removeNames[] = $name;
     $removeOrder = []; $visited = [];
-    $visitRemove = function($name) use (&$visitRemove, &$removeOrder, &$visited, $states, $removeNames) {
+    $visitRemove = function($name) use (&$visitRemove, &$removeOrder, &$visited, $states, $removeNames, $normalizeDependencies) {
         if (isset($visited[$name])) return;
         $visited[$name] = true;
-        foreach (($states[$name]['owned']['dependencies'] ?? []) as $dependency) {
+        foreach ($normalizeDependencies($states[$name]['owned']['dependencies'] ?? []) as $dependency) {
             if (in_array($dependency, $removeNames, true)) $visitRemove($dependency);
         }
         $removeOrder[] = $name;

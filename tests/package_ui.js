@@ -35,4 +35,33 @@ assert.equal(context.rowStateClass('downgrade'), 'package-upgrade', 'downgrade r
 assert.equal(context.rowStateClass('update-available'), 'package-update-available', 'available update row uses attention state');
 assert.equal(context.actionIsEmphasized('keep'), false, 'Keep action is not emphasized');
 assert.equal(context.actionIsEmphasized('install'), true, 'non-keep action is emphasized');
+const postCalls = []; const openBoxCalls = []; let closeCalls = 0;
+const jqueryResult = {
+    val: () => '24',
+    each: () => jqueryResult,
+    prop: () => jqueryResult,
+    text: () => jqueryResult,
+};
+const jquery = () => jqueryResult;
+jquery.post = (url, data) => {
+    postCalls.push({url, data});
+    const deferred = {done: () => deferred, fail: () => deferred, always: () => deferred};
+    return deferred;
+};
+context.$ = jquery;
+context.document = {getElementById: () => ({close: () => { closeCalls++; }})};
+context.openBox = (...args) => openBoxCalls.push(args);
+context.planRevision = 5;
+context.nerdPlan = {id: 'replacement-plan'};
+context.displayedPlanId = 'displayed-plan';
+context.displayedPlanRevision = 4;
+context.confirmPlan();
+assert.equal(closeCalls, 1, 'stale confirmation closes the dialog');
+assert.equal(postCalls.length, 0, 'stale confirmation sends no request');
+assert.equal(openBoxCalls.length, 0, 'stale confirmation starts no package manager');
+context.displayedPlanId = 'replacement-plan';
+context.displayedPlanRevision = 5;
+context.confirmPlan();
+assert.equal(postCalls.length, 1, 'current confirmation sends one request');
+assert.equal(postCalls[0].data.plan, 'replacement-plan', 'confirmation submits the displayed plan ID');
 console.log('Package UI race contracts passed');

@@ -152,6 +152,11 @@ rejects(function() use ($expandedPackages,$removalOwned) {
         ['dep'=>'yes','consumer'=>'no','extra'=>'yes','update_check_hours'=>'24'],
         ['app'=>'install','extra'=>'remove'],24);
 });
+$removedDependentPlan = nt_plan($expandedPackages,$expandedOwned,array_column($expandedOwned,'record'),
+    ['dep'=>'yes','consumer'=>'yes','extra'=>'no','update_check_hours'=>'24'],
+    ['app'=>'install','consumer'=>'remove'],24);
+check(array_column($removedDependentPlan['changes'],'package') === ['dep','app','consumer'],
+    'Explicitly removed dependent is not upgraded and does not stage new dependencies');
 $sameBuild = $planPackage('tool','1.0'); $sameBuild['file'] = 'tool-1.0-x86_64-2.txz';
 check(nt_update_kind('tool-1.0-x86_64-1','tool',$sameBuild) === 'upgrade',
     'Same-version package build replacement is an upgrade action');
@@ -171,6 +176,16 @@ $legacyPlan = nt_plan(['nerdtools-tool'=>$legacyPackage],
     ['tool'=>'yes','update_check_hours'=>'24'],['nerdtools-tool'=>'upgrade'],24);
 check($legacyPlan['changes'][0]['package'] === 'nerdtools-tool'
     && $legacyPlan['changes'][0]['change'] === 'upgrade', 'Same-version legacy migration can be planned');
+$namespacedDep = $planPackage('nerdtools-dep','1.0'); $namespacedDep['tool'] = 'dep';
+$namespacedConsumer = $planPackage('nerdtools-consumer','1.0',['nerdtools-dep']); $namespacedConsumer['tool'] = 'consumer';
+$legacyOwned = [
+    'dep'=>['record'=>'dep-1.0-x86_64-1_nerdtools','dependencies'=>[]],
+    'consumer'=>['record'=>'consumer-1.0-x86_64-1_nerdtools','dependencies'=>['dep']],
+];
+$namespacePlan = nt_plan(['nerdtools-dep'=>$namespacedDep,'nerdtools-consumer'=>$namespacedConsumer],
+    $legacyOwned,array_column($legacyOwned,'record'),
+    ['dep'=>'yes','consumer'=>'yes','update_check_hours'=>'24'],[],24);
+check($namespacePlan['changes'] === [], 'Legacy dependency names resolve through namespace migration');
 $removeOwned = [
     'dep'=>['record'=>'dep-1.0-x86_64-1','dependencies'=>[]],
     'app'=>['record'=>'app-1.0-x86_64-1','dependencies'=>['dep']],
