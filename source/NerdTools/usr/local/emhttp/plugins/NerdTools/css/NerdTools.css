@@ -28,28 +28,28 @@
 .package-action-changed .pkgaction {
     font-weight: 700;
 }
-table.tablesorter tbody tr.package-remove {
+table.tablesorter tbody tr td.package-remove {
     background-color: rgb(198 40 40 / 22%) !important;
 }
-table.tablesorter tbody tr.package-install {
+table.tablesorter tbody tr td.package-install {
     background-color: rgb(46 125 50 / 22%) !important;
 }
-table.tablesorter tbody tr.package-upgrade {
+table.tablesorter tbody tr td.package-upgrade {
     background-color: rgb(21 101 192 / 22%) !important;
 }
-table.tablesorter tbody tr.package-update-available {
+table.tablesorter tbody tr td.package-update-available {
     background-color: rgb(249 168 37 / 22%) !important;
 }
-table.tablesorter tbody tr.package-remove td:first-child {
+table.tablesorter tbody tr td.package-remove:first-child {
     border-left: 0.25rem solid rgb(198 40 40);
 }
-table.tablesorter tbody tr.package-install td:first-child {
+table.tablesorter tbody tr td.package-install:first-child {
     border-left: 0.25rem solid rgb(46 125 50);
 }
-table.tablesorter tbody tr.package-upgrade td:first-child {
+table.tablesorter tbody tr td.package-upgrade:first-child {
     border-left: 0.25rem solid rgb(21 101 192);
 }
-table.tablesorter tbody tr.package-update-available td:first-child {
+table.tablesorter tbody tr td.package-update-available:first-child {
     border-left: 0.25rem solid rgb(249 168 37);
 }
 .package-version-update {

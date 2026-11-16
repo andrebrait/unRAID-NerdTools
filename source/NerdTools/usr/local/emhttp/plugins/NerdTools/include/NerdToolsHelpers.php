@@ -148,6 +148,11 @@ function nt_package_version($record, $name) {
         && preg_match('/^'.preg_quote($name, '/').'-([A-Za-z0-9][A-Za-z0-9+_.]*)-(?:x86_64|noarch|i[3-6]86)-[^-]+$/D', $record, $match)
         ? $match[1] : null;
 }
+function nt_package_display_version($record, $name) {
+    return is_string($record) && is_string($name)
+        && preg_match('/^'.preg_quote($name, '/').'-([A-Za-z0-9][A-Za-z0-9+_.]*)-(?:x86_64|noarch|i[3-6]86)-([^-]+)$/D', $record, $match)
+        ? $match[1].'-'.$match[2] : null;
+}
 function nt_update_kind($record, $name, $package) {
     if (!is_string($record) || !is_string($name) || !is_array($package)
         || !is_string($package['file'] ?? null) || !is_string($package['version'] ?? null)
@@ -306,12 +311,12 @@ function nt_plan($packages, $owned, $installed, $config, $actions, $hours, $cata
         }
     };
     foreach ($installRoots + $upgradeRoots as $root) {
-        $queue = [];
-        if (isset($upgradeRoots[$root])) $queue[] = $root;
-        else {
-            foreach (nt_resolve([$root], $packages) as $name) {
-                if ($name === $root || !$states[$name]['installed'] || !$states[$name]['owned']) continue;
-                if ($stageMove($name, $root)) $queue[] = $name;
+        $queue = isset($upgradeRoots[$root]) ? [$root] : [];
+        $queued = array_fill_keys($queue, true);
+        foreach (nt_resolve([$root], $packages) as $name) {
+            if ($name === $root || !$states[$name]['installed'] || !$states[$name]['owned']) continue;
+            if ($stageMove($name, $root) && !isset($queued[$name])) {
+                $queued[$name] = true; $queue[] = $name;
             }
         }
         $seen = array_fill_keys($queue, true);

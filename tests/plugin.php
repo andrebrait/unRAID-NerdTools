@@ -44,6 +44,8 @@ check(nt_next_check(1000, 24, true, 0) === 4600, 'Hourly failure retry');
 check(nt_next_check(1000, 24, true, 9000) === 9000, 'Rate limit reset wins');
 check(nt_package_version('nerdtools-tool-1.2.3-x86_64-1', 'nerdtools-tool') === '1.2.3', 'Installed version extracted');
 check(nt_package_version('other-1.2.3-x86_64-1', 'nerdtools-tool') === null, 'Mismatched package version refused');
+check(nt_package_display_version('nerdtools-vim-9.2.1252-x86_64-2_NT73','nerdtools-vim') === '9.2.1252-2_NT73',
+    'Full NerdTools package version includes build revision');
 $planPackage = function($name, $version, $dependencies = []) {
     return ['name'=>$name, 'tool'=>$name, 'version'=>$version,
         'file'=>$name.'-'.$version.'-x86_64-1.txz', 'dependencies'=>$dependencies];
@@ -147,6 +149,19 @@ $upgradeCascade = nt_plan($expandedPackages,$expandedOwned,array_column($expande
 check(array_column($upgradeCascade['changes'],'package') === ['dep','extra','consumer']
     && $upgradeCascade['rows']['consumer']['automatic'] && $upgradeCascade['rows']['consumer']['change'] === 'upgrade',
     'Explicit dependency upgrade stages dependent upgrades and their new dependencies');
+$vimPackages = [
+    'tcl'=>$planPackage('tcl','2.0'),
+    'vim'=>$planPackage('vim','2.0',['tcl']),
+];
+$vimOwned = [
+    'tcl'=>['record'=>'tcl-1.0-x86_64-1','dependencies'=>[]],
+    'vim'=>['record'=>'vim-1.0-x86_64-1','dependencies'=>['tcl']],
+];
+$vimPlan = nt_plan($vimPackages,$vimOwned,array_column($vimOwned,'record'),
+    ['tcl'=>'yes','vim'=>'yes','update_check_hours'=>'24'],['vim'=>'upgrade'],24);
+check(array_column($vimPlan['changes'],'package') === ['tcl','vim']
+    && $vimPlan['rows']['tcl']['automatic'] && $vimPlan['rows']['tcl']['change'] === 'upgrade',
+    'Explicit upgrade stages stale installed dependencies');
 $removalOwned = $expandedOwned + ['extra'=>['record'=>'extra-1.0-x86_64-1','dependencies'=>[]]];
 $removalCascade = nt_plan($expandedPackages,$removalOwned,array_column($removalOwned,'record'),
     ['dep'=>'yes','consumer'=>'yes','extra'=>'yes','update_check_hours'=>'24'],
@@ -179,6 +194,9 @@ $legacyPlan = nt_plan(['nerdtools-tool'=>$legacyPackage],
     ['tool'=>'yes','update_check_hours'=>'24'],['nerdtools-tool'=>'upgrade'],24);
 check($legacyPlan['changes'][0]['package'] === 'nerdtools-tool'
     && $legacyPlan['changes'][0]['change'] === 'upgrade', 'Same-version legacy migration can be planned');
+$uninstalledActions = nt_package_actions(null,'screen',$planPackage('screen','1.0'),false,false);
+check($uninstalledActions['update_kind'] === null && $uninstalledActions['actions'] === ['keep','install'],
+    'Uninstalled package never reports an available update');
 $namespacedDep = $planPackage('nerdtools-dep','1.0'); $namespacedDep['tool'] = 'dep';
 $namespacedConsumer = $planPackage('nerdtools-consumer','1.0',['nerdtools-dep']); $namespacedConsumer['tool'] = 'consumer';
 $legacyOwned = [

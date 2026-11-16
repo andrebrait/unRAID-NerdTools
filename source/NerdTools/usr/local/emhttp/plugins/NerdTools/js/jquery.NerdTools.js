@@ -39,20 +39,15 @@ function versionHasUpdate(action, hasUpdate) {
     return hasUpdate && (action === 'keep' || action === 'upgrade' || action === 'downgrade');
 }
 function syncActionDisplay(row, action) {
-    row.removeClass('package-remove package-install package-upgrade package-update-available');
+    var cells = row.children('td');
+    cells.removeClass('package-remove package-install package-upgrade package-update-available');
     var stateClass = actionClass(action, row.hasClass('package-has-update'));
-    if (stateClass) row.addClass(stateClass);
+    if (stateClass) cells.addClass(stateClass);
     var changed = actionIsEmphasized(action); var select = row.find('.pkgaction');
     select.val(action).closest('td').toggleClass('package-action-changed', changed);
     row.find('.version-value').toggleClass('package-version-update',
         versionHasUpdate(action, row.hasClass('package-has-update')));
     row.find('.planned-change').toggleClass('package-change-selected', changed);
-}
-function syncAllActionDisplays() {
-    $('#tblPackages tbody tr').each(function() {
-        var row = $(this); var select = row.find('.pkgaction');
-        if (select.length) syncActionDisplay(row, select.val());
-    });
 }
 $(function() {
     $('#tblPackages').tablesorter({
@@ -67,7 +62,6 @@ $(function() {
             filter_functions: {'.filter-version': true}
         }
     });
-    $('#tblPackages').on('updateComplete', syncAllActionDisplays);
     $('#package_form').on('submit', function(event) { event.preventDefault(); Apply(); });
     $('#btnApply').on('click', Apply);
     $('#btnRefresh').on('click', function() { packageQuery(true); });
@@ -280,7 +274,6 @@ function renderPlan(plan) {
     var count = plan.changes.length;
     $('#btnApply').val(count ? 'Apply ' + count + (count === 1 ? ' change' : ' changes') : 'No changes')
         .prop('disabled', count === 0);
-    $('#tblPackages').trigger('update');
 }
 function Apply() {
     if (!nerdLoaded || !nerdPlan) { packageError('Wait for the package plan to finish.'); return; }

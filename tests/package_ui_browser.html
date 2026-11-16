@@ -12,6 +12,7 @@
 <tr data-case="current"><td><select class="pkgaction"><option value="keep">Keep</option><option value="remove">Remove</option></select></td><td class="version-value">1.0</td><td class="version-value">1.0</td><td class="planned-change">No change</td></tr>
 <tr class="package-has-update" data-case="available"><td><select class="pkgaction"><option value="keep">Keep</option><option value="upgrade">Upgrade</option><option value="remove">Remove</option></select></td><td class="version-value">1.0</td><td class="version-value">2.0</td><td class="planned-change">Update available</td></tr>
 <tr data-case="install"><td><select class="pkgaction"><option value="keep">-</option><option value="install" selected>Install</option></select></td><td class="version-value">—</td><td class="version-value">1.0</td><td class="planned-change">Install</td></tr>
+<tr data-case="uninstalled"><td><select class="pkgaction"><option value="keep">-</option><option value="install">Install</option></select></td><td class="version-value">—</td><td class="version-value">5.0.2-2_NT73</td><td class="planned-change">No change</td></tr>
 <tr data-case="libyaml"><td><select class="pkgaction"><option value="keep">Keep</option><option value="remove">Remove</option></select></td><td>libyaml</td><td class="planned-change">No change</td></tr>
 <tr data-case="ruby"><td><select class="pkgaction"><option value="keep">Keep</option><option value="remove">Remove</option></select></td><td>ruby</td><td class="planned-change">No change</td></tr>
 <tr data-case="vim"><td><select class="pkgaction"><option value="keep">Keep</option><option value="remove">Remove</option></select></td><td>vim</td><td class="planned-change">No change</td></tr>
@@ -27,16 +28,19 @@
     };
     const row = name => document.querySelector(`tr[data-case="${name}"]`);
     const select = name => row(name).querySelector('select');
-    const background = name => getComputedStyle(row(name)).backgroundColor;
+    const background = name => getComputedStyle(row(name).cells[0]).backgroundColor;
     const weight = (name, index) => getComputedStyle(row(name).querySelectorAll('.version-value')[index]).fontWeight;
     const assert = (condition, message) => { if (!condition) throw new Error(message); };
     const applyAction = (name, action, hasUpdate = false) => {
         const element = row(name); const changed = action !== 'keep';
-        element.classList.remove('package-remove', 'package-install', 'package-upgrade', 'package-update-available');
-        if (action === 'remove') element.classList.add('package-remove');
-        else if (action === 'install') element.classList.add('package-install');
-        else if (action === 'upgrade' || action === 'downgrade') element.classList.add('package-upgrade');
-        else if (hasUpdate) element.classList.add('package-update-available');
+        const stateClass = action === 'remove' ? 'package-remove'
+            : (action === 'install' ? 'package-install'
+            : (['upgrade', 'downgrade'].includes(action) ? 'package-upgrade'
+            : (hasUpdate ? 'package-update-available' : '')));
+        element.querySelectorAll('td').forEach(cell => {
+            cell.classList.remove('package-remove', 'package-install', 'package-upgrade', 'package-update-available');
+            if (stateClass) cell.classList.add(stateClass);
+        });
         element.querySelector('td').classList.toggle('package-action-changed', changed);
         element.querySelectorAll('.version-value').forEach(cell =>
             cell.classList.toggle('package-version-update', hasUpdate && ['keep', 'upgrade', 'downgrade'].includes(action)));
@@ -47,6 +51,7 @@
         applyAction('current', 'keep');
         applyAction('available', 'keep', true);
         applyAction('install', 'install');
+        applyAction('uninstalled', 'keep');
         for (const name of ['libyaml', 'ruby', 'vim']) applyAction(name, 'keep');
         const status = document.getElementById('catalog-status');
         assert(status.children.length === 4, 'Catalog status must contain four compact list items');
@@ -59,10 +64,15 @@
         assert(row('install').querySelector('td').classList.contains('package-action-changed'), 'Install action cell must be emphasized');
         assert(background('install') === colors.install, 'Install must be green');
         assert(weight('install', 0) === '400' && weight('install', 1) === '400', 'Install versions must remain normal');
+        assert(background('uninstalled') !== colors.available, 'Uninstalled Keep must not be yellow');
+        assert(weight('uninstalled', 0) === '400' && weight('uninstalled', 1) === '400', 'Uninstalled versions must remain normal');
         applyAction('available', 'upgrade', true);
         assert(background('available') === colors.upgrade, 'Upgrade must override yellow with blue');
         for (const name of ['libyaml', 'ruby', 'vim']) applyAction(name, 'remove');
         for (const name of ['libyaml', 'ruby', 'vim']) assert(background(name) === colors.remove, `${name} Remove must be red`);
+        const body = document.querySelector('tbody');
+        [...body.rows].reverse().forEach(element => body.appendChild(element));
+        for (const name of ['libyaml', 'ruby', 'vim']) assert(background(name) === colors.remove, `${name} Remove must stay red after sorting`);
         assert(row('ruby').querySelector('td').classList.contains('package-action-changed'), 'Ruby Remove action cell must be emphasized');
         applyAction('ruby', 'keep');
         assert(background('ruby') !== colors.remove, 'Ruby Keep must immediately clear red');

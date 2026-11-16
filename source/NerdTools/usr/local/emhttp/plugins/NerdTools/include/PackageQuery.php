@@ -16,7 +16,7 @@ try {
             $current = $record;
             if ($record !== ($entry['record'] ?? null)) $external = true;
         }
-        $installedVersion = $current === null ? null : nt_package_version($current, $current === ($entry['record'] ?? null) ? $ownedName : $name);
+        $installedVersion = $current === null ? null : nt_package_display_version($current, $current === ($entry['record'] ?? null) ? $ownedName : $name);
         $exact = $current === nt_record($package['file']);
         $packageActions = nt_package_actions($current,$ownedName,$package,$external,$entry !== null);
         $updateKind = $packageActions['update_kind']; $actions = $packageActions['actions'];
@@ -25,7 +25,7 @@ try {
             'name'=>$name, 'tool'=>$tool, 'file'=>$package['file'], 'version'=>$package['version'],
             'dependencies'=>$package['dependencies'], 'dependency_labels'=>array_map('nt_tool_name',$package['dependencies']),
             'size'=>format_size($package['size']), 'installed'=>$current !== null, 'current'=>$current ?? '—',
-            'installed_version'=>$installedVersion, 'available_version'=>$package['version'],
+            'installed_version'=>$installedVersion, 'available_version'=>nt_package_display_version(nt_record($package['file']),$name),
             'exact'=>$exact, 'external'=>$external, 'selected'=>$selected, 'update_kind'=>$updateKind,
             'default_action'=>(!$external && $current === null && $selected) ? 'install' : 'keep', 'actions'=>$actions,
         ];
@@ -37,7 +37,7 @@ try {
             'name'=>$name, 'tool'=>$entry['tool'] ?? nt_tool_name($name), 'file'=>$entry['file'], 'version'=>'(unavailable)',
             'dependencies'=>$entry['dependencies'] ?? [], 'dependency_labels'=>array_map('nt_tool_name',$entry['dependencies'] ?? []),
             'size'=>'—', 'installed'=>$isInstalled, 'current'=>$entry['record'],
-            'installed_version'=>$isInstalled ? nt_package_version($entry['record'],$name) : null, 'available_version'=>null,
+            'installed_version'=>$isInstalled ? nt_package_display_version($entry['record'],$name) : null, 'available_version'=>null,
             'exact'=>false, 'external'=>false, 'unavailable'=>true, 'selected'=>nt_preference($config,$name) === 'yes',
             'update_kind'=>null, 'default_action'=>'keep', 'actions'=>['keep','remove'],
         ];
