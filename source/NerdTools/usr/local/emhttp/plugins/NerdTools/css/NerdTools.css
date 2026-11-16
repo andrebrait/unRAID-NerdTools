@@ -9,7 +9,6 @@
 }
 .version-value {
     white-space: nowrap;
-    font-weight: 600;
 }
 .planned-change {
     white-space: nowrap;
@@ -40,6 +39,10 @@ table.tablesorter tbody tr.package-upgrade td:first-child {
 }
 table.tablesorter tbody tr.package-update-available td:first-child {
     border-left: 0.25rem solid rgb(249 168 37);
+}
+.package-upgrade .version-value,
+.package-update-available .version-value {
+    font-weight: 600;
 }
 .package-changed .planned-change,
 .package-update-available .planned-change {
