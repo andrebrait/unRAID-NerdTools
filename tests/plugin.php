@@ -71,7 +71,7 @@ $plan = nt_plan($planPackages,$planOwned,$planInstalled,$planConfig,['other'=>'u
 check(array_column($plan['changes'],'package') === ['other'] && $plan['changes'][0]['change'] === 'upgrade', 'Explicit upgrade changes only its package');
 $plan = nt_plan($planPackages,$planOwned,$planInstalled,$planConfig,['app'=>'install'],24);
 check(array_column($plan['changes'],'package') === ['dep','app','consumer'], 'New install upgrades stale dependency and installed dependents only');
-check($plan['rows']['dep']['automatic'] && $plan['rows']['dep']['reason'] === 'Required by app', 'Required dependency upgrade is explained');
+check($plan['rows']['dep']['automatic'] && $plan['rows']['dep']['reason'] === 'Required to install app', 'Required dependency upgrade is explained');
 check(!in_array('other',array_column($plan['changes'],'package'),true), 'Unrelated update is excluded');
 $plan = nt_plan($planPackages,$planOwned,$planInstalled,$planConfig,['newapp'=>'install'],24);
 check(array_column($plan['changes'],'package') === ['fresh','newapp'], 'Missing dependency installs before requested package');
@@ -160,7 +160,8 @@ $vimOwned = [
 $vimPlan = nt_plan($vimPackages,$vimOwned,array_column($vimOwned,'record'),
     ['tcl'=>'yes','vim'=>'yes','update_check_hours'=>'24'],['vim'=>'upgrade'],24);
 check(array_column($vimPlan['changes'],'package') === ['tcl','vim']
-    && $vimPlan['rows']['tcl']['automatic'] && $vimPlan['rows']['tcl']['change'] === 'upgrade',
+    && $vimPlan['rows']['tcl']['automatic'] && $vimPlan['rows']['tcl']['change'] === 'upgrade'
+    && $vimPlan['rows']['tcl']['reason'] === 'Required to upgrade vim',
     'Explicit upgrade stages stale installed dependencies');
 $removalOwned = $expandedOwned + ['extra'=>['record'=>'extra-1.0-x86_64-1','dependencies'=>[]]];
 $removalCascade = nt_plan($expandedPackages,$removalOwned,array_column($removalOwned,'record'),

@@ -269,7 +269,7 @@ function nt_plan($packages, $owned, $installed, $config, $actions, $hours, $cata
             }
             if (!$states[$name]['installed']) {
                 $operations[$name] = ['change'=>'install','automatic'=>$name !== $root,
-                    'reason'=>$name === $root ? '' : 'Required by '.nt_tool_name($root)];
+                    'reason'=>$name === $root ? '' : 'Required to '.$intents[$root].' '.nt_tool_name($root)];
             }
         }
     }
@@ -292,11 +292,12 @@ function nt_plan($packages, $owned, $installed, $config, $actions, $hours, $cata
             throw new RuntimeException('Required dependency downgrade must be selected explicitly: '.$name);
         }
         if (!isset($operations[$name]) || $operations[$name]['change'] !== $change) {
-            $operations[$name] = ['change'=>$change,'automatic'=>true,'reason'=>'Required by '.nt_tool_name($root)];
+            $operations[$name] = ['change'=>$change,'automatic'=>true,
+                'reason'=>'Required to '.$intents[$root].' '.nt_tool_name($root)];
         }
         return true;
     };
-    $stageDependencies = function($target, $root, &$queue, &$seen) use (&$operations, $packages, $states, $stageMove) {
+    $stageDependencies = function($target, $root, &$queue, &$seen) use (&$operations, $packages, $states, $stageMove, $intents) {
         foreach (nt_resolve([$target], $packages) as $name) {
             if ($name === $target) continue;
             if ($states[$name]['external']) {
@@ -304,7 +305,8 @@ function nt_plan($packages, $owned, $installed, $config, $actions, $hours, $cata
             }
             if (!$states[$name]['installed']) {
                 if (!isset($operations[$name])) {
-                    $operations[$name] = ['change'=>'install','automatic'=>true,'reason'=>'Required by '.nt_tool_name($root)];
+                    $operations[$name] = ['change'=>'install','automatic'=>true,
+                        'reason'=>'Required to '.$intents[$root].' '.nt_tool_name($root)];
                 }
             } elseif ($stageMove($name, $root) && !isset($seen[$name])) {
                 $seen[$name] = true; $queue[] = $name;
