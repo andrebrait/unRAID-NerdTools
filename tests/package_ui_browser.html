@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <title>RUNNING</title>
 <link rel="stylesheet" href="../source/NerdTools/usr/local/emhttp/plugins/NerdTools/css/NerdTools.css">
+<style>table { font-weight: 700; }</style>
 </head>
 <body>
 <ul class="catalog-status" id="catalog-status"><li><strong>NerdTools version: </strong>2026.11.16.10</li><li><strong>Package release: </strong>packages-test</li><li><strong>Last successful check: </strong>16/11/2026, 09:41:43</li><li><strong>Next eligible check: </strong>17/11/2026, 09:41:43</li></ul>
@@ -52,10 +53,12 @@
         assert([...status.children].every(item => item.tagName === 'LI' && item.querySelector('strong')),
             'Each catalog item must keep its label and value together');
         assert(background('current') !== colors.remove, 'Keep row must not be red');
+        assert(weight('current', 0) === '400' && weight('current', 1) === '400', 'Current versions must override inherited bold');
         assert(background('available') === colors.available, 'Available update must be yellow');
         assert(weight('available', 0) === '600' && weight('available', 1) === '600', 'Available versions must be bold');
         assert(row('install').querySelector('td').classList.contains('package-action-changed'), 'Install action cell must be emphasized');
         assert(background('install') === colors.install, 'Install must be green');
+        assert(weight('install', 0) === '400' && weight('install', 1) === '400', 'Install versions must remain normal');
         applyAction('available', 'upgrade', true);
         assert(background('available') === colors.upgrade, 'Upgrade must override yellow with blue');
         for (const name of ['libyaml', 'ruby', 'vim']) applyAction(name, 'remove');
