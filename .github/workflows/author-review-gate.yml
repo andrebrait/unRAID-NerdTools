@@ -1,0 +1,41 @@
+name: Author review gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  pull_request_review:
+    types: [submitted, dismissed]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: author-review-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  author-review-gate:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require a review unless the author is andrebrait
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          if [ "$AUTHOR" = "andrebrait" ]; then
+            echo "Author andrebrait can merge without another review."
+            exit 0
+          fi
+          count="$(gh api --paginate "repos/${REPO}/pulls/${PR}/reviews" --jq '.[]' \
+            | jq -s --arg head "$HEAD" --arg author "$AUTHOR" \
+              '[group_by(.user.login)[] | max_by(.submitted_at) | select(.state == "APPROVED" and .commit_id == $head and .user.login != $author)] | length')"
+          if [ "$count" -lt 1 ]; then
+            echo "Author ${AUTHOR} needs an approving review on ${HEAD}."
+            exit 1
+          fi
+          echo "Approving review present for ${AUTHOR}."
