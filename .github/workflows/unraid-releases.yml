@@ -5,6 +5,11 @@ on:
     - cron: '17 5 * * *'
   workflow_dispatch:
     inputs:
+      retest:
+        description: Re-test and republish releases that already passed with unchanged packages and test path
+        required: false
+        type: boolean
+        default: false
       candidate_pr:
         description: Candidate pull request number
         required: false
@@ -89,6 +94,7 @@ jobs:
           fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
@@ -144,13 +150,36 @@ jobs:
             } catch (error) {
               throw new Error(`Cannot inspect build-packages.yml compatibility runs; ensure the build workflow exists on the default branch and Actions is enabled: ${error.message}`);
             }
+            const {execFileSync} = require('node:child_process');
+            const crypto = require('node:crypto');
+            // Everything that decides package bytes, their tests, or the published sources bundle (build/native.py source_bundle).
+            const testPath = ['build', 'LICENSE', 'scripts/package-change.py',
+              '.github/workflows/build-packages.yml', '.github/workflows/package-build.yml'];
+            // Docs and controller unit tests do not change what a compatibility run builds or checks.
+            const ignored = /\tbuild\/(README\.md|test_[^/]*\.py)$/;
+            const fingerprints = new Map();
+            const fingerprint = sha => {
+              if (!fingerprints.has(sha)) {
+                let value = null;  // Unknown commit never matches, so it cannot suppress a run.
+                try {
+                  const tree = execFileSync('git', ['ls-tree', '-r', sha, '--', ...testPath], {encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore']});
+                  value = crypto.createHash('sha256').update(tree.split('\n').filter(line => !ignored.test(line)).join('\n')).digest('hex');
+                } catch {}
+                fingerprints.set(sha, value);
+              }
+              return fingerprints.get(sha);
+            };
+            const current = fingerprint(context.sha);
+            const retest = String(eventInputs.retest) === 'true';
             const pending = [];
             report.checks = [];
             for (const release of report.matrix.include) {
               const candidateSuffix = candidate ? ` candidate=${candidate.candidate_run_id}/${candidate.candidate_run_attempt}` : '';
               const title = `Unraid compatibility ${release.version} ${release.sha256} publish=true${candidateSuffix}`;
-              const matching = runs.filter(run => run.display_title === title && run.head_sha === context.sha);
-              const successful = matching.find(run => run.conclusion === 'success');
+              // Same release, same archive, same test path: commits that touch nothing else do not re-test.
+              const matching = runs.filter(run => run.display_title === title
+                && (run.head_sha === context.sha || (current !== null && fingerprint(run.head_sha) === current)));
+              const successful = retest ? undefined : matching.find(run => run.conclusion === 'success');
               const active = matching.find(run => run.status !== 'completed');
               const previous = successful || active;
               if (previous) {
@@ -163,7 +192,7 @@ jobs:
                 report.checks.push({...release, status: 'dispatch_pending'});
               }
             }
-            // A package release is not proof of compatibility; only exact run identity deduplicates.
+            // A package release is not proof of compatibility; only a successful run of this exact test path deduplicates.
             report.dispatch_matrix = {include: pending};
             core.setOutput('matrix', JSON.stringify(report.dispatch_matrix));
             fs.writeFileSync('unraid-releases.json', JSON.stringify(report, null, 2) + '\n');

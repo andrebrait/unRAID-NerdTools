@@ -1,0 +1,37 @@
+name: Retry rejected upstream recipes
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: Package to reassess; leave empty to requeue every open rejected recipe issue
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  retry:
+    concurrency:
+      group: upstream-recipe-issue-writes
+      queue: max
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+      actions: write
+      statuses: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Reset rejected discovery issues and dispatch reassessment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PACKAGE: ${{ inputs.package }}
+        run: python3 scripts/upstream-updates.py retry --package "$PACKAGE"

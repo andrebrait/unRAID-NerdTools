@@ -384,7 +384,8 @@ def issue_body(issue, state):
     if state.get('build_url'):
         lines.append(f"[Catalog build]({state['build_url']})")
     if state.get('failure'):
-        lines.append(f"**Latest failure:** {html.escape(state['failure'], quote=False).replace('@', '&#64;').replace('#', '&#35;')}")
+        label = 'Rejected because' if state['status'] == 'rejected' else 'Latest failure'
+        lines.append(f"**{label}:** {html.escape(state['failure'], quote=False).replace('#', '&#35;').replace('@', '&#64;')}")
     lines.append(ISSUE_STATUS_END)
     status_block = '\n'.join(lines)
     if ISSUE_STATUS_START in body:
@@ -978,7 +979,7 @@ def pr_body(state):
     reviews = state.get('review_status', 'Bot review requests await successful catalog verification.')
 
     def safe(text):
-        return html.escape(str(text), quote=False).replace('@', '&#64;').replace('#', '&#35;')
+        return html.escape(str(text), quote=False).replace('#', '&#35;').replace('@', '&#64;')
 
     def link(label, url):
         return f"[{label}]({html.escape(url, quote=True)})" if isinstance(url, str) and url.startswith('https://') else ''
@@ -1558,6 +1559,7 @@ def finish(repo, gh, plan_path, workspace, report_path, dry_run=False, output=No
         return
     records = state.get('candidate_issues', [])
     decisions = {item['name']: item['decision'] for item in report['recipes']}
+    reasons = {item['name']: item['reason'] for item in report['recipes']}
     versions = {item['name']: item['version'] for lock in LOCKS
                 for item in json.loads((repo / lock).read_text())}
     for candidate in plan['candidates']:
@@ -1565,7 +1567,9 @@ def finish(repo, gh, plan_path, workspace, report_path, dry_run=False, output=No
         if not record:
             continue
         if decisions.get(candidate['name']) == 'reject':
-            set_issue_status(gh, record, 'rejected', decision='reject', failure=None, build_url=None)
+            # Cap untrusted model text so the issue body stays under GitHub's size limit.
+            set_issue_status(gh, record, 'rejected', decision='reject',
+                             failure=reasons[candidate['name']].strip()[:4000], build_url=None)
         elif (decisions.get(candidate['name']) == 'accept'
               and versions.get(candidate['name']) == candidate['upstream']):
             set_issue_status(gh, record, 'building', decision='accept', failure=None, build_url=None)
@@ -1709,14 +1713,37 @@ def retry_issue(gh, number, run_url=None):
         report['recipes'] = [item for item in report.get('recipes', [])
                              if item.get('name') != metadata['candidate']['name']]
         report['summary'] = 'Awaiting maintainer-requested reassessment'
+        # Keep earlier queued retries in this batch; finish clears the list.
+        retry = [item for item in pr_state.get('retry_candidates', []) if item != metadata['candidate']]
         pr_state.update(attempts=0, feedback_digest='', issue_closures=[
             item for item in pr_state.get('issue_closures', []) if item != number], reviewed_head='',
-            force_repair=True, retry_candidates=[metadata['candidate']])
+            force_repair=True, retry_candidates=[*retry, metadata['candidate']])
         clear_candidate_state(pr_state)
         pr_state.pop('validation_error', None)
         gh.api(f"pulls/{pr['number']}", {'body': pr_body(pr_state)}, method='PATCH')
         set_candidate_status(gh, pr, pr['head']['sha'], 'pending')
     return True
+
+
+def retry_rejected(gh, package=None):
+    """Requeue every open rejected discovery issue, or only the one for package."""
+    names = []
+    for issue in gh.pages('issues?state=all&per_page=100'):
+        if issue.get('state') != 'open' or issue.get('pull_request'):
+            continue
+        try:
+            metadata = read_issue_state(issue)
+        except ValueError:
+            continue
+        if (metadata and metadata['status'] == 'rejected'
+                and package in (None, metadata['candidate']['name'])
+                and retry_issue(gh, issue['number'], workflow_run_url(gh.repository))):
+            names.append(metadata['candidate']['name'])
+    if not names:
+        summary('No open rejected upstream issue matched; nothing queued.')
+        return
+    gh.dispatch('upstream-versions.yml')
+    summary(f"Queued reassessment of rejected recipes: {', '.join(names)}.")
 
 
 def retry_pr_batch(gh, number, run_url=None):
@@ -1859,6 +1886,7 @@ def main():
     finish_parser.add_argument('--output', type=Path)
     for name in ('feedback', 'release', 'authorize'):
         commands.add_parser(name)
+    commands.add_parser('retry').add_argument('--package')
     args = parser.parse_args()
     gh = GitHub(os.environ['GH_REPO'])
     event = json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text()) if os.environ.get('GITHUB_EVENT_PATH') else {}
@@ -1867,6 +1895,8 @@ def main():
         prepare(repo, gh, event, args.output, evaluation=args.evaluation, package=args.package)
     elif args.command == 'finish':
         finish(repo, gh, args.plan, args.workspace, args.report, dry_run=args.dry_run, output=args.output)
+    elif args.command == 'retry':
+        retry_rejected(gh, args.package or None)
     else:
         globals()[args.command](gh, event)
 

@@ -48,6 +48,17 @@ class StateAndFeedbackTests(unittest.TestCase):
         self.assertNotIn('@everyone', body)
         self.assertEqual(body.count(self.updates.STATE), 1)
 
+    def test_rejected_issue_shows_escaped_rejection_reason(self):
+        candidate = {'name': 'rclone', 'ours': '1.0', 'upstream': '2.0',
+                     'source': 'SlackBuilds.org 15.0', 'url': 'https://example.invalid/rclone'}
+        gh = controller.GitHubFixture(None)
+        record = self.updates.sync_candidate_issues(gh, [candidate])[0]
+        self.updates.set_issue_status(gh, record, 'rejected', decision='reject',
+                                      failure='Needs Go lock regeneration @everyone')
+        body = gh.issues[0]['body']
+        self.assertIn('**Rejected because:** Needs Go lock regeneration &#64;everyone', body)
+        self.assertEqual(self.updates.read_issue_state(gh.issues[0])['status'], 'rejected')
+
     def test_only_exact_current_write_permission_can_reset_open_issue_or_pr_batch(self):
         candidate = {'name': 'vim', 'ours': '1.0', 'upstream': '2.0',
                      'source': 'Slackware-current', 'url': 'https://example.invalid/releases'}
@@ -75,6 +86,34 @@ class StateAndFeedbackTests(unittest.TestCase):
         self.updates.feedback(readonly, event)
         self.assertEqual(self.updates.read_issue_state(readonly.issues[0])['attempts'], 3)
         self.assertEqual(readonly.dispatched, [])
+
+    def test_dispatched_retry_requeues_only_open_rejected_issues_for_requested_package(self):
+        vim = {'name': 'vim', 'ours': '1.0', 'upstream': '2.0',
+               'source': 'Slackware-current', 'url': 'https://example.invalid/vim'}
+        tmux = {'name': 'tmux', 'ours': '3.0', 'upstream': '4.0',
+                'source': 'SlackBuilds.org 15.0', 'url': 'https://example.invalid/tmux'}
+        fio = {'name': 'fio', 'ours': '3.0', 'upstream': '3.1',
+               'source': 'SlackBuilds.org 15.0', 'url': 'https://example.invalid/fio'}
+        gh = controller.GitHubFixture(None)
+        statuses = {'vim': 'rejected', 'tmux': 'rejected', 'fio': 'blocked'}
+        for record in self.updates.sync_candidate_issues(gh, [vim, tmux, fio]):
+            self.updates.set_issue_status(gh, record, statuses[record['candidate']['name']],
+                                          attempts=3, decision='reject')
+        state = lambda name: next(self.updates.read_issue_state(issue) for issue in gh.issues
+                                  if self.updates.read_issue_state(issue)['candidate']['name'] == name)
+
+        self.updates.retry_rejected(gh, 'tmux')
+        self.assertEqual([state(name)['status'] for name in ('vim', 'tmux', 'fio')],
+                         ['rejected', 'queued', 'blocked'])
+        self.assertEqual(gh.dispatched, [('upstream-versions.yml', 'main', None)])
+
+        self.updates.retry_rejected(gh)
+        self.assertEqual((state('vim')['status'], state('vim')['attempts']), ('queued', 0))
+        self.assertEqual(state('fio')['status'], 'blocked')
+        self.assertEqual(len(gh.dispatched), 2)
+
+        self.updates.retry_rejected(gh)
+        self.assertEqual(len(gh.dispatched), 2)
 
     def test_pr_retry_resets_only_open_frozen_batch_issues(self):
         candidate = {'name': 'vim', 'ours': '1.0', 'upstream': '2.0',
