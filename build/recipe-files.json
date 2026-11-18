@@ -501,7 +501,7 @@
   },
   "libksba/libksba.SlackBuild": {
     "executable": true,
-    "sha256": "9a76b04c36d3f543d70e9d887d5b8e218ddcc23d886cebf2fa64164099023789",
+    "sha256": "85eceb07ab9cd05d3c84f612bb078059829d51e59010efa593fe59c160aaa74a",
     "type": "file"
   },
   "libksba/slack-desc": {

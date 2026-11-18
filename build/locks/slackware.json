@@ -1160,19 +1160,19 @@
   },
   {
     "name": "libksba",
-    "version": "1.8.1",
+    "version": "1.9.0",
     "recipe": "build/recipes/libksba/libksba.SlackBuild",
-    "recipe_sha256": "9a76b04c36d3f543d70e9d887d5b8e218ddcc23d886cebf2fa64164099023789",
+    "recipe_sha256": "85eceb07ab9cd05d3c84f612bb078059829d51e59010efa593fe59c160aaa74a",
     "provenance": {
       "kind": "source",
-      "url": "https://git.slackware.nl/current/plain/source/n/libksba/libksba.SlackBuild?id=8dbbc18b2042228d0189b2ddf267c1028c860f61",
-      "revision": "8dbbc18b2042228d0189b2ddf267c1028c860f61"
+      "url": "https://git.slackware.nl/current/plain/source/n/libksba/libksba.SlackBuild?id=2227785cbca858788eed755bf22afa2986b4c7da",
+      "revision": "2227785cbca858788eed755bf22afa2986b4c7da"
     },
     "inputs": [
       {
-        "url": "https://slackware.uk/slackware/slackware64-current/source/n/libksba/libksba-1.8.1.tar.lz",
-        "file": "libksba-1.8.1.tar.lz",
-        "sha256": "3f1820de578c9f7d714436495429528c5c08fa994ce01db0abadc185d9248b99"
+        "url": "https://slackware.uk/slackware/slackware64-current/source/n/libksba/libksba-1.9.0.tar.lz",
+        "file": "libksba-1.9.0.tar.lz",
+        "sha256": "ebc5f8efd05375d7d59a27ff13dd3dc43eff9258b2ab59f2a8fd094c57cd5994"
       }
     ],
     "dependencies": [],
